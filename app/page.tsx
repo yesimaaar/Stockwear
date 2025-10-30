@@ -1,65 +1,119 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { AuthService } from "@/lib/services/auth-service"
+import Link from "next/link"
+import { Package, ShoppingBag, Warehouse, Users, BarChart3, History, Tag, Ruler } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+
+export default function HomePage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    const user = AuthService.getCurrentUser()
+
+    if (!user) {
+      router.push("/login")
+    } else if (user.rol === "admin") {
+      router.push("/admin")
+    } else {
+      router.push("/empleado")
+    }
+  }, [router])
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+        <p className="text-muted-foreground">Cargando...</p>
+      </div>
+    </div>
+  )
+}
+
+function DashboardPage() {
+  const stats = [
+    { title: "Total Productos", value: "1,234", icon: Package, color: "text-blue-600" },
+    { title: "Categorías", value: "24", icon: Tag, color: "text-green-600" },
+    { title: "Almacenes", value: "5", icon: Warehouse, color: "text-purple-600" },
+    { title: "Stock Bajo", value: "12", icon: ShoppingBag, color: "text-red-600" },
+  ]
+
+  const quickActions = [
+    { title: "Productos", href: "/productos", icon: Package, description: "Gestionar inventario" },
+    { title: "Categorías", href: "/categorias", icon: Tag, description: "Organizar productos" },
+    { title: "Tallas", href: "/tallas", icon: Ruler, description: "Gestionar tallas" },
+    { title: "Almacenes", href: "/almacenes", icon: Warehouse, description: "Puntos de venta" },
+    { title: "Stock", href: "/stock", icon: ShoppingBag, description: "Control de inventario" },
+    { title: "Historial", href: "/historial", icon: History, description: "Movimientos de stock" },
+    { title: "Usuarios", href: "/usuarios", icon: Users, description: "Gestionar accesos" },
+    { title: "Reportes", href: "/reportes", icon: BarChart3, description: "Estadísticas" },
+  ]
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+                <Package className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">StockWear</h1>
+                <p className="text-sm text-muted-foreground">Sistema de Gestión de Inventario</p>
+              </div>
+            </div>
+            <Link
+              href="/login"
+              className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              Cerrar Sesión
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </header>
+
+      <main className="container mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-foreground">Dashboard</h2>
+          <p className="text-muted-foreground">Bienvenido al panel de administración</p>
+        </div>
+
+        <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {stats.map((stat) => (
+            <Card key={stat.title}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stat.value}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div>
+          <h3 className="mb-4 text-xl font-semibold text-foreground">Accesos Rápidos</h3>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {quickActions.map((action) => (
+              <Link key={action.title} href={action.href}>
+                <Card className="transition-all hover:shadow-lg hover:border-primary">
+                  <CardHeader>
+                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                      <action.icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <CardTitle className="text-lg">{action.title}</CardTitle>
+                    <CardDescription>{action.description}</CardDescription>
+                  </CardHeader>
+                </Card>
+              </Link>
+            ))}
+          </div>
         </div>
       </main>
     </div>
-  );
+  )
 }
