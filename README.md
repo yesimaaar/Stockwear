@@ -1,8 +1,5 @@
 # StockWear - Sistema de Gestión de Inventario
 
-## Instalación y Uso
-
-\`\`\`bash
 # Instalar dependencias
 npm install
 
