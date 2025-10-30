@@ -20,6 +20,12 @@ export const metadata: Metadata = {
   description: "Sistema de gestión de inventario y ventas para calzado y ropa deportiva con reconocimiento visual",
   generator: "Next.js",
   viewport: "width=device-width, initial-scale=1, maximum-scale=5",
+  icons: {
+    // ruta relativa a la carpeta `public/`
+    icon: '/favicon.svg',
+    // Puedes añadir más variantes si las tienes, por ejemplo:
+    // apple: '/apple-touch-icon.png'
+  },
 }
 
 export default function RootLayout({
