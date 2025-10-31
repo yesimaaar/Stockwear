@@ -1,4 +1,4 @@
-# StockWear - Sistema de Gestión de Inventario
+# StockWear - Sistema de Gestión de Inventario con reconocimiento visual de productos
 
 # Instalar dependencias
 npm install
