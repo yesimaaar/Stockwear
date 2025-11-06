@@ -13,10 +13,11 @@ import { Badge } from "@/components/ui/badge"
 import { AuthService } from "@/lib/services/auth-service"
 import { ReconocimientoService } from "@/lib/services/reconocimiento-service"
 import { ProductoService } from "@/lib/services/producto-service"
+import type { Usuario } from "@/lib/types"
 
 export default function EmpleadoDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState(AuthService.getCurrentUser())
+  const [user, setUser] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [cameraActive, setCameraActive] = useState(false)
@@ -41,31 +42,34 @@ export default function EmpleadoDashboard() {
   }, [])
 
   useEffect(() => {
-    const currentUser = AuthService.getCurrentUser()
-    if (!currentUser || currentUser.rol !== "empleado") {
-      router.push("/login")
-      return
-    }
-    setUser(currentUser)
-    setLoading(false)
+    const loadUser = async () => {
+      const currentUser = await AuthService.getCurrentUser()
+      if (!currentUser || currentUser.rol !== "empleado") {
+        router.push("/login")
+        return
+      }
+      setUser(currentUser)
+      setLoading(false)
 
-    // Iniciar cámara automáticamente al cargar el dashboard
-    if (isMobile) {
-      startCamera()
+      if (isMobile) {
+        startCamera()
+      }
     }
+
+    void loadUser()
   }, [router, isMobile])
 
-  const handleLogout = () => {
-    AuthService.logout()
+  const handleLogout = async () => {
+    await AuthService.logout()
     router.push("/login")
   }
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!searchQuery.trim()) {
       setSearchResults([])
       return
     }
-    const results = ProductoService.search(searchQuery)
+    const results = await ProductoService.search(searchQuery)
     setSearchResults(results)
   }
 

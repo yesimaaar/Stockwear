@@ -1,41 +1,84 @@
--- Habilitar Row Level Security en todas las tablas
-ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sizes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE colors ENABLE ROW LEVEL SECURITY;
-ALTER TABLE product_variants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE inventory_movements ENABLE ROW LEVEL SECURITY;
+-- Habilitar Row Level Security en el nuevo esquema
+ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categorias ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tallas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE almacenes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE productos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stock ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "historialStock" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE consultas ENABLE ROW LEVEL SECURITY;
 
--- Políticas para categorías (lectura pública, escritura autenticada)
-CREATE POLICY "categories_select_all" ON categories FOR SELECT USING (true);
-CREATE POLICY "categories_insert_authenticated" ON categories FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "categories_update_authenticated" ON categories FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "categories_delete_authenticated" ON categories FOR DELETE USING (auth.uid() IS NOT NULL);
+-- Eliminar políticas existentes para usuarios
+DROP POLICY IF EXISTS "usuarios_select_authenticated" ON usuarios;
+DROP POLICY IF EXISTS "usuarios_insert_self" ON usuarios;
+DROP POLICY IF EXISTS "usuarios_update_self" ON usuarios;
 
--- Políticas para productos (lectura pública, escritura autenticada)
-CREATE POLICY "products_select_all" ON products FOR SELECT USING (true);
-CREATE POLICY "products_insert_authenticated" ON products FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "products_update_authenticated" ON products FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "products_delete_authenticated" ON products FOR DELETE USING (auth.uid() IS NOT NULL);
+-- Eliminar políticas existentes para catálogos
+DROP POLICY IF EXISTS "categorias_select_authenticated" ON categorias;
+DROP POLICY IF EXISTS "categorias_write_authenticated" ON categorias;
+DROP POLICY IF EXISTS "tallas_select_authenticated" ON tallas;
+DROP POLICY IF EXISTS "tallas_write_authenticated" ON tallas;
+DROP POLICY IF EXISTS "almacenes_select_authenticated" ON almacenes;
+DROP POLICY IF EXISTS "almacenes_write_authenticated" ON almacenes;
 
--- Políticas para tallas (lectura pública, escritura autenticada)
-CREATE POLICY "sizes_select_all" ON sizes FOR SELECT USING (true);
-CREATE POLICY "sizes_insert_authenticated" ON sizes FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "sizes_update_authenticated" ON sizes FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "sizes_delete_authenticated" ON sizes FOR DELETE USING (auth.uid() IS NOT NULL);
+-- Eliminar políticas existentes para productos y stock
+DROP POLICY IF EXISTS "productos_select_authenticated" ON productos;
+DROP POLICY IF EXISTS "productos_write_authenticated" ON productos;
+DROP POLICY IF EXISTS "stock_select_authenticated" ON stock;
+DROP POLICY IF EXISTS "stock_write_authenticated" ON stock;
 
--- Políticas para colores (lectura pública, escritura autenticada)
-CREATE POLICY "colors_select_all" ON colors FOR SELECT USING (true);
-CREATE POLICY "colors_insert_authenticated" ON colors FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "colors_update_authenticated" ON colors FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "colors_delete_authenticated" ON colors FOR DELETE USING (auth.uid() IS NOT NULL);
+-- Eliminar políticas existentes para historial y consultas
+DROP POLICY IF EXISTS "historial_select_authenticated" ON "historialStock";
+DROP POLICY IF EXISTS "historial_insert_authenticated" ON "historialStock";
+DROP POLICY IF EXISTS "consultas_select_authenticated" ON consultas;
+DROP POLICY IF EXISTS "consultas_insert_authenticated" ON consultas;
 
--- Políticas para variantes de productos (lectura pública, escritura autenticada)
-CREATE POLICY "product_variants_select_all" ON product_variants FOR SELECT USING (true);
-CREATE POLICY "product_variants_insert_authenticated" ON product_variants FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "product_variants_update_authenticated" ON product_variants FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "product_variants_delete_authenticated" ON product_variants FOR DELETE USING (auth.uid() IS NOT NULL);
+-- Crear nuevas políticas para usuarios
+CREATE POLICY "usuarios_select_authenticated" ON usuarios
+	FOR SELECT
+	USING (auth.role() = 'service_role' OR auth.uid() IS NOT NULL);
 
--- Políticas para movimientos de inventario (lectura y escritura autenticada)
-CREATE POLICY "inventory_movements_select_authenticated" ON inventory_movements FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "inventory_movements_insert_authenticated" ON inventory_movements FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "usuarios_insert_self" ON usuarios
+	FOR INSERT
+	WITH CHECK (
+		auth.role() = 'service_role'
+		OR auth.uid() IS NOT NULL AND (
+			auth.uid()::uuid = id
+			OR auth.uid()::uuid = COALESCE(auth_uid, id)
+		)
+	);
+
+CREATE POLICY "usuarios_update_self" ON usuarios
+	FOR UPDATE
+	USING (
+		auth.role() = 'service_role'
+		OR auth.uid() IS NOT NULL AND auth.uid()::uuid = COALESCE(auth_uid, id)
+	)
+	WITH CHECK (
+		auth.role() = 'service_role'
+		OR auth.uid() IS NOT NULL AND auth.uid()::uuid = COALESCE(auth_uid, id)
+	);
+
+-- Catálogos compartidos: lectura para autenticados, escritura para autenticados
+CREATE POLICY "categorias_select_authenticated" ON categorias FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "categorias_write_authenticated" ON categorias FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "tallas_select_authenticated" ON tallas FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "tallas_write_authenticated" ON tallas FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "almacenes_select_authenticated" ON almacenes FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "almacenes_write_authenticated" ON almacenes FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Productos y stock
+CREATE POLICY "productos_select_authenticated" ON productos FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "productos_write_authenticated" ON productos FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "stock_select_authenticated" ON stock FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "stock_write_authenticated" ON stock FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Historial y consultas
+CREATE POLICY "historial_select_authenticated" ON "historialStock" FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "historial_insert_authenticated" ON "historialStock" FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "consultas_select_authenticated" ON consultas FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "consultas_insert_authenticated" ON consultas FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);

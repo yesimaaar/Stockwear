@@ -10,7 +10,6 @@ import {
   Tag,
   Ruler,
   Warehouse,
-  ShoppingBag,
   History,
   Users,
   Settings,
@@ -24,11 +23,10 @@ import { Button } from "@/components/ui/button"
 
 const menuItems = [
   { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { title: "Productos", href: "/admin/productos", icon: Package },
+  { title: "Productos y Stock", href: "/admin/productos", icon: Package },
   { title: "Categorías", href: "/admin/categorias", icon: Tag },
   { title: "Tallas", href: "/admin/tallas", icon: Ruler },
   { title: "Almacenes", href: "/admin/almacenes", icon: Warehouse },
-  { title: "Stock", href: "/admin/stock", icon: ShoppingBag },
   { title: "Historial", href: "/admin/historial", icon: History },
   { title: "Reportes", href: "/admin/reportes", icon: BarChart3 },
   { title: "Usuarios", href: "/admin/usuarios", icon: Users },

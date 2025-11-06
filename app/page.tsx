@@ -11,15 +11,18 @@ export default function HomePage() {
   const router = useRouter()
 
   useEffect(() => {
-    const user = AuthService.getCurrentUser()
-
-    if (!user) {
-      router.push("/login")
-    } else if (user.rol === "admin") {
-      router.push("/admin")
-    } else {
-      router.push("/empleado")
+    const check = async () => {
+      const user = await AuthService.getCurrentUser()
+      if (!user) {
+        router.push('/login')
+      } else if (user.rol === 'admin') {
+        router.push('/admin')
+      } else {
+        router.push('/empleado')
+      }
     }
+
+    void check()
   }, [router])
 
   return (

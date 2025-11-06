@@ -8,6 +8,7 @@ import { LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { AdminSidebar } from "@/components/admin-sidebar"
 import { AuthService } from "@/lib/services/auth-service"
+import type { Usuario } from "@/lib/types"
 
 export default function AdminLayout({
   children,
@@ -15,21 +16,25 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const [user, setUser] = useState(AuthService.getCurrentUser())
+  const [user, setUser] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const currentUser = AuthService.getCurrentUser()
-    if (!currentUser || currentUser.rol !== "admin") {
-      router.push("/login")
-      return
+    const loadUser = async () => {
+      const currentUser = await AuthService.getCurrentUser()
+      if (!currentUser || currentUser.rol !== "admin") {
+        router.push("/login")
+        return
+      }
+      setUser(currentUser)
+      setLoading(false)
     }
-    setUser(currentUser)
-    setLoading(false)
+
+    void loadUser()
   }, [router])
 
-  const handleLogout = () => {
-    AuthService.logout()
+  const handleLogout = async () => {
+    await AuthService.logout()
     router.push("/login")
   }
 

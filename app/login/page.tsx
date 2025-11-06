@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Scan, ShoppingBag } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,9 +27,9 @@ export default function LoginPage() {
     setError("")
     setLoading(true)
 
-    await new Promise((resolve) => setTimeout(resolve, 800))
+  await new Promise((resolve) => setTimeout(resolve, 800))
 
-    const result = AuthService.login(email, password)
+  const result = await AuthService.login(email.trim(), password)
 
     if (!result.success) {
       setError(result.message || "Error al iniciar sesión")
@@ -195,10 +196,16 @@ export default function LoginPage() {
               </div>
             </form>
 
-            <div className="mt-8 pt-6 border-t border-gray-200">
+            <div className="mt-8 pt-6 border-t border-gray-200 space-y-3">
               <button onClick={toggleLoginType} className="text-sm text-gray-600 hover:text-primary transition-colors">
                 {isAdmin ? "Iniciar sesión como Empleado" : "Iniciar sesión como Administrador"}
               </button>
+              <p className="text-center text-sm text-gray-600">
+                ¿No tienes una cuenta?{' '}
+                <Link href="/register" className="font-semibold text-primary hover:underline">
+                  Regístrate
+                </Link>
+              </p>
             </div>
 
             {/* Credenciales de prueba */}

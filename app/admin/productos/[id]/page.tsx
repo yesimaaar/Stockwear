@@ -1,32 +1,82 @@
+"use client"
+
 import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, Edit, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
 
 export default function ProductoDetallePage() {
-  const producto = {
-    id: 1,
-    codigo: "ZAP-001",
-    nombre: "Nike Air Max 270",
-    categoria: "Calzado Deportivo",
-    precio: 450000,
-    descuento: 10,
-    proveedor: "Nike Inc.",
-    stockMinimo: 10,
-    estado: "Activo",
-    descripcion: "Zapatillas deportivas de alta calidad con tecnología Air Max para máximo confort.",
-    imagen: "/product-1.png",
-    fechaCreacion: "2025-01-15",
+  const params = useParams<{ id: string }>()
+  const router = useRouter()
+  const [producto, setProducto] = useState<ProductoConStock | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const idParam = params?.id
+    if (!idParam) {
+      setError("Identificador no válido")
+      setLoading(false)
+      return
+    }
+
+    const productoId = Number(idParam)
+    if (Number.isNaN(productoId)) {
+      setError("Identificador no válido")
+      setLoading(false)
+      return
+    }
+
+    let canceled = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const data = await ProductoService.getById(productoId)
+        if (!canceled) {
+          if (!data) {
+            setError("Producto no encontrado")
+          }
+          setProducto(data)
+        }
+      } finally {
+        if (!canceled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      canceled = true
+    }
+  }, [params])
+
+  const stockBajo = useMemo(() => {
+    if (!producto) return 0
+    return producto.stockPorTalla.filter((detalle) => detalle.cantidad < producto.stockMinimo).length
+  }, [producto])
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-muted-foreground">Cargando información del producto…</p>
+      </div>
+    )
   }
 
-  const stockPorAlmacen = [
-    { almacen: "Almacén Principal", talla: "38", cantidad: 15 },
-    { almacen: "Almacén Principal", talla: "39", cantidad: 20 },
-    { almacen: "Almacén Principal", talla: "40", cantidad: 10 },
-    { almacen: "Sucursal Centro", talla: "38", cantidad: 8 },
-    { almacen: "Sucursal Centro", talla: "39", cantidad: 12 },
-  ]
+  if (error || !producto) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
+        <p className="text-muted-foreground">{error ?? "Producto no encontrado"}</p>
+        <Button onClick={() => router.push("/admin/productos")}>Regresar al listado</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,7 +91,7 @@ export default function ProductoDetallePage() {
               </Link>
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Detalle del Producto</h1>
-                <p className="text-sm text-muted-foreground">{producto.codigo}</p>
+                <p className="text-sm text-muted-foreground">Código {producto.codigo}</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -76,13 +126,29 @@ export default function ProductoDetallePage() {
                 <div>
                   <h3 className="text-2xl font-bold">{producto.nombre}</h3>
                   <div className="mt-2 flex items-center gap-2">
-                    <Badge variant="default">{producto.estado}</Badge>
+                    <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
+                      {producto.estado.toUpperCase()}
+                    </Badge>
                     <Badge variant="outline">{producto.categoria}</Badge>
                   </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Descripción</p>
-                  <p className="mt-1">{producto.descripcion}</p>
+                <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
+                  <div>
+                    <p className="font-semibold text-foreground">Proveedor</p>
+                    <p>{producto.proveedor || "No especificado"}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Stock mínimo</p>
+                    <p>{producto.stockMinimo} unidades</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Stock total</p>
+                    <p>{producto.stockTotal} unidades</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Ubicaciones bajo mínimo</p>
+                    <p>{stockBajo}</p>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -96,14 +162,6 @@ export default function ProductoDetallePage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Código</p>
-                    <p className="font-semibold">{producto.codigo}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Proveedor</p>
-                    <p className="font-semibold">{producto.proveedor}</p>
-                  </div>
-                  <div>
                     <p className="text-sm text-muted-foreground">Precio</p>
                     <p className="text-xl font-bold text-primary">${producto.precio.toLocaleString()}</p>
                   </div>
@@ -112,12 +170,14 @@ export default function ProductoDetallePage() {
                     <p className="font-semibold">{producto.descuento}%</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Stock Mínimo</p>
-                    <p className="font-semibold">{producto.stockMinimo} unidades</p>
+                    <p className="text-sm text-muted-foreground">Estado</p>
+                    <p className="font-semibold">{producto.estado}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Fecha de Creación</p>
-                    <p className="font-semibold">{producto.fechaCreacion}</p>
+                    <p className="text-sm text-muted-foreground">Creado</p>
+                    <p className="font-semibold">
+                      {new Date(producto.createdAt).toLocaleDateString("es-CO")}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -129,19 +189,26 @@ export default function ProductoDetallePage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {stockPorAlmacen.map((item, index) => (
+                  {producto.stockPorTalla.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No hay unidades registradas para este producto.
+                    </p>
+                  )}
+                  {producto.stockPorTalla.map((item, index) => (
                     <div key={index} className="flex items-center justify-between rounded-lg border p-3">
                       <div>
                         <p className="font-medium">{item.almacen}</p>
                         <p className="text-sm text-muted-foreground">Talla {item.talla}</p>
                       </div>
-                      <Badge variant={item.cantidad < 10 ? "destructive" : "default"}>{item.cantidad} unidades</Badge>
+                      <Badge variant={item.cantidad < producto.stockMinimo ? "destructive" : "default"}>
+                        {item.cantidad} unidades
+                      </Badge>
                     </div>
                   ))}
                 </div>
-                <Link href="/admin/stock">
+                <Link href="/admin/productos">
                   <Button variant="outline" className="mt-4 w-full bg-transparent">
-                    Ver Todo el Stock
+                    Volver al listado
                   </Button>
                 </Link>
               </CardContent>

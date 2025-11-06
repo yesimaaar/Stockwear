@@ -1,197 +1,467 @@
 "use client"
 
-import { useState } from "react"
-import { DollarSign, ShoppingCart, Users, Package, TrendingUp, TrendingDown, Target } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import {
+  DollarSign,
+  ShoppingCart,
+  Users,
+  Package,
+  TrendingUp,
+  TrendingDown,
+  Target,
+  AlertTriangle,
+} from "lucide-react"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
-const salesData = [
-  { date: "22 Jul", value: 45000 },
-  { date: "23 Jul", value: 52000 },
-  { date: "24 Jul", value: 48000 },
-  { date: "25 Jul", value: 61000 },
-  { date: "26 Jul", value: 55000 },
-  { date: "27 Jul", value: 67000 },
-  { date: "28 Jul", value: 58000 },
-  { date: "29 Jul", value: 72000 },
-]
+type Trend = "up" | "down" | "flat"
+
+interface Metric {
+  title: string
+  value: string
+  change: string
+  trend: Trend
+  icon: typeof DollarSign
+  bgColor: string
+  iconColor: string
+  description: string
+}
+
+interface HistorialRow {
+  tipo: string
+  cantidad: number
+  costoUnitario: number | null
+  createdAt: string
+}
+
+interface ProductoRow {
+  id: number
+  estado: string
+  stockMinimo: number
+  createdAt: string
+}
+
+interface StockRow {
+  productoId: number
+  cantidad: number
+}
+
+interface UsuarioRow {
+  id: string
+  estado: string | null
+  createdAt: string | null
+}
+
+const currencyFormatter = new Intl.NumberFormat("es-CO", {
+  style: "currency",
+  currency: "COP",
+  maximumFractionDigits: 0,
+})
+
+const shortDateFormatter = new Intl.DateTimeFormat("es-CO", {
+  day: "2-digit",
+  month: "short",
+})
+
+function computeTrend(current: number, previous: number): { change: string; trend: Trend } {
+  if (previous === 0) {
+    if (current === 0) {
+      return { change: "0%", trend: "flat" }
+    }
+    return { change: "+100%", trend: "up" }
+  }
+
+  const variation = ((current - previous) / previous) * 100
+  const rounded = Number.isFinite(variation) ? variation : 0
+  if (rounded === 0) {
+    return { change: "0%", trend: "flat" }
+  }
+  const formatted = `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}%`
+  return { change: formatted, trend: rounded > 0 ? "up" : "down" }
+}
+
+function getDateParts(dateLike: string | Date) {
+  const date = typeof dateLike === "string" ? new Date(dateLike) : dateLike
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth(),
+    day: date.getDate(),
+  }
+}
 
 export default function AdminDashboard() {
-  const [selectedMonth, setSelectedMonth] = useState("Jul 2023")
-
-  const [dailyTarget, setDailyTarget] = useState(650)
-  const [dailyProgress, setDailyProgress] = useState(450)
-  const [monthlyTarget, setMonthlyTarget] = useState(14500)
-  const [monthlyProgress, setMonthlyProgress] = useState(14500)
-  const [yearlyTarget, setYearlyTarget] = useState(175000)
-  const [yearlyProgress, setYearlyProgress] = useState(125000)
-
-  const metrics = [
+  const [metrics, setMetrics] = useState<Metric[]>([
     {
-      title: "Ingresos Totales",
-      value: "$82,650",
-      change: "+11%",
-      trend: "up",
+      title: "Ventas del mes",
+      value: "$0",
+      change: "--",
+      trend: "flat",
       icon: DollarSign,
-      bgColor: "bg-gray-100",
-      iconColor: "text-gray-700",
+      bgColor: "bg-emerald-100",
+      iconColor: "text-emerald-700",
+      description: "Ingresos registrados en movimientos de tipo venta",
     },
     {
-      title: "Pedidos Totales",
-      value: "1645",
-      change: "+11%",
-      trend: "up",
+      title: "Ventas registradas",
+      value: "0",
+      change: "--",
+      trend: "flat",
       icon: ShoppingCart,
-      bgColor: "bg-gray-100",
-      iconColor: "text-gray-700",
+      bgColor: "bg-blue-100",
+      iconColor: "text-blue-700",
+      description: "Cantidad de movimientos de venta en el mes",
     },
     {
-      title: "Clientes Totales",
-      value: "1,462",
-      change: "-17%",
-      trend: "down",
+      title: "Usuarios activos",
+      value: "0",
+      change: "--",
+      trend: "flat",
       icon: Users,
-      bgColor: "bg-gray-100",
-      iconColor: "text-gray-700",
+      bgColor: "bg-purple-100",
+      iconColor: "text-purple-700",
+      description: "Usuarios habilitados en la plataforma",
     },
     {
-      title: "Entregas Pendientes",
-      value: "117",
-      change: "+8%",
-      trend: "up",
+      title: "Productos bajo stock",
+      value: "0",
+      change: "--",
+      trend: "flat",
       icon: Package,
-      bgColor: "bg-gray-100",
-      iconColor: "text-gray-700",
+      bgColor: "bg-amber-100",
+      iconColor: "text-amber-700",
+      description: "Productos cuyo inventario está por debajo del mínimo",
     },
-  ]
+  ])
 
-  const dailyPercentage = (dailyProgress / dailyTarget) * 100
-  const monthlyPercentage = (monthlyProgress / monthlyTarget) * 100
-  const yearlyPercentage = (yearlyProgress / yearlyTarget) * 100
+  const [salesSeries, setSalesSeries] = useState<Array<{ date: string; value: number }>>([])
+  const [dailyTarget, setDailyTarget] = useState(0)
+  const [dailyProgress, setDailyProgress] = useState(0)
+  const [monthlyTarget, setMonthlyTarget] = useState(0)
+  const [monthlyProgress, setMonthlyProgress] = useState(0)
+  const [yearlyTarget, setYearlyTarget] = useState(0)
+  const [yearlyProgress, setYearlyProgress] = useState(0)
+  const [lowStockCount, setLowStockCount] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let canceled = false
+    const loadDashboard = async () => {
+      setLoading(true)
+      try {
+        const [historialResp, productosResp, stockResp, usuariosResp] = await Promise.all([
+          supabase
+            .from("historialStock")
+            .select("tipo,cantidad,\"costoUnitario\",\"createdAt\"")
+            .order("createdAt", { ascending: false })
+            .limit(500),
+          supabase.from("productos").select("id,estado,\"stockMinimo\",\"createdAt\"").limit(500),
+          supabase.from("stock").select("\"productoId\",cantidad").limit(2000),
+          supabase.from("usuarios").select("id,estado,\"createdAt\"").limit(500),
+        ])
+
+        if (canceled) return
+
+        const historial = (historialResp.data as HistorialRow[]) || []
+        const productos = (productosResp.data as ProductoRow[]) || []
+        const stock = (stockResp.data as StockRow[]) || []
+        const usuarios = (usuariosResp.data as UsuarioRow[]) || []
+
+        const ventas = historial.filter((item) => item.tipo === "venta")
+        const now = new Date()
+        const { month: currentMonth, year: currentYear } = getDateParts(now)
+        const previousMonthDate = new Date(currentYear, currentMonth - 1, 1)
+        const { month: previousMonth, year: previousMonthYear } = getDateParts(previousMonthDate)
+
+        const monthSales = ventas.filter((v) => {
+          const { month, year } = getDateParts(v.createdAt)
+          return month === currentMonth && year === currentYear
+        })
+        const previousMonthSales = ventas.filter((v) => {
+          const { month, year } = getDateParts(v.createdAt)
+          return month === previousMonth && year === previousMonthYear
+        })
+
+        const monthSalesValue = monthSales.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+        const previousMonthSalesValue = previousMonthSales.reduce(
+          (sum, item) => sum + (item.costoUnitario || 0) * item.cantidad,
+          0,
+        )
+
+        const monthSalesCount = monthSales.length
+        const previousMonthSalesCount = previousMonthSales.length
+
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const salesToday = ventas.filter((v) => new Date(v.createdAt) >= today)
+        const dailySalesValue = salesToday.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+
+        const yearlySales = ventas.filter((v) => {
+          const { year } = getDateParts(v.createdAt)
+          return year === currentYear
+        })
+        const yearlySalesValue = yearlySales.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+
+        const activeUsers = usuarios.filter((u) => (u.estado ?? "activo") === "activo")
+        const usersCurrentMonth = usuarios.filter((u) => {
+          const createdAt = u.createdAt ? new Date(u.createdAt) : null
+          if (!createdAt) return false
+          const { month, year } = getDateParts(createdAt)
+          return month === currentMonth && year === currentYear
+        })
+        const usersPreviousMonth = usuarios.filter((u) => {
+          const createdAt = u.createdAt ? new Date(u.createdAt) : null
+          if (!createdAt) return false
+          const { month, year } = getDateParts(createdAt)
+          return month === previousMonth && year === previousMonthYear
+        })
+
+        const stockByProduct = stock.reduce<Record<number, number>>((acc, item) => {
+          acc[item.productoId] = (acc[item.productoId] || 0) + (item.cantidad || 0)
+          return acc
+        }, {})
+
+        const lowStockProducts = productos.filter((producto) => {
+          if (producto.estado !== "activo") return false
+          const total = stockByProduct[producto.id] || 0
+          return total < producto.stockMinimo
+        })
+
+        const activeProducts = productos.filter((producto) => producto.estado === "activo")
+        const productsCreatedCurrentMonth = activeProducts.filter((p) => {
+          const createdAt = new Date(p.createdAt)
+          const { month, year } = getDateParts(createdAt)
+          return month === currentMonth && year === currentYear
+        })
+        const productsCreatedPreviousMonth = activeProducts.filter((p) => {
+          const createdAt = new Date(p.createdAt)
+          const { month, year } = getDateParts(createdAt)
+          return month === previousMonth && year === previousMonthYear
+        })
+
+        const salesMap = new Map<string, number>()
+        const lastSevenDays: Date[] = []
+        for (let i = 6; i >= 0; i--) {
+          lastSevenDays.push(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i))
+        }
+
+        for (const date of lastSevenDays) {
+          const key = date.toISOString().slice(0, 10)
+          salesMap.set(key, 0)
+        }
+
+        ventas.forEach((venta) => {
+          const key = new Date(venta.createdAt).toISOString().slice(0, 10)
+          if (!salesMap.has(key)) return
+          const previous = salesMap.get(key) || 0
+          salesMap.set(key, previous + (venta.costoUnitario || 0) * venta.cantidad)
+        })
+
+        const series = lastSevenDays.map((date) => {
+          const key = date.toISOString().slice(0, 10)
+          const value = salesMap.get(key) || 0
+          return {
+            date: shortDateFormatter.format(date),
+            value,
+          }
+        })
+
+        const monthSalesTrend = computeTrend(monthSalesValue, previousMonthSalesValue)
+        const monthSalesCountTrend = computeTrend(monthSalesCount, previousMonthSalesCount)
+        const usersTrend = computeTrend(usersCurrentMonth.length, usersPreviousMonth.length)
+        const productsTrend = computeTrend(productsCreatedCurrentMonth.length, productsCreatedPreviousMonth.length)
+
+        setMetrics([
+          {
+            title: "Ventas del mes",
+            value: currencyFormatter.format(monthSalesValue),
+            change: monthSalesTrend.change,
+            trend: monthSalesTrend.trend,
+            icon: DollarSign,
+            bgColor: "bg-emerald-100",
+            iconColor: "text-emerald-700",
+            description: "Ingresos registrados en movimientos de tipo venta",
+          },
+          {
+            title: "Ventas registradas",
+            value: monthSalesCount.toString(),
+            change: monthSalesCountTrend.change,
+            trend: monthSalesCountTrend.trend,
+            icon: ShoppingCart,
+            bgColor: "bg-blue-100",
+            iconColor: "text-blue-700",
+            description: "Cantidad de movimientos de venta en el mes",
+          },
+          {
+            title: "Usuarios activos",
+            value: activeUsers.length.toString(),
+            change: usersTrend.change,
+            trend: usersTrend.trend,
+            icon: Users,
+            bgColor: "bg-purple-100",
+            iconColor: "text-purple-700",
+            description: "Usuarios habilitados en la plataforma",
+          },
+          {
+            title: "Productos bajo stock",
+            value: lowStockProducts.length.toString(),
+            change: productsTrend.change,
+            trend: productsTrend.trend,
+            icon: Package,
+            bgColor: "bg-amber-100",
+            iconColor: "text-amber-700",
+            description: "Productos cuyo inventario está por debajo del mínimo",
+          },
+        ])
+
+        setLowStockCount(lowStockProducts.length)
+        setSalesSeries(series)
+        setDailyProgress(Math.round(dailySalesValue))
+        setMonthlyProgress(Math.round(monthSalesValue))
+        setYearlyProgress(Math.round(yearlySalesValue))
+        setDailyTarget(Math.max(Math.round(dailySalesValue * 1.2), 1))
+        setMonthlyTarget(Math.max(Math.round(monthSalesValue * 1.15), 1))
+        setYearlyTarget(Math.max(Math.round(yearlySalesValue * 1.1), 1))
+      } catch (error) {
+        console.error("Error loading dashboard", error)
+      } finally {
+        if (!canceled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadDashboard()
+
+    return () => {
+      canceled = true
+    }
+  }, [])
+
+  const dailyPercentage = useMemo(() => {
+    if (dailyTarget === 0) return 0
+    return (dailyProgress / dailyTarget) * 100
+  }, [dailyProgress, dailyTarget])
+
+  const monthlyPercentage = useMemo(() => {
+    if (monthlyTarget === 0) return 0
+    return (monthlyProgress / monthlyTarget) * 100
+  }, [monthlyProgress, monthlyTarget])
+
+  const yearlyPercentage = useMemo(() => {
+    if (yearlyTarget === 0) return 0
+    return (yearlyProgress / yearlyTarget) * 100
+  }, [yearlyProgress, yearlyTarget])
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-foreground">Resumen General</h2>
+        {loading && <span className="text-sm text-muted-foreground">Actualizando datos…</span>}
       </div>
 
+      {lowStockCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <AlertTriangle className="h-5 w-5" />
+          {lowStockCount === 1
+            ? "Hay 1 producto con inventario por debajo del mínimo."
+            : `Hay ${lowStockCount} productos con inventario por debajo del mínimo.`}
+        </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {metrics.map((metric) => (
-          <Card key={metric.title} className="border-none shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div>
-                <CardDescription className="text-xs text-muted-foreground">Últimos 30 días</CardDescription>
-                <CardTitle className="text-sm font-medium text-muted-foreground mt-1">{metric.title}</CardTitle>
-              </div>
-              <div className={`rounded-full p-2 ${metric.bgColor}`}>
-                <metric.icon className={`h-5 w-5 ${metric.iconColor}`} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <div className="text-3xl font-bold">{metric.value}</div>
-                <div className="flex items-center gap-1">
-                  {metric.trend === "up" ? (
-                    <TrendingUp className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-red-600" />
-                  )}
-                  <span className={`text-sm font-medium ${metric.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                    {metric.change}
-                  </span>
+        {metrics.map((metric) => {
+          const TrendIcon =
+            metric.trend === "up" ? TrendingUp : metric.trend === "down" ? TrendingDown : null
+          const changeColor =
+            metric.trend === "up"
+              ? "text-green-600"
+              : metric.trend === "down"
+                ? "text-red-600"
+                : "text-muted-foreground"
+
+          return (
+            <Card key={metric.title} className="border-none shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardDescription className="text-xs text-muted-foreground">Últimos 30 días</CardDescription>
+                  <CardTitle className="mt-1 text-sm font-medium text-muted-foreground">
+                    {metric.title}
+                  </CardTitle>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <div className={`rounded-full p-2 ${metric.bgColor}`}>
+                  <metric.icon className={`h-5 w-5 ${metric.iconColor}`} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-bold">{metric.value}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">{metric.description}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {TrendIcon ? <TrendIcon className={`h-4 w-4 ${changeColor}`} /> : null}
+                    <span className={`text-sm font-medium ${changeColor}`}>{metric.change}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2 border-none shadow-sm">
+        <Card className="border-none shadow-sm lg:col-span-2">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xl font-semibold">Análisis de Ventas</CardTitle>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option>Jul 2023</option>
-                <option>Ago 2023</option>
-                <option>Sep 2023</option>
-              </select>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Ingresos</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-xl font-bold">23,262.00</p>
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
-                    +0.05% ↑
-                  </Badge>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Gastos</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-xl font-bold">11,135.00</p>
-                  <Badge variant="secondary" className="bg-orange-100 text-orange-700 text-xs">
-                    +0.03% ↑
-                  </Badge>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Balance</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-xl font-bold">48,135.00</p>
-                  <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
-                    +0.05% ↑
-                  </Badge>
-                </div>
-              </div>
-            </div>
+            <CardTitle className="text-xl font-semibold">Ventas de los últimos 7 días</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={{
-                value: {
-                  label: "Ventas",
-                  color: "hsl(var(--primary))",
-                },
-              }}
-              className="h-[300px]"
-            >
-              <AreaChart data={salesData}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} className="text-xs" />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => `${value / 1000}k`}
-                  className="text-xs"
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  fill="url(#colorValue)"
-                />
-              </AreaChart>
-            </ChartContainer>
+            {salesSeries.length === 0 ? (
+              <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+                Aún no se registran ventas para este periodo.
+              </div>
+            ) : (
+              <ChartContainer
+                config={{
+                  value: {
+                    label: "Ventas",
+                    color: "hsl(var(--primary))",
+                  },
+                }}
+                className="h-[300px]"
+              >
+                <AreaChart data={salesSeries}>
+                  <defs>
+                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} className="text-xs" />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `${Math.round(value / 1000)}k`}
+                    className="text-xs"
+                  />
+                  <ChartTooltip
+                    content={<ChartTooltipContent formatter={(value) => currencyFormatter.format(value as number)} />}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#colorValue)"
+                  />
+                </AreaChart>
+              </ChartContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -200,19 +470,9 @@ export default function AdminDashboard() {
             <CardTitle className="text-xl font-semibold">Objetivo de Ventas</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center space-y-6">
-            {/* Diagrama circular segmentado en 3 partes */}
             <div className="relative h-56 w-56">
               <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 200 200">
-                {/* Objetivo Anual - Segmento exterior */}
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="85"
-                  stroke="hsl(var(--muted))"
-                  strokeWidth="20"
-                  fill="none"
-                  opacity="0.3"
-                />
+                <circle cx="100" cy="100" r="85" stroke="hsl(var(--muted))" strokeWidth="20" fill="none" opacity="0.3" />
                 <circle
                   cx="100"
                   cy="100"
@@ -224,16 +484,7 @@ export default function AdminDashboard() {
                   strokeLinecap="round"
                 />
 
-                {/* Objetivo Mensual - Segmento medio */}
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="60"
-                  stroke="hsl(var(--muted))"
-                  strokeWidth="18"
-                  fill="none"
-                  opacity="0.3"
-                />
+                <circle cx="100" cy="100" r="60" stroke="hsl(var(--muted))" strokeWidth="18" fill="none" opacity="0.3" />
                 <circle
                   cx="100"
                   cy="100"
@@ -245,16 +496,7 @@ export default function AdminDashboard() {
                   strokeLinecap="round"
                 />
 
-                {/* Objetivo Diario - Segmento interior */}
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="37"
-                  stroke="hsl(var(--muted))"
-                  strokeWidth="16"
-                  fill="none"
-                  opacity="0.3"
-                />
+                <circle cx="100" cy="100" r="37" stroke="hsl(var(--muted))" strokeWidth="16" fill="none" opacity="0.3" />
                 <circle
                   cx="100"
                   cy="100"
@@ -267,7 +509,6 @@ export default function AdminDashboard() {
                 />
               </svg>
 
-              {/* Porcentaje central */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <div className="text-3xl font-bold">
@@ -278,7 +519,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Leyenda de objetivos */}
             <div className="w-full space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -286,13 +526,9 @@ export default function AdminDashboard() {
                   <span className="text-sm text-muted-foreground">Objetivo Diario</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {dailyPercentage >= 100 ? (
-                    <TrendingUp className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-orange-600" />
-                  )}
+                  <Target className="h-4 w-4 text-gray-800" />
                   <span className="text-base font-bold">
-                    {dailyProgress}/{dailyTarget}
+                    {currencyFormatter.format(dailyProgress)}/{currencyFormatter.format(dailyTarget)}
                   </span>
                 </div>
               </div>
@@ -303,13 +539,9 @@ export default function AdminDashboard() {
                   <span className="text-sm text-muted-foreground">Objetivo Mensual</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {monthlyPercentage >= 100 ? (
-                    <TrendingUp className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-orange-600" />
-                  )}
+                  <Target className="h-4 w-4 text-gray-600" />
                   <span className="text-base font-bold">
-                    {monthlyProgress.toLocaleString()}/{monthlyTarget.toLocaleString()}
+                    {currencyFormatter.format(monthlyProgress)}/{currencyFormatter.format(monthlyTarget)}
                   </span>
                 </div>
               </div>
@@ -320,13 +552,9 @@ export default function AdminDashboard() {
                   <span className="text-sm text-muted-foreground">Objetivo Anual</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {yearlyPercentage >= 100 ? (
-                    <TrendingUp className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-orange-600" />
-                  )}
+                  <Target className="h-4 w-4 text-gray-400" />
                   <span className="text-base font-bold">
-                    {yearlyProgress.toLocaleString()}/{yearlyTarget.toLocaleString()}
+                    {currencyFormatter.format(yearlyProgress)}/{currencyFormatter.format(yearlyTarget)}
                   </span>
                 </div>
               </div>
@@ -345,30 +573,29 @@ export default function AdminDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-6 md:grid-cols-3">
-            {/* Objetivo Diario */}
             <div className="space-y-4 rounded-lg border border-border p-4">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-gray-800" />
                 <h3 className="font-semibold">Objetivo Diario</h3>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="daily-target">Meta</Label>
+                <Label htmlFor="daily-target">Meta (COP)</Label>
                 <Input
                   id="daily-target"
                   type="number"
                   value={dailyTarget}
-                  onChange={(e) => setDailyTarget(Number(e.target.value))}
-                  placeholder="Ej: 650"
+                  onChange={(e) => setDailyTarget(Number(e.target.value) || 0)}
+                  placeholder="Ej: 650000"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="daily-progress">Progreso Actual</Label>
+                <Label htmlFor="daily-progress">Progreso</Label>
                 <Input
                   id="daily-progress"
                   type="number"
                   value={dailyProgress}
-                  onChange={(e) => setDailyProgress(Number(e.target.value))}
-                  placeholder="Ej: 450"
+                  onChange={(e) => setDailyProgress(Number(e.target.value) || 0)}
+                  placeholder="Ej: 450000"
                 />
               </div>
               <div className="pt-2">
@@ -377,30 +604,29 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Objetivo Mensual */}
             <div className="space-y-4 rounded-lg border border-border p-4">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-gray-600" />
                 <h3 className="font-semibold">Objetivo Mensual</h3>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="monthly-target">Meta</Label>
+                <Label htmlFor="monthly-target">Meta (COP)</Label>
                 <Input
                   id="monthly-target"
                   type="number"
                   value={monthlyTarget}
-                  onChange={(e) => setMonthlyTarget(Number(e.target.value))}
-                  placeholder="Ej: 14500"
+                  onChange={(e) => setMonthlyTarget(Number(e.target.value) || 0)}
+                  placeholder="Ej: 14500000"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="monthly-progress">Progreso Actual</Label>
+                <Label htmlFor="monthly-progress">Progreso</Label>
                 <Input
                   id="monthly-progress"
                   type="number"
                   value={monthlyProgress}
-                  onChange={(e) => setMonthlyProgress(Number(e.target.value))}
-                  placeholder="Ej: 14500"
+                  onChange={(e) => setMonthlyProgress(Number(e.target.value) || 0)}
+                  placeholder="Ej: 11200000"
                 />
               </div>
               <div className="pt-2">
@@ -409,30 +635,29 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Objetivo Anual */}
             <div className="space-y-4 rounded-lg border border-border p-4">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-gray-400" />
                 <h3 className="font-semibold">Objetivo Anual</h3>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="yearly-target">Meta</Label>
+                <Label htmlFor="yearly-target">Meta (COP)</Label>
                 <Input
                   id="yearly-target"
                   type="number"
                   value={yearlyTarget}
-                  onChange={(e) => setYearlyTarget(Number(e.target.value))}
-                  placeholder="Ej: 175000"
+                  onChange={(e) => setYearlyTarget(Number(e.target.value) || 0)}
+                  placeholder="Ej: 175000000"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="yearly-progress">Progreso Actual</Label>
+                <Label htmlFor="yearly-progress">Progreso</Label>
                 <Input
                   id="yearly-progress"
                   type="number"
                   value={yearlyProgress}
-                  onChange={(e) => setYearlyProgress(Number(e.target.value))}
-                  placeholder="Ej: 125000"
+                  onChange={(e) => setYearlyProgress(Number(e.target.value) || 0)}
+                  placeholder="Ej: 125000000"
                 />
               </div>
               <div className="pt-2">
@@ -443,7 +668,9 @@ export default function AdminDashboard() {
           </div>
 
           <div className="mt-6 flex justify-end">
-            <Button size="lg">Guardar Objetivos</Button>
+            <Button className="px-6" type="button">
+              Guardar cambios
+            </Button>
           </div>
         </CardContent>
       </Card>

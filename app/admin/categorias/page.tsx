@@ -1,40 +1,45 @@
+"use client"
+
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import { Tag, Plus, ArrowLeft, Edit, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { InventarioService, type CategoriaResumen } from "@/lib/services/inventario-service"
+
+const ESTADO_VARIANT: Record<string, "default" | "secondary"> = {
+  activo: "default",
+  inactivo: "secondary",
+}
 
 export default function CategoriasPage() {
-  const categorias = [
-    {
-      id: 1,
-      nombre: "Calzado Deportivo",
-      descripcion: "Zapatillas y calzado para actividades deportivas",
-      productos: 45,
-      estado: "Activo",
-    },
-    {
-      id: 2,
-      nombre: "Ropa Deportiva",
-      descripcion: "Camisetas, pantalones y ropa para entrenar",
-      productos: 120,
-      estado: "Activo",
-    },
-    {
-      id: 3,
-      nombre: "Accesorios",
-      descripcion: "Gorras, medias, guantes y otros accesorios",
-      productos: 78,
-      estado: "Activo",
-    },
-    {
-      id: 4,
-      nombre: "Calzado Casual",
-      descripcion: "Zapatillas y calzado para uso diario",
-      productos: 32,
-      estado: "Inactivo",
-    },
-  ]
+  const [categorias, setCategorias] = useState<CategoriaResumen[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let canceled = false
+
+    const load = async () => {
+      setLoading(true)
+      try {
+        const data = await InventarioService.getCategoriasResumen()
+        if (!canceled) {
+          setCategorias(data)
+        }
+      } finally {
+        if (!canceled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    load()
+
+    return () => {
+      canceled = true
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,35 +69,53 @@ export default function CategoriasPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {categorias.map((categoria) => (
-            <Card key={categoria.id} className="transition-all hover:shadow-lg">
-              <CardContent className="p-6">
-                <div className="mb-4 flex items-start justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                    <Tag className="h-6 w-6 text-primary" />
+        {loading ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Card key={index} className="animate-pulse">
+                <CardContent className="p-6">
+                  <div className="h-6 w-40 rounded bg-muted" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : categorias.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+            No se encontraron categorías.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {categorias.map((categoria) => (
+              <Card key={categoria.id} className="transition-all hover:shadow-lg">
+                <CardContent className="p-6">
+                  <div className="mb-4 flex items-start justify-between">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                      <Tag className="h-6 w-6 text-primary" />
+                    </div>
+                    <Badge variant={ESTADO_VARIANT[categoria.estado] ?? "default"}>
+                      {categoria.estado.toUpperCase()}
+                    </Badge>
                   </div>
-                  <Badge variant={categoria.estado === "Activo" ? "default" : "secondary"}>{categoria.estado}</Badge>
-                </div>
-                <h3 className="mb-2 text-xl font-semibold">{categoria.nombre}</h3>
-                <p className="mb-4 text-sm text-muted-foreground">{categoria.descripcion}</p>
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Productos</span>
-                  <span className="text-lg font-bold text-primary">{categoria.productos}</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                    <Edit className="mr-2 h-4 w-4" />
-                    Editar
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  <h3 className="mb-2 text-xl font-semibold">{categoria.nombre}</h3>
+                  <p className="mb-4 text-sm text-muted-foreground">{categoria.descripcion ?? "Sin descripción"}</p>
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Productos activos</span>
+                    <span className="text-lg font-bold text-primary">{categoria.productosActivos}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 bg-transparent">
+                      <Edit className="mr-2 h-4 w-4" />
+                      Editar
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   )
