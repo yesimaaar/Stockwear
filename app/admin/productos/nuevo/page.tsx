@@ -2,35 +2,143 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Upload } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
+import { ProductoService } from "@/lib/services/producto-service"
+import type { Categoria } from "@/lib/types"
 
 export default function NuevoProductoPage() {
   const router = useRouter()
+  const { toast } = useToast()
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [cargandoCategorias, setCargandoCategorias] = useState(true)
+  const [guardando, setGuardando] = useState(false)
   const [formData, setFormData] = useState({
     codigo: "",
     nombre: "",
-    categoria: "",
+    categoriaId: "",
     precio: "",
-    descuento: "",
+    descuento: "0",
     proveedor: "",
     stockMinimo: "",
     descripcion: "",
+    imagen: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Simulación de guardado
-    alert("Producto registrado exitosamente")
-    router.push("/productos")
+  useEffect(() => {
+    let activo = true
+    const cargarCategorias = async () => {
+      try {
+        const data = await ProductoService.getCategoriasActivas()
+        if (activo) {
+          setCategorias(data)
+        }
+      } catch (error) {
+        console.error("Error cargando categorías", error)
+        toast({
+          title: "No se pudieron cargar las categorías",
+          description: "Intenta recargar la página",
+          variant: "destructive",
+        })
+      } finally {
+        if (activo) {
+          setCargandoCategorias(false)
+        }
+      }
+    }
+
+    void cargarCategorias()
+    return () => {
+      activo = false
+    }
+  }, [toast])
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    if (!formData.categoriaId) {
+      toast({
+        title: "Selecciona una categoría",
+        description: "Todos los productos deben pertenecer a una categoría",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const precio = Number(formData.precio)
+    const descuento = formData.descuento ? Number(formData.descuento) : 0
+    const stockMinimo = Number(formData.stockMinimo)
+    const categoriaId = Number(formData.categoriaId)
+
+    if (Number.isNaN(precio) || precio <= 0) {
+      toast({
+        title: "Precio inválido",
+        description: "Ingresa un precio mayor a cero",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (Number.isNaN(stockMinimo) || stockMinimo < 0) {
+      toast({
+        title: "Stock mínimo inválido",
+        description: "El stock mínimo no puede ser negativo",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setGuardando(true)
+    try {
+      const payload = {
+        codigo: formData.codigo.trim(),
+        nombre: formData.nombre.trim(),
+        categoriaId,
+        descripcion: formData.descripcion.trim() || null,
+        precio,
+        descuento: Number.isNaN(descuento) ? 0 : descuento,
+        proveedor: formData.proveedor.trim() || null,
+        imagen: formData.imagen.trim() || null,
+        stockMinimo,
+        estado: "activo" as const,
+      }
+
+      const nuevoProducto = await ProductoService.create(payload)
+
+      if (!nuevoProducto) {
+        toast({
+          title: "No se pudo guardar",
+          description: "Supabase devolvió un error al intentar crear el producto",
+          variant: "destructive",
+        })
+        setGuardando(false)
+        return
+      }
+
+      toast({
+        title: "Producto registrado",
+        description: `${nuevoProducto.nombre} se añadió al inventario`,
+      })
+      router.push("/admin/productos")
+    } catch (error) {
+      console.error("Error creando producto", error)
+      toast({
+        title: "Error inesperado",
+        description: "Revisa la consola para más detalles",
+        variant: "destructive",
+      })
+    } finally {
+      setGuardando(false)
+    }
   }
 
   return (
@@ -38,7 +146,7 @@ export default function NuevoProductoPage() {
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
-            <Link href="/productos">
+            <Link href="/admin/productos">
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
@@ -103,18 +211,31 @@ export default function NuevoProductoPage() {
                   <div className="space-y-2">
                     <Label htmlFor="categoria">Categoría</Label>
                     <Select
-                      value={formData.categoria}
-                      onValueChange={(value) => setFormData({ ...formData, categoria: value })}
+                      value={formData.categoriaId}
+                      onValueChange={(value) => setFormData({ ...formData, categoriaId: value })}
+                      disabled={cargandoCategorias}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar categoría" />
+                        <SelectValue placeholder={cargandoCategorias ? "Cargando categorías..." : "Seleccionar categoría"} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="calzado">Calzado Deportivo</SelectItem>
-                        <SelectItem value="ropa">Ropa Deportiva</SelectItem>
-                        <SelectItem value="accesorios">Accesorios</SelectItem>
+                        {categorias.map((categoria) => (
+                          <SelectItem key={categoria.id} value={String(categoria.id)}>
+                            {categoria.nombre}
+                          </SelectItem>
+                        ))}
+                        {!cargandoCategorias && categorias.length === 0 && (
+                          <SelectItem value="" disabled>
+                            No hay categorías activas disponibles
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
+                    {!cargandoCategorias && categorias.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Crea una categoría en el panel correspondiente antes de registrar productos.
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="proveedor">Proveedor</Label>
@@ -176,27 +297,40 @@ export default function NuevoProductoPage() {
                 <CardTitle>Imagen del Producto</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-12">
-                  <div className="text-center">
-                    <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Arrastra una imagen o haz clic para seleccionar
-                    </p>
-                    <Button variant="outline" className="mt-4 bg-transparent" type="button">
-                      Seleccionar Imagen
-                    </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="imagen">URL de imagen (opcional)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="imagen"
+                      placeholder="https://..."
+                      value={formData.imagen}
+                      onChange={(event) => setFormData({ ...formData, imagen: event.target.value })}
+                    />
+                    {formData.imagen && (
+                      <div className="h-16 w-16 overflow-hidden rounded border">
+                        <img src={formData.imagen} alt="Previsualización" className="h-full w-full object-cover" />
+                      </div>
+                    )}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sube la imagen a tu almacenamiento preferido y pega aquí la URL pública.
+                  </p>
                 </div>
               </CardContent>
             </Card>
 
             <div className="flex justify-end gap-4">
-              <Link href="/productos">
-                <Button variant="outline" type="button">
+              <Link href="/admin/productos">
+                <Button variant="outline" type="button" disabled={guardando}>
                   Cancelar
                 </Button>
               </Link>
-              <Button type="submit">Guardar Producto</Button>
+              <Button
+                type="submit"
+                disabled={guardando || (!cargandoCategorias && categorias.length === 0)}
+              >
+                {guardando ? "Guardando..." : "Guardar Producto"}
+              </Button>
             </div>
           </div>
         </form>

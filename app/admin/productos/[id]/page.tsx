@@ -131,6 +131,11 @@ export default function ProductoDetallePage() {
                     </Badge>
                     <Badge variant="outline">{producto.categoria}</Badge>
                   </div>
+                  {producto.descripcion && (
+                    <p className="mt-3 text-sm text-muted-foreground whitespace-pre-line">
+                      {producto.descripcion}
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
                   <div>

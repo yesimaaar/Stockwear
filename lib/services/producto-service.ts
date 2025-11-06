@@ -5,6 +5,9 @@ export interface ProductoConStock extends Producto {
   categoria: string
   stockTotal: number
   stockPorTalla: Array<{
+    stockId: number
+    tallaId: number | null
+    almacenId: number | null
     talla: string
     almacen: string
     cantidad: number
@@ -32,14 +35,28 @@ export class ProductoService {
     const { data: categoria } = await supabase.from('categorias').select('*').eq('id', producto.categoriaId).single()
 
     const { data: stockEntries } = await supabase.from('stock').select('*').eq('productoId', id)
-    const stockProducto = (stockEntries || []) as Array<{ tallaId: number; almacenId: number; cantidad: number }>
+    const stockProducto = (stockEntries || []) as Array<{
+      id: number
+      tallaId: number | null
+      almacenId: number | null
+      cantidad: number | null
+    }>
     const stockTotal = stockProducto.reduce((sum, s) => sum + (s.cantidad || 0), 0)
 
     const stockPorTalla = [] as ProductoConStock['stockPorTalla']
     for (const s of stockProducto) {
-      const { data: talla } = await supabase.from('tallas').select('*').eq('id', s.tallaId).single()
-      const { data: almacen } = await supabase.from('almacenes').select('*').eq('id', s.almacenId).single()
+      const tallaId = s.tallaId ?? null
+      const almacenId = s.almacenId ?? null
+      const { data: talla } = tallaId
+        ? await supabase.from('tallas').select('id,nombre').eq('id', tallaId).single()
+        : { data: null }
+      const { data: almacen } = almacenId
+        ? await supabase.from('almacenes').select('id,nombre').eq('id', almacenId).single()
+        : { data: null }
       stockPorTalla.push({
+        stockId: s.id,
+        tallaId,
+        almacenId,
         talla: (talla as Talla)?.nombre || '',
         almacen: (almacen as Almacen)?.nombre || '',
         cantidad: s.cantidad || 0,
@@ -87,9 +104,32 @@ export class ProductoService {
   }
 
   static async create(producto: Omit<Producto, 'id' | 'createdAt'>): Promise<Producto | null> {
-    const { data, error } = await supabase.from('productos').insert({ ...producto, createdAt: new Date() }).select().single()
-    if (error || !data) return null
+    const payload = {
+      ...producto,
+      descripcion: producto.descripcion?.trim() || null,
+      createdAt: new Date(),
+    }
+
+    const { data, error } = await supabase.from('productos').insert(payload).select().single()
+    if (error || !data) {
+      console.error('Error al crear producto', error)
+      return null
+    }
     return data as Producto
+  }
+
+  static async getCategoriasActivas(): Promise<Categoria[]> {
+    const { data, error } = await supabase
+      .from('categorias')
+      .select('*')
+      .eq('estado', 'activo')
+      .order('nombre', { ascending: true })
+
+    if (error || !data) {
+      return []
+    }
+
+    return data as Categoria[]
   }
 
   static async update(id: number, data: Partial<Producto>): Promise<Producto | null> {

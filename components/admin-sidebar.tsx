@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   BarChart3,
+  Receipt,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button"
 const menuItems = [
   { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { title: "Productos y Stock", href: "/admin/productos", icon: Package },
+  { title: "Facturación", href: "/admin/facturacion", icon: Receipt },
   { title: "Categorías", href: "/admin/categorias", icon: Tag },
   { title: "Tallas", href: "/admin/tallas", icon: Ruler },
   { title: "Almacenes", href: "/admin/almacenes", icon: Warehouse },
