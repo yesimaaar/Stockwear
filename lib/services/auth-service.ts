@@ -12,6 +12,7 @@ type UsuarioRow = {
   auth_uid?: string
   nombre: string
   email: string
+  telefono?: string | null
   rol: 'admin' | 'empleado'
   estado?: 'activo' | 'inactivo'
   created_at?: string
@@ -26,6 +27,7 @@ function mapUsuario(row?: UsuarioRow | null): Usuario | undefined {
     authUid: row.auth_uid ?? row.id,
     nombre: row.nombre,
     email: row.email,
+    telefono: row.telefono ?? null,
     rol: row.rol,
     estado: row.estado ?? 'activo',
     createdAt: createdValue,
@@ -68,9 +70,10 @@ export class AuthService {
     return { success: true }
   }
 
-  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado' }): Promise<AuthResponse> {
-    const { nombre, email, password, rol } = params
+  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado'; telefono?: string }): Promise<AuthResponse> {
+    const { nombre, email, password, rol, telefono } = params
     const normalizedEmail = email.trim().toLowerCase()
+    const normalizedPhone = telefono?.trim() || null
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -79,6 +82,7 @@ export class AuthService {
         data: {
           nombre,
           rol,
+          telefono: normalizedPhone ?? undefined,
         },
       },
     })
@@ -95,11 +99,31 @@ export class AuthService {
     }
 
     if (!data.session) {
+      await supabase.from('usuarios').upsert({
+        id: user.id,
+        auth_uid: user.id,
+        nombre,
+        email: normalizedEmail,
+        rol,
+        telefono: normalizedPhone,
+        estado: 'activo',
+      })
+
       return {
         success: true,
         message: 'Usuario registrado. Revisa tu correo para confirmar la cuenta.',
       }
     }
+
+    await supabase.from('usuarios').upsert({
+      id: user.id,
+      auth_uid: user.id,
+      nombre,
+      email: normalizedEmail,
+      rol,
+      telefono: normalizedPhone,
+      estado: 'activo',
+    })
 
     const { data: profile } = await supabase
       .from('usuarios')

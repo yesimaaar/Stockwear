@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   DollarSign,
   ShoppingCart,
@@ -10,6 +10,8 @@ import {
   TrendingDown,
   Target,
   AlertTriangle,
+  MonitorSmartphone,
+  X,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -95,6 +97,8 @@ function getDateParts(dateLike: string | Date) {
 }
 
 export default function AdminDashboard() {
+  const dismissedRef = useRef(false)
+  const [showMobileNotice, setShowMobileNotice] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([
     {
       title: "Ventas del mes",
@@ -147,6 +151,47 @@ export default function AdminDashboard() {
   const [yearlyProgress, setYearlyProgress] = useState(0)
   const [lowStockCount, setLowStockCount] = useState(0)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const storageKey = "stockwear-mobile-notice-dismissed"
+    const dismissed = window.localStorage.getItem(storageKey) === "true"
+    if (dismissed) {
+      dismissedRef.current = true
+      return
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 768px)")
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (dismissedRef.current) return
+      const matches = (event as MediaQueryList).matches
+      setShowMobileNotice(matches)
+    }
+
+    handleChange(mediaQuery)
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange)
+    } else {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else {
+        mediaQuery.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  const dismissMobileNotice = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("stockwear-mobile-notice-dismissed", "true")
+    }
+    dismissedRef.current = true
+    setShowMobileNotice(false)
+  }
 
   useEffect(() => {
     let canceled = false
@@ -362,6 +407,31 @@ export default function AdminDashboard() {
         <h2 className="text-3xl font-bold text-foreground">Resumen General</h2>
         {loading && <span className="text-sm text-muted-foreground">Actualizando datos…</span>}
       </div>
+
+      {showMobileNotice && (
+        <div className="relative w-full overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground shadow-sm">
+          <div className="flex gap-3">
+            <span className="mt-0.5 flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <MonitorSmartphone className="h-4 w-4" />
+            </span>
+            <div className="flex-1 text-[0.92rem] leading-relaxed text-foreground/80">
+              <p className="font-medium text-foreground">Optimiza tu experiencia</p>
+              <p>
+                StockWear recomienda gestionar el panel desde un equipo de escritorio para aprovechar todo el
+                espacio disponible. Puedes continuar en tu dispositivo móvil cuando lo necesites.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={dismissMobileNotice}
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition hover:border-border hover:text-foreground"
+          >
+            <span className="sr-only">Ocultar aviso</span>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {lowStockCount > 0 && (
         <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

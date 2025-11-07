@@ -1,12 +1,35 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { Package, Plus, Search, ArrowLeft, AlertTriangle } from "lucide-react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import {
+  Package,
+  Plus,
+  Search,
+  ArrowLeft,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
 
 export default function ProductosPage() {
@@ -15,6 +38,10 @@ export default function ProductosPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
+  const [page, setPage] = useState(1)
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  const pageSize = 10
 
   const cargarProductos = useCallback(async () => {
     setLoading(true)
@@ -56,6 +83,11 @@ export default function ProductosPage() {
     }
   }, [searchQuery, productos])
 
+  useEffect(() => {
+    setPage(1)
+    setExpanded(null)
+  }, [filteredProductos])
+
   const productosConInfo = useMemo(() => {
     return filteredProductos.map((producto) => {
       const stockBajo = producto.stockPorTalla.filter((detalle) => detalle.cantidad < producto.stockMinimo).length
@@ -67,6 +99,33 @@ export default function ProductosPage() {
     () => productosConInfo.reduce((sum, producto) => sum + producto.stockBajo, 0),
     [productosConInfo],
   )
+
+  const pageCount = useMemo(() => {
+    return Math.max(1, Math.ceil(productosConInfo.length / pageSize))
+  }, [productosConInfo.length, pageSize])
+
+  const paginatedProductos = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return productosConInfo.slice(start, start + pageSize)
+  }, [page, productosConInfo])
+
+  const mostrarDesde = useMemo(() => {
+    if (productosConInfo.length === 0) return 0
+    return (page - 1) * pageSize + 1
+  }, [page, productosConInfo.length])
+
+  const mostrarHasta = useMemo(() => {
+    return Math.min(page * pageSize, productosConInfo.length)
+  }, [page, productosConInfo.length])
+
+  const toggleExpand = (productoId: number) => {
+    setExpanded((actual) => (actual === productoId ? null : productoId))
+  }
+
+  const irAPagina = (nuevaPagina: number) => {
+    const paginaValida = Math.min(Math.max(1, nuevaPagina), pageCount)
+    setPage(paginaValida)
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -134,13 +193,12 @@ export default function ProductosPage() {
         )}
 
         {loading ? (
-          <div className="grid gap-6">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Card key={index} className="animate-pulse">
-                <CardContent className="p-6">
-                  <div className="h-6 w-56 rounded bg-muted" />
-                </CardContent>
-              </Card>
+          <div className="space-y-4">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="animate-pulse rounded-md border border-border bg-card/40 p-4">
+                <div className="h-5 w-3/4 rounded bg-muted" />
+                <div className="mt-3 h-4 w-full rounded bg-muted/70" />
+              </div>
             ))}
           </div>
         ) : productosConInfo.length === 0 ? (
@@ -148,73 +206,191 @@ export default function ProductosPage() {
             No hay productos registrados aún.
           </div>
         ) : (
-          <div className="grid gap-6">
-            {productosConInfo.map((producto) => (
-              <Card key={producto.id}>
-                <CardContent className="p-6">
-                  <div className="flex flex-col gap-4 md:flex-row md:gap-6">
-                    <img
-                      src={producto.imagen || "/placeholder.svg"}
-                      alt={producto.nombre}
-                      className="h-24 w-24 rounded-lg object-cover"
-                    />
-                    <div className="flex-1">
-                      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="mb-1 flex items-center gap-2">
-                            <h3 className="text-lg font-semibold">{producto.nombre}</h3>
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {mostrarDesde}-{mostrarHasta} de {productosConInfo.length} productos
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Haz clic en un producto para ver el detalle por almacén y talla.
+              </p>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border">
+              <Table>
+                <TableHeader className="bg-card/60 backdrop-blur">
+                  <TableRow>
+                    <TableHead className="w-10" aria-label="Expandir" />
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Categoría</TableHead>
+                    <TableHead>Precio</TableHead>
+                    <TableHead>Stock total</TableHead>
+                    <TableHead>En alerta</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedProductos.map((producto) => {
+                    const esExpandido = expanded === producto.id
+                    return (
+                      <Fragment key={producto.id}>
+                        <TableRow className="cursor-pointer" onClick={() => toggleExpand(producto.id)}>
+                          <TableCell className="py-3">
+                            <Button variant="ghost" size="icon" onClick={(event) => {
+                              event.stopPropagation()
+                              toggleExpand(producto.id)
+                            }}>
+                              {esExpandido ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={producto.imagen || "/placeholder.svg"}
+                                alt={producto.nombre}
+                                className="h-12 w-12 shrink-0 rounded-md object-cover"
+                              />
+                              <div>
+                                <p className="font-medium text-foreground">{producto.nombre}</p>
+                                <p className="text-xs text-muted-foreground">Código: {producto.codigo}</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="text-sm text-muted-foreground">{producto.categoria}</span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="font-semibold text-primary">
+                              ${producto.precio.toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="font-medium">{producto.stockTotal} u.</span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            {producto.stockBajo > 0 ? (
+                              <Badge variant="destructive">{producto.stockBajo}</Badge>
+                            ) : (
+                              <Badge variant="secondary">OK</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-3">
                             <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
                               {producto.estado.toUpperCase()}
                             </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">Código: {producto.codigo}</p>
-                          <p className="text-sm text-muted-foreground">Categoría: {producto.categoria}</p>
-                        </div>
-                        <div className="text-left md:text-right">
-                          <p className="text-2xl font-bold text-primary">
-                            ${producto.precio.toLocaleString()}
-                          </p>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Stock Total: {producto.stockTotal} unidades
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
-                        <h4 className="text-sm font-semibold text-foreground">Detalle por Almacén y Talla</h4>
-                        <div className="grid gap-2">
-                          {producto.stockPorTalla.map((detalle, index) => (
-                            <div key={index} className="flex items-center justify-between rounded-md bg-background p-3">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline">{detalle.almacen}</Badge>
-                                <Badge variant="secondary">Talla {detalle.talla}</Badge>
-                              </div>
-                              <div className="text-right">
-                                <p
-                                  className={`text-lg font-bold ${
-                                    detalle.cantidad < producto.stockMinimo ? "text-red-600" : "text-green-600"
-                                  }`}
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Link href={`/admin/productos/${producto.id}`}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                  }}
                                 >
-                                  {detalle.cantidad}
-                                </p>
-                                <p className="text-xs text-muted-foreground">Mín: {producto.stockMinimo}</p>
-                              </div>
+                                  Ver detalle
+                                </Button>
+                              </Link>
                             </div>
-                          ))}
-                        </div>
-                        <div className="pt-3 text-right">
-                          <Link href={`/admin/productos/${producto.id}`}>
-                            <Button variant="outline" size="sm">
-                              Ver detalle completo
-                            </Button>
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                          </TableCell>
+                        </TableRow>
+                        {esExpandido && (
+                          <TableRow className="bg-muted/10">
+                            <TableCell colSpan={8} className="p-4">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm font-semibold text-foreground">Detalle por almacén y talla</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Stock mínimo configurado: {producto.stockMinimo} unidades
+                                </p>
+                              </div>
+                              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                                {producto.stockPorTalla.map((detalle, index) => {
+                                  const enRiesgo = detalle.cantidad < producto.stockMinimo
+                                  return (
+                                    <div
+                                      key={`${producto.id}-${index}`}
+                                      className="flex items-center justify-between rounded-md border bg-background/80 p-3"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                                        <Badge variant="outline">{detalle.almacen}</Badge>
+                                        <Badge variant="secondary">Talla {detalle.talla}</Badge>
+                                      </div>
+                                      <div className="text-right">
+                                        <p
+                                          className={`text-base font-semibold ${
+                                            enRiesgo ? "text-red-500" : "text-green-500"
+                                          }`}
+                                        >
+                                          {detalle.cantidad}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">Min: {producto.stockMinimo}</p>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {pageCount > 1 && (
+              <div className="flex flex-col items-center gap-2 pt-2">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        aria-disabled={page === 1}
+                        className={page === 1 ? "pointer-events-none opacity-50" : undefined}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          irAPagina(page - 1)
+                        }}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: pageCount }).map((_, index) => {
+                      const pagina = index + 1
+                      return (
+                        <PaginationItem key={pagina}>
+                          <PaginationLink
+                            href="#"
+                            isActive={pagina === page}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              irAPagina(pagina)
+                            }}
+                          >
+                            {pagina}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    })}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        aria-disabled={page === pageCount}
+                        className={page === pageCount ? "pointer-events-none opacity-50" : undefined}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          irAPagina(page + 1)
+                        }}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+                <p className="text-xs text-muted-foreground">
+                  Página {page} de {pageCount}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </main>

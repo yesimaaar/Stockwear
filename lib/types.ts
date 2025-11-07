@@ -6,6 +6,7 @@ export interface Usuario {
   authUid?: string
   nombre: string
   email: string
+  telefono?: string | null
   rol: RolUsuario
   estado: EstadoRegistro
   createdAt: string

@@ -1,113 +1,232 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useState } from "react"
-import Image from "next/image"
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  Package,
-  Tag,
-  Ruler,
-  Warehouse,
-  History,
-  Users,
-  Settings,
-  ChevronRight,
-  Menu,
-  X,
-  BarChart3,
-  Receipt,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+	BarChart3,
+	Boxes,
+	Clock,
+	Cog,
+	Layers3,
+	Package,
+	Settings,
+	Shirt,
+	Users
+} from "lucide-react";
 
-const menuItems = [
-  { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { title: "Productos y Stock", href: "/admin/productos", icon: Package },
-  { title: "Facturación", href: "/admin/facturacion", icon: Receipt },
-  { title: "Categorías", href: "/admin/categorias", icon: Tag },
-  { title: "Tallas", href: "/admin/tallas", icon: Ruler },
-  { title: "Almacenes", href: "/admin/almacenes", icon: Warehouse },
-  { title: "Historial", href: "/admin/historial", icon: History },
-  { title: "Reportes", href: "/admin/reportes", icon: BarChart3 },
-  { title: "Usuarios", href: "/admin/usuarios", icon: Users },
-  { title: "Configuración", href: "/admin/configuracion", icon: Settings },
-]
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger
+} from "@/components/ui/tooltip";
+
+const NAV_ITEMS = [
+	{ href: "/admin", icon: BarChart3, label: "Dashboard" },
+	{ href: "/admin/almacenes", icon: Boxes, label: "Almacenes" },
+	{ href: "/admin/categorias", icon: Layers3, label: "Categorías" },
+	{ href: "/admin/productos", icon: Package, label: "Productos y Stock" },
+	{ href: "/admin/tallas", icon: Shirt, label: "Tallas" },
+	{ href: "/admin/usuarios", icon: Users, label: "Usuarios" },
+	{ href: "/admin/reportes", icon: BarChart3, label: "Reportes" },
+	{ href: "/admin/historial", icon: Clock, label: "Historial" },
+	{ href: "/admin/configuracion", icon: Settings, label: "Configuración" }
+] as const;
+
+type SidebarMode = "closed" | "condensed" | "open" | "hover";
+
+const SIDEBAR_WIDTH: Record<SidebarMode, string> = {
+	closed: "w-[68px]",
+	condensed: "w-[84px]",
+	hover: "w-[84px]",
+	open: "w-64"
+};
+
+function useIsDesktop() {
+	const [isDesktop, setIsDesktop] = useState(false);
+
+	useEffect(() => {
+		const mediaQuery = window.matchMedia("(min-width: 1024px)");
+		const updateMatch = () => setIsDesktop(mediaQuery.matches);
+		updateMatch();
+		mediaQuery.addEventListener("change", updateMatch);
+		return () => mediaQuery.removeEventListener("change", updateMatch);
+	}, []);
+
+	return isDesktop;
+}
 
 export function AdminSidebar() {
-  const pathname = usePathname()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+	const pathname = usePathname();
+	const isDesktop = useIsDesktop();
+	const [sidebarMode, setSidebarMode] = useState<SidebarMode>("condensed");
 
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed left-4 top-4 z-50 lg:hidden"
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-      >
-        {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-      </Button>
+	useEffect(() => {
+		setSidebarMode((previous) => {
+			if (!isDesktop) {
+				return "closed";
+			}
+			return previous === "closed" ? "condensed" : previous;
+		});
+	}, [isDesktop]);
 
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
-      )}
+	const hoverEnabled = sidebarMode === "hover" && isDesktop;
+	const showLabels = sidebarMode === "open";
+	const tooltipsEnabled =
+		isDesktop && (sidebarMode === "closed" || sidebarMode === "condensed");
 
-      <aside
-        className={cn(
-          "fixed left-0 top-0 z-40 h-screen w-64 border-r bg-card transition-transform duration-300",
-          "lg:translate-x-0",
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <div className="flex h-full flex-col">
-          {/* Logo */}
-          <div className="flex h-16 items-center gap-3 border-b px-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary p-2">
-              <Image
-                src="/stockwear-icon.png"
-                alt="StockWear"
-                width={32}
-                height={32}
-                className="object-contain brightness-0 invert"
-              />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">StockWear</h1>
-              <p className="text-xs text-muted-foreground">Admin Panel</p>
-            </div>
-          </div>
+	const wrapperClass = useMemo(
+		() =>
+			cn(
+				"group/sidebar relative z-20 hidden flex-col border-r border-border/60 bg-background/70 backdrop-blur-xl transition-all duration-200 lg:flex lg:sticky lg:top-0 lg:h-screen",
+				SIDEBAR_WIDTH[sidebarMode],
+				hoverEnabled && "lg:hover:w-64"
+			),
+		[hoverEnabled, sidebarMode]
+	);
 
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-            {menuItems.map((item) => {
-              const isActive = pathname === item.href
-              const Icon = item.icon
+	return (
+		<>
+			<aside className={wrapperClass}>
+				<div className="hidden items-center justify-center px-3 pb-2 pt-5 lg:flex">
+					<Link
+						href="/admin"
+						className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-primary/10 text-primary transition-colors hover:bg-primary/20"
+					>
+						<div className="relative h-6 w-6">
+							<Image
+								src="/stockwear-icon.png"
+								alt="StockWear"
+								fill
+								sizes="100%"
+								className="object-contain"
+							/>
+						</div>
+					</Link>
+				</div>
+				<TooltipProvider delayDuration={120}>
+					<nav className="flex-1 overflow-y-auto pb-4 pt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+					<ul className="flex list-none flex-col items-center gap-1.5 p-0">
+						{NAV_ITEMS.map((item) => {
+							const Icon = item.icon;
+							const isActive = pathname === item.href;
+							const linkContent = (
+								<Link
+									href={item.href}
+									className={cn(
+										"group flex h-12 items-center justify-center rounded-xl border border-transparent bg-muted/10 text-muted-foreground transition-all duration-200",
+										hoverEnabled &&
+											"lg:group-hover/sidebar:w-64 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-4 lg:group-hover/sidebar:bg-muted/20",
+										isActive && "border-primary/40 bg-primary/10 text-primary",
+										showLabels ? " justify-start gap-3 px-4" : ""
+									)}
+								>
+									<Icon className="h-5 w-5" />
+									<span
+										className={cn(
+											"text-sm font-medium transition-all duration-200",
+											showLabels
+												? "ml-3 opacity-100"
+												: hoverEnabled
+												? "hidden opacity-0 lg:group-hover/sidebar:inline lg:group-hover/sidebar:ml-3 lg:group-hover/sidebar:opacity-100"
+												: "hidden opacity-0"
+										)}
+									>
+										{item.label}
+									</span>
+								</Link>
+							);
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-5 w-5" />
-                    <span>{item.title}</span>
-                  </div>
-                  {isActive && <ChevronRight className="h-4 w-4" />}
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
-      </aside>
-    </>
-  )
+							return (
+								<li key={item.href} className="w-full px-3">
+									{tooltipsEnabled ? (
+										<Tooltip>
+											<TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+											<TooltipContent side="right" className="hidden font-medium lg:block">
+												{item.label}
+											</TooltipContent>
+										</Tooltip>
+									) : (
+										linkContent
+									)}
+								</li>
+							);
+						})}
+					</ul>
+					</nav>
+				</TooltipProvider>
+
+				<div className="flex justify-center border-t border-border/50 px-3 py-4">
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="outline" size="icon" className="h-10 w-10 rounded-xl">
+								<Cog className="h-5 w-5" />
+								<span className="sr-only">Cambiar modo</span>
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="center" side="top" className="w-44">
+							{(
+								["closed", "condensed", "hover", "open"] satisfies SidebarMode[]
+							).map((mode) => (
+								<DropdownMenuItem
+									key={mode}
+									onSelect={() => setSidebarMode(mode)}
+									className={cn(
+										"flex items-center justify-between",
+										sidebarMode === mode && "text-primary"
+									)}
+								>
+									<span className="capitalize">{mode}</span>
+									<div
+										className={cn(
+											"h-2 w-2 rounded-full",
+											sidebarMode === mode ? "bg-primary" : "bg-muted"
+										)}
+									/>
+								</DropdownMenuItem>
+							))}
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</div>
+			</aside>
+
+			<nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-background/95 px-2 pb-4 pt-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+				<ul className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+					{NAV_ITEMS.map((item) => {
+						const Icon = item.icon;
+						const isActive = pathname === item.href;
+
+						return (
+							<li key={item.href} className="flex min-w-[78px] flex-none justify-center">
+								<Link
+									href={item.href}
+									className={cn(
+										"flex w-full flex-col items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground transition-colors",
+										isActive && "bg-primary/10 text-primary"
+									)}
+								>
+									<Icon className="h-5 w-5" />
+									<span className="text-[0.68rem] leading-none text-center">
+										{item.label}
+									</span>
+								</Link>
+							</li>
+						);
+					})}
+				</ul>
+			</nav>
+		</>
+	);
 }
+
+export default AdminSidebar;

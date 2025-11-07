@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   auth_uid UUID UNIQUE,
   nombre TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
+  telefono TEXT,
   rol TEXT NOT NULL CHECK (rol IN ('admin', 'empleado')),
   estado TEXT NOT NULL DEFAULT 'activo',
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', NOW()),
@@ -38,6 +39,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE INDEX IF NOT EXISTS usuarios_email_idx ON usuarios (email);
 CREATE INDEX IF NOT EXISTS usuarios_auth_uid_idx ON usuarios (auth_uid);
+
+ALTER TABLE usuarios
+  ADD COLUMN IF NOT EXISTS telefono TEXT;
 
 -- Catálogo de categorías
 CREATE TABLE IF NOT EXISTS categorias (
