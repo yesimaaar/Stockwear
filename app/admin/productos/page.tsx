@@ -149,7 +149,7 @@ export default function ProductosPage() {
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-8 space-y-6">
-        <div className="flex flex-col gap-4 border-b border-border/70 pb-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Link href="/">
               <Button variant="ghost" size="icon">
@@ -219,9 +219,9 @@ export default function ProductosPage() {
         {loading ? (
           <div className="space-y-4">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="animate-pulse rounded-md border border-border bg-card/40 p-4">
+              <div key={index} className="animate-pulse rounded-md border border-border bg-card p-4">
                 <div className="h-5 w-3/4 rounded bg-muted" />
-                <div className="mt-3 h-4 w-full rounded bg-muted/70" />
+                <div className="mt-3 h-4 w-full rounded bg-muted" />
               </div>
             ))}
           </div>
@@ -242,7 +242,7 @@ export default function ProductosPage() {
 
             <div className="overflow-hidden rounded-lg border">
               <Table>
-                <TableHeader className="bg-card/60 backdrop-blur">
+                <TableHeader className="bg-card">
                   <TableRow>
                     <TableHead className="w-10" aria-label="Expandir" />
                     <TableHead>Producto</TableHead>
@@ -324,7 +324,7 @@ export default function ProductosPage() {
                           </TableCell>
                         </TableRow>
                         {esExpandido && (
-                          <TableRow className="bg-muted/10">
+                          <TableRow className="bg-muted">
                             <TableCell colSpan={8} className="p-4">
                               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <p className="text-sm font-semibold text-foreground">Detalle por almacén y talla</p>
@@ -338,7 +338,7 @@ export default function ProductosPage() {
                                   return (
                                     <div
                                       key={`${producto.id}-${index}`}
-                                      className="flex items-center justify-between rounded-md border bg-background/80 p-3"
+                                      className="flex items-center justify-between rounded-md border bg-background p-3"
                                     >
                                       <div className="flex flex-wrap items-center gap-2 text-sm">
                                         <Badge variant="outline">{detalle.almacen}</Badge>

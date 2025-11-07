@@ -497,12 +497,12 @@ export default function AdminDashboard() {
       </div>
 
       {showMobileNotice && (
-        <div className="relative w-full overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground shadow-sm">
+        <div className="relative w-full overflow-hidden rounded-2xl border border-primary bg-secondary p-4 text-sm text-muted-foreground shadow-sm">
           <div className="flex gap-3">
-            <span className="mt-0.5 flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <span className="mt-0.5 flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <MonitorSmartphone className="h-4 w-4" />
             </span>
-            <div className="flex-1 text-[0.92rem] leading-relaxed text-foreground/80">
+            <div className="flex-1 text-[0.92rem] leading-relaxed text-muted-foreground">
               <p className="font-medium text-foreground">Optimiza tu experiencia</p>
               <p>
                 StockWear recomienda gestionar el panel desde un equipo de escritorio para aprovechar todo el

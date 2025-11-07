@@ -88,7 +88,7 @@ export function AdminSidebar() {
 	const wrapperClass = useMemo(
 		() =>
 			cn(
-				"group/sidebar relative z-20 hidden flex-col border-r border-border/60 bg-background transition-all duration-200 lg:flex lg:sticky lg:top-0 lg:h-screen",
+				"group/sidebar relative z-20 hidden flex-col border-r border-border bg-background transition-all duration-200 lg:flex lg:sticky lg:top-0 lg:h-screen",
 				SIDEBAR_WIDTH[sidebarMode],
 				hoverEnabled && "lg:hover:w-64"
 			),
@@ -101,7 +101,7 @@ export function AdminSidebar() {
 				<div className="hidden items-center justify-center px-3 pb-2 pt-5 lg:flex">
 					<Link
 						href="/admin"
-						className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-primary/10 text-primary transition-colors hover:bg-primary/20"
+						className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card text-primary transition-colors hover:bg-secondary"
 					>
 						<div className="relative h-6 w-6">
 							<Image
@@ -124,10 +124,10 @@ export function AdminSidebar() {
 								<Link
 									href={item.href}
 									className={cn(
-										"group flex h-12 items-center justify-center rounded-xl border border-transparent bg-muted/10 text-muted-foreground transition-all duration-200",
+										"group flex h-12 items-center justify-center rounded-xl border border-transparent bg-card text-muted-foreground transition-all duration-200 hover:bg-secondary hover:text-foreground",
 										hoverEnabled &&
-											"lg:group-hover/sidebar:w-64 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-4 lg:group-hover/sidebar:bg-muted/20",
-										isActive && "border-primary/40 bg-primary/10 text-primary",
+											"lg:group-hover/sidebar:w-64 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-4 lg:group-hover/sidebar:bg-secondary",
+										isActive && "border-primary bg-primary text-primary-foreground",
 										showLabels ? " justify-start gap-3 px-4" : ""
 									)}
 								>
@@ -166,7 +166,7 @@ export function AdminSidebar() {
 					</nav>
 				</TooltipProvider>
 
-				<div className="flex justify-center border-t border-border/50 px-3 py-4">
+				<div className="flex justify-center border-t border-border px-3 py-4">
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button variant="outline" size="icon" className="h-10 w-10 rounded-xl">
@@ -200,7 +200,7 @@ export function AdminSidebar() {
 				</div>
 			</aside>
 
-			<nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-background/95 px-2 pb-4 pt-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+			<nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background px-2 pb-4 pt-3 lg:hidden">
 				<ul className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
 					{NAV_ITEMS.map((item) => {
 						const Icon = item.icon;
@@ -211,8 +211,8 @@ export function AdminSidebar() {
 								<Link
 									href={item.href}
 									className={cn(
-										"flex w-full flex-col items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground transition-colors",
-										isActive && "bg-primary/10 text-primary"
+										"flex w-full flex-col items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+										isActive && "bg-primary text-primary-foreground"
 									)}
 								>
 									<Icon className="h-5 w-5" />

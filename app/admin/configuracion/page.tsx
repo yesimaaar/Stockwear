@@ -36,7 +36,7 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-indigo-500">
                 <Bell className="h-5 w-5" />
               </div>
               <div>
@@ -60,7 +60,7 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-emerald-500">
                 <Shield className="h-5 w-5" />
               </div>
               <div>
@@ -84,7 +84,7 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/15 text-purple-300">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-purple-500">
                 <Database className="h-5 w-5" />
               </div>
               <div>
@@ -106,7 +106,7 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/15 text-orange-300">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-orange-500">
                 <Palette className="h-5 w-5" />
               </div>
               <div>

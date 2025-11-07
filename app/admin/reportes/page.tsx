@@ -162,7 +162,7 @@ export default function ReportesPage() {
                     {productosConsultados.map((producto) => (
                       <div
                         key={producto.id}
-                        className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2"
+                        className="flex items-center justify-between rounded-lg border bg-muted px-3 py-2"
                       >
                         <span className="text-sm font-medium">{producto.nombre}</span>
                         <span className="text-sm text-muted-foreground">{producto.consultas} consultas</span>

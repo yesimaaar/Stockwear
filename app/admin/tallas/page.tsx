@@ -98,9 +98,9 @@ export default function TallasPage() {
                     {tallasNumericas.map((talla) => (
                       <div
                         key={talla.id}
-                        className="flex flex-col items-center justify-center rounded-lg border-2 border-primary bg-primary/5 p-4 transition-all hover:bg-primary/10"
+                        className="flex flex-col items-center justify-center rounded-lg border-2 border-primary bg-secondary p-4 text-primary transition-all hover:bg-primary hover:text-primary-foreground"
                       >
-                        <span className="text-2xl font-bold text-primary">{talla.nombre}</span>
+                        <span className="text-2xl font-bold">{talla.nombre}</span>
                         <Badge variant={ESTADO_VARIANT[talla.estado] ?? "default"} className="mt-2">
                           {talla.estado.toUpperCase()}
                         </Badge>

@@ -120,6 +120,7 @@
   }
   html {
     color-scheme: light;
+    overscroll-behavior: none;
   }
   .dark {
     color-scheme: dark;
@@ -128,25 +129,6 @@
     @apply bg-background text-foreground font-sans;
     font-family: var(--font-sans);
     background-color: var(--background);
-    position: relative;
-    isolation: isolate;
-  }
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: -1;
-    background:
-      radial-gradient(ellipse at top left, rgba(99, 102, 241, 0.12), transparent 55%),
-      radial-gradient(ellipse at top right, rgba(34, 211, 238, 0.08), transparent 50%);
-    opacity: 0.45;
-  }
-  .dark body::before {
-    background:
-      radial-gradient(ellipse at top left, rgba(99, 102, 241, 0.15), transparent 55%),
-      radial-gradient(ellipse at top right, rgba(168, 85, 247, 0.12), transparent 50%);
-    opacity: 0.8;
   }
   code,
   pre,

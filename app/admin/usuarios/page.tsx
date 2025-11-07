@@ -95,8 +95,8 @@ export default function UsuariosPage() {
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex gap-4">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                        <span className="text-2xl font-bold text-primary">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <span className="text-2xl font-bold">
                           {usuario.nombre.charAt(0).toUpperCase()}
                         </span>
                       </div>

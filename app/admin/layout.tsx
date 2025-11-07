@@ -23,11 +23,11 @@ import type { Usuario } from "@/lib/types";
 const AdminSidebar = dynamic(() => import("@/components/admin-sidebar"), {
 	ssr: false,
 	loading: () => (
-		<div className="hidden h-screen w-[68px] flex-col border-r border-border/60 bg-background px-3 py-5 lg:flex">
-			<div className="h-12 w-full animate-pulse rounded-xl bg-muted/40" />
+		<div className="hidden h-screen w-[68px] flex-col border-r border-border bg-background px-3 py-5 lg:flex">
+			<div className="h-12 w-full animate-pulse rounded-xl bg-muted" />
 			<div className="mt-6 space-y-3">
 				{Array.from({ length: 7 }).map((_, index) => (
-					<div key={index} className="h-10 animate-pulse rounded-xl bg-muted/30" />
+					<div key={index} className="h-10 animate-pulse rounded-xl bg-muted" />
 				))}
 			</div>
 		</div>
@@ -76,10 +76,10 @@ export default function AdminLayout({
 	return (
 		<div className="min-h-screen bg-background flex flex-col lg:flex-row">
 			<div className="flex min-h-screen flex-1 flex-col pb-20 lg:pb-0">
-				<header className="sticky top-0 z-40 border-b border-border/50 bg-background">
+				<header className="sticky top-0 z-40 border-b border-border bg-background">
 					<div className="flex h-14 w-full items-center justify-between gap-3 px-5 lg:px-10">
 						<div className="flex items-center gap-2">
-							<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary lg:hidden">
+							<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground lg:hidden">
 								<div className="relative h-6 w-6">
 									<Image
 										src="/stockwear-icon.png"
@@ -100,7 +100,7 @@ export default function AdminLayout({
 								<Button
 									variant="ghost"
 									size="icon"
-									className="h-10 w-10 rounded-full border border-border/60 bg-background shadow-sm"
+									className="h-10 w-10 rounded-full border border-border bg-background shadow-sm"
 								>
 									<Avatar className="h-8 w-8">
 										<AvatarFallback className="text-sm font-medium uppercase">

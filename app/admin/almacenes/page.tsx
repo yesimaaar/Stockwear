@@ -79,7 +79,7 @@ export default function AlmacenesPage() {
               </p>
             </div>
           </section>
-          <section className="rounded-2xl border border-border/60 bg-background/80 p-4">
+          <section className="rounded-2xl border border-border bg-background p-4">
             <h3 className="text-sm font-semibold text-foreground">Atajos</h3>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li>• Crear transferencia</li>
@@ -111,8 +111,8 @@ export default function AlmacenesPage() {
               <CardContent className="p-6">
                 <div className="mb-4 flex items-start justify-between">
                   <div className="flex gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                      <Warehouse className="h-6 w-6 text-primary" />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-primary">
+                      <Warehouse className="h-6 w-6" />
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold">{almacen.nombre}</h3>
