@@ -70,6 +70,7 @@ export default function LoginPage() {
                 alt="StockWear"
                 width={90}
                 height={90}
+                priority
               />
               <span className="text-2xl font-semibold">StockWear</span>
             </div>
@@ -110,6 +111,7 @@ export default function LoginPage() {
                 alt="StockWear"
                 width={100}
                 height={100}
+                loading="lazy"
               />
               <span className="text-xl font-bold">StockWear</span>
             </div>

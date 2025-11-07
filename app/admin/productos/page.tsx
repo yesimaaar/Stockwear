@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import {
@@ -10,6 +11,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  SlidersHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,7 +61,7 @@ export default function ProductosPage() {
   }, [cargarProductos])
 
   const ejecutarBusqueda = useCallback(
-    async (query: string) => {
+    (query: string) => {
       const trimmed = query.trim()
       if (trimmed.length === 0) {
         setFilteredProductos(productos)
@@ -67,12 +69,29 @@ export default function ProductosPage() {
       }
 
       setSearching(true)
-      try {
-        const results = await ProductoService.search(trimmed)
-        setFilteredProductos(results)
-      } finally {
-        setSearching(false)
-      }
+      const normalized = trimmed.toLowerCase()
+      const resultados = productos.filter((producto) => {
+        const nombre = producto.nombre.toLowerCase()
+        const codigo = producto.codigo.toLowerCase()
+        const categoria = producto.categoria.toLowerCase()
+        const proveedor = (producto.proveedor ?? "").toLowerCase()
+        const coincideStock = producto.stockPorTalla.some((detalle) => {
+          const almacen = (detalle.almacen ?? "").toLowerCase()
+          const talla = (detalle.talla ?? "").toLowerCase()
+          return almacen.includes(normalized) || talla.includes(normalized)
+        })
+
+        return (
+          nombre.includes(normalized) ||
+          codigo.includes(normalized) ||
+          categoria.includes(normalized) ||
+          proveedor.includes(normalized) ||
+          coincideStock
+        )
+      })
+
+      setFilteredProductos(resultados)
+      setSearching(false)
     },
     [productos],
   )
@@ -129,35 +148,31 @@ export default function ProductosPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/">
-                <Button variant="ghost" size="icon">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              </Link>
-              <div className="flex items-center gap-3">
-                <Package className="h-8 w-8 text-primary" />
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">Productos y Stock</h1>
-                  <p className="text-sm text-muted-foreground">Gestión completa de inventario</p>
-                </div>
-              </div>
-            </div>
-            <Link href="/admin/productos/nuevo">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo Producto
+      <main className="container mx-auto px-4 py-8 space-y-6">
+        <div className="flex flex-col gap-4 border-b border-border/70 pb-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
+            <div className="flex items-center gap-3">
+              <Package className="h-7 w-7 text-primary" />
+              <div>
+                <h1 className="text-xl font-semibold text-foreground">Productos y Stock</h1>
+                <p className="text-sm text-muted-foreground">Gestión completa de inventario</p>
+              </div>
+            </div>
           </div>
+          <Link href="/admin/productos/nuevo">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo Producto
+            </Button>
+          </Link>
         </div>
-      </header>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-1 gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -174,9 +189,18 @@ export default function ProductosPage() {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline" onClick={() => void ejecutarBusqueda(searchQuery)} disabled={searching}>
+            <Button
+              variant="outline"
+              onClick={() => void ejecutarBusqueda(searchQuery)}
+              disabled={searching}
+              type="button"
+            >
               <Search className="mr-2 h-4 w-4" />
               {searching ? "Buscando..." : "Buscar"}
+            </Button>
+            <Button type="button" variant="outline" className="min-w-[120px] gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              Filtros
             </Button>
           </div>
         </div>
@@ -246,9 +270,12 @@ export default function ProductosPage() {
                           </TableCell>
                           <TableCell className="py-3">
                             <div className="flex items-center gap-3">
-                              <img
+                              <Image
                                 src={producto.imagen || "/placeholder.svg"}
                                 alt={producto.nombre}
+                                width={48}
+                                height={48}
+                                loading="lazy"
                                 className="h-12 w-12 shrink-0 rounded-md object-cover"
                               />
                               <div>

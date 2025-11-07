@@ -88,7 +88,7 @@ export function AdminSidebar() {
 	const wrapperClass = useMemo(
 		() =>
 			cn(
-				"group/sidebar relative z-20 hidden flex-col border-r border-border/60 bg-background/70 backdrop-blur-xl transition-all duration-200 lg:flex lg:sticky lg:top-0 lg:h-screen",
+				"group/sidebar relative z-20 hidden flex-col border-r border-border/60 bg-background transition-all duration-200 lg:flex lg:sticky lg:top-0 lg:h-screen",
 				SIDEBAR_WIDTH[sidebarMode],
 				hoverEnabled && "lg:hover:w-64"
 			),

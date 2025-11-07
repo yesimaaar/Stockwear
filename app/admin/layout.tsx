@@ -1,9 +1,10 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,9 +17,22 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { AdminSidebar } from "@/components/admin-sidebar";
 import { AuthService } from "@/lib/services/auth-service";
 import type { Usuario } from "@/lib/types";
+
+const AdminSidebar = dynamic(() => import("@/components/admin-sidebar"), {
+	ssr: false,
+	loading: () => (
+		<div className="hidden h-screen w-[68px] flex-col border-r border-border/60 bg-background px-3 py-5 lg:flex">
+			<div className="h-12 w-full animate-pulse rounded-xl bg-muted/40" />
+			<div className="mt-6 space-y-3">
+				{Array.from({ length: 7 }).map((_, index) => (
+					<div key={index} className="h-10 animate-pulse rounded-xl bg-muted/30" />
+				))}
+			</div>
+		</div>
+	),
+});
 
 export default function AdminLayout({
 	children
@@ -60,10 +74,9 @@ export default function AdminLayout({
 	}
 
 	return (
-		<div className="min-h-screen bg-background lg:flex">
-			<AdminSidebar />
+		<div className="min-h-screen bg-background flex flex-col lg:flex-row">
 			<div className="flex min-h-screen flex-1 flex-col pb-20 lg:pb-0">
-				<header className="sticky top-0 z-40 border-b border-border/50 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/65">
+				<header className="sticky top-0 z-40 border-b border-border/50 bg-background">
 					<div className="flex h-14 w-full items-center justify-between gap-3 px-5 lg:px-10">
 						<div className="flex items-center gap-2">
 							<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary lg:hidden">
@@ -87,7 +100,7 @@ export default function AdminLayout({
 								<Button
 									variant="ghost"
 									size="icon"
-									className="h-10 w-10 rounded-full border border-border/60 bg-background/80 shadow-sm"
+									className="h-10 w-10 rounded-full border border-border/60 bg-background shadow-sm"
 								>
 									<Avatar className="h-8 w-8">
 										<AvatarFallback className="text-sm font-medium uppercase">
@@ -121,6 +134,9 @@ export default function AdminLayout({
 				<main className="mx-auto w-full flex-1 space-y-7 px-4 pt-7 pb-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-16">
 					{children}
 				</main>
+			</div>
+			<div className="lg:order-first lg:flex-none">
+				<AdminSidebar />
 			</div>
 		</div>
 	);

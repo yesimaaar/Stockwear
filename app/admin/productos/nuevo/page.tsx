@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
@@ -307,8 +308,15 @@ export default function NuevoProductoPage() {
                       onChange={(event) => setFormData({ ...formData, imagen: event.target.value })}
                     />
                     {formData.imagen && (
-                      <div className="h-16 w-16 overflow-hidden rounded border">
-                        <img src={formData.imagen} alt="Previsualización" className="h-full w-full object-cover" />
+                      <div className="relative h-16 w-16 overflow-hidden rounded border">
+                        <Image
+                          src={formData.imagen}
+                          alt="Previsualización"
+                          fill
+                          sizes="64px"
+                          loading="lazy"
+                          className="object-cover"
+                        />
                       </div>
                     )}
                   </div>

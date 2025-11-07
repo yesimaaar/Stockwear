@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   DollarSign,
@@ -18,12 +19,50 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 type Trend = "up" | "down" | "flat"
 
+type MetricId = "ventasMes" | "ventasRegistradas" | "usuariosActivos" | "productosBajoStock"
+
+const METRIC_STYLES: Record<MetricId, {
+  title: string
+  icon: typeof DollarSign
+  bgColor: string
+  iconColor: string
+  description: string
+}> = {
+  ventasMes: {
+    title: "Ventas del mes",
+    icon: DollarSign,
+    bgColor: "bg-emerald-100",
+    iconColor: "text-emerald-700",
+    description: "Ingresos registrados en movimientos de tipo venta",
+  },
+  ventasRegistradas: {
+    title: "Ventas registradas",
+    icon: ShoppingCart,
+    bgColor: "bg-blue-100",
+    iconColor: "text-blue-700",
+    description: "Cantidad de movimientos de venta en el mes",
+  },
+  usuariosActivos: {
+    title: "Usuarios activos",
+    icon: Users,
+    bgColor: "bg-purple-100",
+    iconColor: "text-purple-700",
+    description: "Usuarios habilitados en la plataforma",
+  },
+  productosBajoStock: {
+    title: "Productos bajo stock",
+    icon: Package,
+    bgColor: "bg-amber-100",
+    iconColor: "text-amber-700",
+    description: "Productos cuyo inventario está por debajo del mínimo",
+  },
+}
+
 interface Metric {
+  id: MetricId
   title: string
   value: string
   change: string
@@ -58,6 +97,36 @@ interface UsuarioRow {
   estado: string | null
   createdAt: string | null
 }
+
+const DASHBOARD_CACHE_KEY = "stockwear-dashboard-cache-v1"
+
+interface CachedMetric {
+  id: MetricId
+  value: string
+  change: string
+  trend: Trend
+}
+
+interface DashboardCache {
+  metrics: CachedMetric[]
+  salesSeries: Array<{ date: string; value: number }>
+  dailyTarget: number
+  dailyProgress: number
+  monthlyTarget: number
+  monthlyProgress: number
+  yearlyTarget: number
+  yearlyProgress: number
+  lowStockCount: number
+}
+
+const SalesChart = dynamic(() => import("@/components/dashboard/sales-chart"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+      Cargando tendencias de ventas...
+    </div>
+  ),
+})
 
 const currencyFormatter = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -99,48 +168,15 @@ function getDateParts(dateLike: string | Date) {
 export default function AdminDashboard() {
   const dismissedRef = useRef(false)
   const [showMobileNotice, setShowMobileNotice] = useState(false)
-  const [metrics, setMetrics] = useState<Metric[]>([
-    {
-      title: "Ventas del mes",
-      value: "$0",
+  const [metrics, setMetrics] = useState<Metric[]>(() =>
+    (Object.keys(METRIC_STYLES) as MetricId[]).map((id) => ({
+      id,
+      ...METRIC_STYLES[id],
+      value: id === "ventasMes" ? "$0" : "0",
       change: "--",
       trend: "flat",
-      icon: DollarSign,
-      bgColor: "bg-emerald-100",
-      iconColor: "text-emerald-700",
-      description: "Ingresos registrados en movimientos de tipo venta",
-    },
-    {
-      title: "Ventas registradas",
-      value: "0",
-      change: "--",
-      trend: "flat",
-      icon: ShoppingCart,
-      bgColor: "bg-blue-100",
-      iconColor: "text-blue-700",
-      description: "Cantidad de movimientos de venta en el mes",
-    },
-    {
-      title: "Usuarios activos",
-      value: "0",
-      change: "--",
-      trend: "flat",
-      icon: Users,
-      bgColor: "bg-purple-100",
-      iconColor: "text-purple-700",
-      description: "Usuarios habilitados en la plataforma",
-    },
-    {
-      title: "Productos bajo stock",
-      value: "0",
-      change: "--",
-      trend: "flat",
-      icon: Package,
-      bgColor: "bg-amber-100",
-      iconColor: "text-amber-700",
-      description: "Productos cuyo inventario está por debajo del mínimo",
-    },
-  ])
+    })),
+  )
 
   const [salesSeries, setSalesSeries] = useState<Array<{ date: string; value: number }>>([])
   const [dailyTarget, setDailyTarget] = useState(0)
@@ -151,6 +187,41 @@ export default function AdminDashboard() {
   const [yearlyProgress, setYearlyProgress] = useState(0)
   const [lowStockCount, setLowStockCount] = useState(0)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const cached = window.localStorage.getItem(DASHBOARD_CACHE_KEY)
+    if (!cached) {
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(cached) as DashboardCache
+      const hydratedMetrics = parsed.metrics.map((metric) => ({
+        id: metric.id,
+        ...METRIC_STYLES[metric.id],
+        value: metric.value,
+        change: metric.change,
+        trend: metric.trend,
+      }))
+
+      setMetrics(hydratedMetrics)
+      setSalesSeries(parsed.salesSeries)
+      setDailyTarget(parsed.dailyTarget)
+      setDailyProgress(parsed.dailyProgress)
+      setMonthlyTarget(parsed.monthlyTarget)
+      setMonthlyProgress(parsed.monthlyProgress)
+      setYearlyTarget(parsed.yearlyTarget)
+      setYearlyProgress(parsed.yearlyProgress)
+      setLowStockCount(parsed.lowStockCount)
+      setLoading(false)
+    } catch (error) {
+      console.warn("No se pudo restaurar la caché del dashboard", error)
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -319,57 +390,74 @@ export default function AdminDashboard() {
         const usersTrend = computeTrend(usersCurrentMonth.length, usersPreviousMonth.length)
         const productsTrend = computeTrend(productsCreatedCurrentMonth.length, productsCreatedPreviousMonth.length)
 
-        setMetrics([
+        const metricsPayload: Metric[] = [
           {
-            title: "Ventas del mes",
+            id: "ventasMes",
+            ...METRIC_STYLES.ventasMes,
             value: currencyFormatter.format(monthSalesValue),
             change: monthSalesTrend.change,
             trend: monthSalesTrend.trend,
-            icon: DollarSign,
-            bgColor: "bg-emerald-100",
-            iconColor: "text-emerald-700",
-            description: "Ingresos registrados en movimientos de tipo venta",
           },
           {
-            title: "Ventas registradas",
+            id: "ventasRegistradas",
+            ...METRIC_STYLES.ventasRegistradas,
             value: monthSalesCount.toString(),
             change: monthSalesCountTrend.change,
             trend: monthSalesCountTrend.trend,
-            icon: ShoppingCart,
-            bgColor: "bg-blue-100",
-            iconColor: "text-blue-700",
-            description: "Cantidad de movimientos de venta en el mes",
           },
           {
-            title: "Usuarios activos",
+            id: "usuariosActivos",
+            ...METRIC_STYLES.usuariosActivos,
             value: activeUsers.length.toString(),
             change: usersTrend.change,
             trend: usersTrend.trend,
-            icon: Users,
-            bgColor: "bg-purple-100",
-            iconColor: "text-purple-700",
-            description: "Usuarios habilitados en la plataforma",
           },
           {
-            title: "Productos bajo stock",
+            id: "productosBajoStock",
+            ...METRIC_STYLES.productosBajoStock,
             value: lowStockProducts.length.toString(),
             change: productsTrend.change,
             trend: productsTrend.trend,
-            icon: Package,
-            bgColor: "bg-amber-100",
-            iconColor: "text-amber-700",
-            description: "Productos cuyo inventario está por debajo del mínimo",
           },
-        ])
+        ]
 
+        const computedDailyProgress = Math.round(dailySalesValue)
+        const computedMonthlyProgress = Math.round(monthSalesValue)
+        const computedYearlyProgress = Math.round(yearlySalesValue)
+        const computedDailyTarget = Math.max(Math.round(dailySalesValue * 1.2), 1)
+        const computedMonthlyTarget = Math.max(Math.round(monthSalesValue * 1.15), 1)
+        const computedYearlyTarget = Math.max(Math.round(yearlySalesValue * 1.1), 1)
+
+        setMetrics(metricsPayload)
         setLowStockCount(lowStockProducts.length)
         setSalesSeries(series)
-        setDailyProgress(Math.round(dailySalesValue))
-        setMonthlyProgress(Math.round(monthSalesValue))
-        setYearlyProgress(Math.round(yearlySalesValue))
-        setDailyTarget(Math.max(Math.round(dailySalesValue * 1.2), 1))
-        setMonthlyTarget(Math.max(Math.round(monthSalesValue * 1.15), 1))
-        setYearlyTarget(Math.max(Math.round(yearlySalesValue * 1.1), 1))
+        setDailyProgress(computedDailyProgress)
+        setMonthlyProgress(computedMonthlyProgress)
+        setYearlyProgress(computedYearlyProgress)
+        setDailyTarget(computedDailyTarget)
+        setMonthlyTarget(computedMonthlyTarget)
+        setYearlyTarget(computedYearlyTarget)
+
+        if (typeof window !== "undefined") {
+          const payload: DashboardCache = {
+            metrics: metricsPayload.map((metric) => ({
+              id: metric.id,
+              value: metric.value,
+              change: metric.change,
+              trend: metric.trend,
+            })),
+            salesSeries: series,
+            dailyTarget: computedDailyTarget,
+            dailyProgress: computedDailyProgress,
+            monthlyTarget: computedMonthlyTarget,
+            monthlyProgress: computedMonthlyProgress,
+            yearlyTarget: computedYearlyTarget,
+            yearlyProgress: computedYearlyProgress,
+            lowStockCount: lowStockProducts.length,
+          }
+
+          window.localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(payload))
+        }
       } catch (error) {
         console.error("Error loading dashboard", error)
       } finally {
@@ -489,49 +577,7 @@ export default function AdminDashboard() {
             <CardTitle className="text-xl font-semibold">Ventas de los últimos 7 días</CardTitle>
           </CardHeader>
           <CardContent>
-            {salesSeries.length === 0 ? (
-              <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-                Aún no se registran ventas para este periodo.
-              </div>
-            ) : (
-              <ChartContainer
-                config={{
-                  value: {
-                    label: "Ventas",
-                    color: "hsl(var(--primary))",
-                  },
-                }}
-                className="h-[300px]"
-              >
-                <AreaChart data={salesSeries}>
-                  <defs>
-                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} className="text-xs" />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-                    className="text-xs"
-                  />
-                  <ChartTooltip
-                    content={<ChartTooltipContent formatter={(value) => currencyFormatter.format(value as number)} />}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    fill="url(#colorValue)"
-                  />
-                </AreaChart>
-              </ChartContainer>
-            )}
+            <SalesChart data={salesSeries} formatter={(value) => currencyFormatter.format(value)} />
           </CardContent>
         </Card>
 
