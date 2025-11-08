@@ -4,81 +4,78 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Cambiado de mint/turquoise a escala de grises (blanco y negro) */
-  --background: oklch(0.99 0.005 180);
-  --foreground: oklch(0.25 0.01 180);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.25 0.01 180);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.25 0.01 180);
-  --primary: oklch(0.25 0.01 180); /* Negro/Gris oscuro */
-  --primary-foreground: oklch(0.99 0.005 180);
-  --secondary: oklch(0.97 0.005 180);
-  --secondary-foreground: oklch(0.25 0.01 180);
-  --muted: oklch(0.96 0.005 180);
-  --muted-foreground: oklch(0.55 0.01 180);
-  --accent: oklch(0.55 0.01 180); /* Gris medio */
-  --accent-foreground: oklch(0.99 0.005 180);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.005 180);
-  --input: oklch(0.92 0.005 180);
-  --ring: oklch(0.25 0.01 180); /* Negro/Gris oscuro para focus rings */
-  --chart-1: oklch(0.35 0.01 180);
-  --chart-2: oklch(0.45 0.01 180);
-  --chart-3: oklch(0.55 0.01 180);
-  --chart-4: oklch(0.65 0.01 180);
-  --chart-5: oklch(0.75 0.01 180);
+  --background: #f5f5f7;
+  --foreground: #111114;
+  --card: #ffffff;
+  --card-foreground: #111114;
+  --popover: #ffffff;
+  --popover-foreground: #111114;
+  --primary: #111114;
+  --primary-foreground: #f9f9fb;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #18181b;
+  --muted: #eff0f3;
+  --muted-foreground: #63636f;
+  --accent: #e4e4e7;
+  --accent-foreground: #111114;
+  --destructive: #ef4444;
+  --destructive-foreground: #fef2f2;
+  --border: #e4e4e7;
+  --input: #e0e0e7;
+  --ring: #111114;
+  --chart-1: #6366f1;
+  --chart-2: #22d3ee;
+  --chart-3: #f97316;
+  --chart-4: #a855f7;
+  --chart-5: #facc15;
   --radius: 0.75rem;
-  --sidebar: oklch(0.985 0.005 180);
-  --sidebar-foreground: oklch(0.25 0.01 180);
-  --sidebar-primary: oklch(0.25 0.01 180); /* Negro/Gris oscuro */
-  --sidebar-primary-foreground: oklch(0.99 0.005 180);
-  --sidebar-accent: oklch(0.97 0.005 180);
-  --sidebar-accent-foreground: oklch(0.25 0.01 180);
-  --sidebar-border: oklch(0.92 0.005 180);
-  --sidebar-ring: oklch(0.25 0.01 180);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111114;
+  --sidebar-primary: #111114;
+  --sidebar-primary-foreground: #f9f9fb;
+  --sidebar-accent: #f3f4f6;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #111114;
 }
 
 .dark {
-  /* Modo oscuro actualizado con escala de grises */
-  --background: oklch(0.15 0.01 180);
-  --foreground: oklch(0.98 0.005 180);
-  --card: oklch(0.18 0.01 180);
-  --card-foreground: oklch(0.98 0.005 180);
-  --popover: oklch(0.18 0.01 180);
-  --popover-foreground: oklch(0.98 0.005 180);
-  --primary: oklch(0.98 0.005 180); /* Blanco/Gris claro para dark mode */
-  --primary-foreground: oklch(0.15 0.01 180);
-  --secondary: oklch(0.25 0.01 180);
-  --secondary-foreground: oklch(0.98 0.005 180);
-  --muted: oklch(0.25 0.01 180);
-  --muted-foreground: oklch(0.7 0.01 180);
-  --accent: oklch(0.7 0.01 180); /* Gris claro */
-  --accent-foreground: oklch(0.15 0.01 180);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.25 0.01 180);
-  --input: oklch(0.25 0.01 180);
-  --ring: oklch(0.98 0.005 180); /* Blanco/Gris claro para focus rings */
-  --chart-1: oklch(0.75 0.01 180);
-  --chart-2: oklch(0.65 0.01 180);
-  --chart-3: oklch(0.55 0.01 180);
-  --chart-4: oklch(0.45 0.01 180);
-  --chart-5: oklch(0.35 0.01 180);
-  --sidebar: oklch(0.2 0.01 180);
-  --sidebar-foreground: oklch(0.98 0.005 180);
-  --sidebar-primary: oklch(0.98 0.005 180); /* Blanco/Gris claro */
-  --sidebar-primary-foreground: oklch(0.15 0.01 180);
-  --sidebar-accent: oklch(0.25 0.01 180);
-  --sidebar-accent-foreground: oklch(0.98 0.005 180);
-  --sidebar-border: oklch(0.25 0.01 180);
-  --sidebar-ring: oklch(0.98 0.005 180);
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --card: #111113;
+  --card-foreground: #f4f4f5;
+  --popover: #111113;
+  --popover-foreground: #f4f4f5;
+  --primary: #636161;
+  --primary-foreground: #f9f8ff;
+  --secondary: #18181b;
+  --secondary-foreground: #f4f4f5;
+  --muted: #1f1f23;
+  --muted-foreground: #a1a1aa;
+  --accent: #1f1f23;
+  --accent-foreground: #f4f4f5;
+  --destructive: #f87171;
+  --destructive-foreground: #111113;
+  --border: #1f1f23;
+  --input: #27272f;
+  --ring: #6366f1;
+  --chart-1: #6366f1;
+  --chart-2: #22d3ee;
+  --chart-3: #f97316;
+  --chart-4: #a855f7;
+  --chart-5: #facc15;
+  --sidebar: #0f0f12;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #09090b;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: #1f1f23;
+  --sidebar-ring: #6366f1;
 }
 
 @theme inline {
-  /* optional: --font-sans, --font-serif, --font-mono if they are applied in the layout.tsx */
-  /* Updated Tailwind theme colors to use Evershop brand */
+  /* Updated Tailwind theme colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -121,7 +118,22 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    color-scheme: light;
+    overscroll-behavior: none;
+  }
+  .dark {
+    color-scheme: dark;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    font-family: var(--font-sans);
+    background-color: var(--background);
+  }
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
   }
 }

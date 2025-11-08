@@ -6,6 +6,7 @@ export interface Usuario {
   authUid?: string
   nombre: string
   email: string
+  telefono?: string | null
   rol: RolUsuario
   estado: EstadoRegistro
   createdAt: string
@@ -16,6 +17,7 @@ export interface Producto {
   codigo: string
   nombre: string
   categoriaId: number
+  descripcion: string | null
   precio: number
   descuento: number
   proveedor: string | null
@@ -79,4 +81,23 @@ export interface Consulta {
   nivelConfianza: 'alto' | 'medio' | 'bajo'
   resultado: 'exitoso' | 'fallido'
   createdAt: string
+}
+
+export interface Venta {
+  id: number
+  folio: string
+  total: number
+  usuarioId: string | null
+  createdAt: string
+}
+
+export interface VentaDetalle {
+  id: number
+  ventaId: number
+  productoId: number
+  stockId: number
+  cantidad: number
+  precioUnitario: number
+  descuento: number
+  subtotal: number
 }

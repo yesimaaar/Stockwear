@@ -1,13 +1,26 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Edit, Trash2 } from "lucide-react"
+import * as LucideIcons from "lucide-react"
+const { ArrowLeft, Edit, Trash2 } = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
 
 export default function ProductoDetallePage() {
   const params = useParams<{ id: string }>()
@@ -15,6 +28,9 @@ export default function ProductoDetallePage() {
   const [producto, setProducto] = useState<ProductoConStock | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     const idParam = params?.id
@@ -95,13 +111,16 @@ export default function ProductoDetallePage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline">
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/admin/productos/${producto.id}/editar`)}
+              >
                 <Edit className="mr-2 h-4 w-4" />
                 Editar
               </Button>
-              <Button variant="destructive">
+              <Button variant="destructive" onClick={() => setConfirmOpen(true)} disabled={deleting}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar
+                {deleting ? "Eliminando..." : "Eliminar"}
               </Button>
             </div>
           </div>
@@ -115,11 +134,14 @@ export default function ProductoDetallePage() {
               <CardTitle>Información del Producto</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-6">
-                <img
+              <div className="relative mb-6 aspect-square w-full overflow-hidden rounded-lg">
+                <Image
                   src={producto.imagen || "/placeholder.svg"}
                   alt={producto.nombre}
-                  className="w-full rounded-lg object-cover"
+                  fill
+                  sizes="(min-width: 1024px) 50vw, 100vw"
+                  loading="lazy"
+                  className="object-cover"
                 />
               </div>
               <div className="space-y-4">
@@ -131,6 +153,11 @@ export default function ProductoDetallePage() {
                     </Badge>
                     <Badge variant="outline">{producto.categoria}</Badge>
                   </div>
+                  {producto.descripcion && (
+                    <p className="mt-3 text-sm text-muted-foreground whitespace-pre-line">
+                      {producto.descripcion}
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
                   <div>
@@ -216,6 +243,46 @@ export default function ProductoDetallePage() {
           </div>
         </div>
       </main>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este producto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El producto se marcará como inactivo y dejará de aparecer en los listados activos. Puedes reactivarlo más adelante si es necesario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive"
+              disabled={deleting}
+              onClick={async () => {
+                if (!producto) return
+                setDeleting(true)
+                const exito = await ProductoService.delete(producto.id)
+                setDeleting(false)
+                if (!exito) {
+                  toast({
+                    title: "No se pudo eliminar",
+                    description: "Ocurrió un error al intentar actualizar el estado del producto",
+                    variant: "destructive"
+                  })
+                  return
+                }
+                toast({
+                  title: "Producto actualizado",
+                  description: `${producto.nombre} fue marcado como inactivo`
+                })
+                setConfirmOpen(false)
+                router.push("/admin/productos")
+              }}
+            >
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

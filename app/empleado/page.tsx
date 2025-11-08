@@ -2,10 +2,23 @@
 
 import type React from "react"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { Camera, Package, Search, LogOut, CheckCircle, XCircle, AlertCircle, Loader2, X, Clock } from "lucide-react"
+import * as LucideIcons from "lucide-react"
+const {
+  Camera,
+  Package,
+  Search,
+  LogOut,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  X,
+  Clock,
+  Sparkles,
+} = LucideIcons
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,14 +36,14 @@ export default function EmpleadoDashboard() {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
-  const [showDesktopModal, setShowDesktopModal] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraRequestedRef = useRef(false)
   const [resultado, setResultado] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
-  const [imageUrl, setImageUrl] = useState("")
+  const [recommendedProducts, setRecommendedProducts] = useState<any[]>([])
 
   useEffect(() => {
     const checkMobile = () => {
@@ -50,14 +63,66 @@ export default function EmpleadoDashboard() {
       }
       setUser(currentUser)
       setLoading(false)
-
-      if (isMobile) {
-        startCamera()
-      }
     }
 
     void loadUser()
-  }, [router, isMobile])
+  }, [router])
+
+  useEffect(() => {
+    if (!user || cameraRequestedRef.current || cameraActive) {
+      return
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError("Tu navegador no soporta acceso a la cámara.")
+      return
+    }
+
+    cameraRequestedRef.current = true
+    void startCamera()
+  }, [user, cameraActive])
+
+  const loadRecommendations = useCallback(
+    async (categoria?: string, excludeId?: number) => {
+      if (!categoria) {
+        setRecommendedProducts([])
+        return
+      }
+
+      try {
+        const related = await ProductoService.search(categoria)
+        const filtered = related.filter((item: any) => item.id !== excludeId).slice(0, 4)
+        setRecommendedProducts(filtered)
+      } catch (error) {
+        console.error("No fue posible cargar recomendaciones", error)
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (!cameraActive) {
+      return
+    }
+
+    const video = videoRef.current
+    if (!video || !streamRef.current) {
+      return
+    }
+
+    video.srcObject = streamRef.current
+    const handleLoadedMetadata = () => {
+      void video.play()
+    }
+
+    video.onloadedmetadata = handleLoadedMetadata
+
+    return () => {
+      if (video) {
+        video.onloadedmetadata = null
+      }
+    }
+  }, [cameraActive])
 
   const handleLogout = async () => {
     await AuthService.logout()
@@ -73,6 +138,11 @@ export default function EmpleadoDashboard() {
     setSearchResults(results)
   }
 
+  const clearManualSearch = () => {
+    setSearchQuery("")
+    setSearchResults([])
+  }
+
   const handleConfirmarProducto = (confirmar: boolean) => {
     if (confirmar) {
       setResultado({ ...resultado, nivelConfianza: "alto" })
@@ -82,11 +152,25 @@ export default function EmpleadoDashboard() {
     }
   }
 
+  useEffect(() => {
+    if (resultado?.success && resultado.producto) {
+      void loadRecommendations(resultado.producto.categoria, resultado.producto.id)
+    }
+  }, [resultado, loadRecommendations])
+
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      const reference = searchResults[0]
+      void loadRecommendations(reference.categoria, reference.id)
+    } else if (!resultado) {
+      setRecommendedProducts([])
+    }
+  }, [searchResults, loadRecommendations, resultado])
+
   const startCamera = async () => {
     try {
       setCameraError(null)
       setResultado(null)
-      setShowDesktopModal(false)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
@@ -96,14 +180,12 @@ export default function EmpleadoDashboard() {
         audio: false,
       })
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        streamRef.current = stream
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play()
-        }
-        setCameraActive(true)
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
       }
+
+      streamRef.current = stream
+      setCameraActive(true)
     } catch (error) {
       console.error("Error al acceder a la cámara:", error)
       setCameraError("No se pudo acceder a la cámara. Verifica los permisos.")
@@ -149,7 +231,6 @@ export default function EmpleadoDashboard() {
     if (!file) return
 
     setScanning(true)
-    setShowDesktopModal(false)
 
     const reader = new FileReader()
     reader.onload = async (event) => {
@@ -159,21 +240,6 @@ export default function EmpleadoDashboard() {
       setScanning(false)
     }
     reader.readAsDataURL(file)
-  }
-
-  const handleUrlUpload = async () => {
-    if (!imageUrl.trim()) return
-
-    setScanning(true)
-    setShowDesktopModal(false)
-
-    // Simular procesamiento de URL
-    setTimeout(async () => {
-      const result = await ReconocimientoService.procesarImagen(imageUrl, user!.id)
-      setResultado(result)
-      setScanning(false)
-      setImageUrl("")
-    }, 1000)
   }
 
   useEffect(() => {
@@ -310,21 +376,25 @@ export default function EmpleadoDashboard() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8 text-center">
-          <h2 className="text-3xl font-bold text-foreground mb-2">Consulta de Productos</h2>
-          <p className="text-muted-foreground">Escanea un producto o busca manualmente para ver su disponibilidad</p>
-        </div>
+      <main className="mx-auto w-full px-4 py-8 lg:px-8 xl:px-12">
+        <div className="flex flex-col gap-8 xl:flex-row">
+          <div className="flex-1 space-y-8">
+            <div className="text-center xl:text-left">
+              <h2 className="mb-2 text-3xl font-bold text-foreground">Consulta de Productos</h2>
+              <p className="text-muted-foreground">
+                Escanea un producto o busca manualmente para ver su disponibilidad
+              </p>
+            </div>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Camera className="h-5 w-5" />
-              Reconocimiento Visual
-            </CardTitle>
-            <CardDescription>Captura una foto del producto para identificarlo automáticamente</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Camera className="h-5 w-5" />
+                  Reconocimiento Visual
+                </CardTitle>
+                <CardDescription>Captura una foto del producto para identificarlo automáticamente</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
             {/* Vista de cámara en tiempo real integrada en el dashboard */}
             <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
               {cameraActive ? (
@@ -407,11 +477,16 @@ export default function EmpleadoDashboard() {
                       <Card>
                         <CardContent className="pt-6">
                           <div className="flex gap-4">
-                            <img
-                              src={resultado.producto.imagen || "/placeholder.svg"}
-                              alt={resultado.producto.nombre}
-                              className="h-32 w-32 rounded-lg object-cover"
-                            />
+                            <div className="relative h-32 w-32 overflow-hidden rounded-lg">
+                              <Image
+                                src={resultado.producto.imagen || "/placeholder.svg"}
+                                alt={resultado.producto.nombre}
+                                fill
+                                sizes="128px"
+                                loading="lazy"
+                                className="object-cover"
+                              />
+                            </div>
                             <div className="flex-1">
                               <h3 className="text-xl font-bold mb-2">{resultado.producto.nombre}</h3>
                               <p className="text-sm text-muted-foreground mb-1">Código: {resultado.producto.codigo}</p>
@@ -488,12 +563,26 @@ export default function EmpleadoDashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
-              <Input
-                placeholder="Buscar por nombre o código..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              />
+              <div className="relative flex-1">
+                <Input
+                  placeholder="Buscar por nombre o código..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="pr-11"
+                />
+                {searchQuery && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearManualSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               <Button onClick={handleSearch}>
                 <Search className="h-4 w-4" />
               </Button>
@@ -505,11 +594,16 @@ export default function EmpleadoDashboard() {
                   <Card key={producto.id}>
                     <CardContent className="pt-6">
                       <div className="flex gap-4">
-                        <img
-                          src={producto.imagen || "/placeholder.svg"}
-                          alt={producto.nombre}
-                          className="h-20 w-20 rounded-lg object-cover"
-                        />
+                        <div className="relative h-20 w-20 overflow-hidden rounded-lg">
+                          <Image
+                            src={producto.imagen || "/placeholder.svg"}
+                            alt={producto.nombre}
+                            fill
+                            sizes="80px"
+                            loading="lazy"
+                            className="object-cover"
+                          />
+                        </div>
                         <div className="flex-1">
                           <h4 className="font-bold">{producto.nombre}</h4>
                           <p className="text-sm text-muted-foreground">
@@ -533,6 +627,60 @@ export default function EmpleadoDashboard() {
             )}
           </CardContent>
         </Card>
+          </div>
+
+          <aside className="xl:w-[360px] space-y-6">
+            <Card className="xl:sticky xl:top-24">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Sparkles className="h-5 w-5" />
+                  Recomendaciones según tu búsqueda
+                </CardTitle>
+                <CardDescription>Productos relacionados para sugerir al cliente</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {recommendedProducts.length > 0 ? (
+                  recommendedProducts.map((producto) => (
+                    <div
+                      key={producto.id}
+                      className="flex gap-3 rounded-xl border border-border/60 p-3 transition hover:border-primary/40 hover:shadow-sm"
+                    >
+                      <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-muted">
+                        <Image
+                          src={producto.imagen || "/placeholder.svg"}
+                          alt={producto.nombre}
+                          fill
+                          sizes="64px"
+                          loading="lazy"
+                          className="object-cover"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-foreground">{producto.nombre}</p>
+                        <p className="text-xs text-muted-foreground">{producto.categoria}</p>
+                        <p className="mt-1 text-sm font-medium text-primary">
+                          ${Number(producto.precio || 0).toLocaleString()}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="mt-2 px-0 text-xs"
+                          onClick={() => setSearchResults([producto])}
+                        >
+                          Ver disponibilidad
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Aún no hay recomendaciones. Escanea un producto o realiza una búsqueda para ver sugerencias similares.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </aside>
+        </div>
       </main>
 
       {/* Input oculto para subir archivos */}

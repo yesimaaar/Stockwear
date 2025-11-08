@@ -1,15 +1,34 @@
 "use client"
 
-import { Bell, Shield, Database, Palette } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { useTheme } from "next-themes"
+import * as LucideIcons from "lucide-react"
+const { Bell, Shield, Database, Palette } = LucideIcons
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 
 export default function ConfiguracionPage() {
+  const { resolvedTheme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const handleThemeToggle = useCallback(
+    (checked: boolean) => {
+      setTheme(checked ? "dark" : "light")
+    },
+    [setTheme],
+  )
+
+  const isDarkMode = mounted && resolvedTheme === "dark"
+
   return (
-    <div>
-      <div className="mb-8">
+    <div className="space-y-8">
+      <div className="space-y-2">
         <h2 className="text-3xl font-bold text-foreground">Configuración</h2>
         <p className="text-muted-foreground">Ajustes generales del sistema</p>
       </div>
@@ -18,8 +37,8 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
-                <Bell className="h-5 w-5 text-blue-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-indigo-500">
+                <Bell className="h-5 w-5" />
               </div>
               <div>
                 <CardTitle>Notificaciones</CardTitle>
@@ -42,8 +61,8 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
-                <Shield className="h-5 w-5 text-green-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-emerald-500">
+                <Shield className="h-5 w-5" />
               </div>
               <div>
                 <CardTitle>Seguridad</CardTitle>
@@ -66,8 +85,8 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100">
-                <Database className="h-5 w-5 text-purple-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-purple-500">
+                <Database className="h-5 w-5" />
               </div>
               <div>
                 <CardTitle>Base de Datos</CardTitle>
@@ -88,8 +107,8 @@ export default function ConfiguracionPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100">
-                <Palette className="h-5 w-5 text-orange-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-orange-500">
+                <Palette className="h-5 w-5" />
               </div>
               <div>
                 <CardTitle>Apariencia</CardTitle>
@@ -100,7 +119,7 @@ export default function ConfiguracionPage() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="dark-mode">Modo oscuro</Label>
-              <Switch id="dark-mode" />
+              <Switch id="dark-mode" checked={isDarkMode} onCheckedChange={handleThemeToggle} disabled={!mounted} />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="compact-view">Vista compacta</Label>

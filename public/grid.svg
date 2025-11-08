@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" fill="none">
+  <g opacity="0.35" stroke="#ffffff" stroke-width="0.5">
+    <path d="M0 0h64" />
+    <path d="M0 8h64" />
+    <path d="M0 16h64" />
+    <path d="M0 24h64" />
+    <path d="M0 32h64" />
+    <path d="M0 40h64" />
+    <path d="M0 48h64" />
+    <path d="M0 56h64" />
+    <path d="M0 64h64" />
+    <path d="M0 0v64" />
+    <path d="M8 0v64" />
+    <path d="M16 0v64" />
+    <path d="M24 0v64" />
+    <path d="M32 0v64" />
+    <path d="M40 0v64" />
+    <path d="M48 0v64" />
+    <path d="M56 0v64" />
+    <path d="M64 0v64" />
+  </g>
+</svg>

@@ -1,1 +1,6 @@
-export { registrarEmpleado, registrarAdmin } from ".register-service/"
+export * from './auth-service'
+export * from './inventario-service'
+export * from './producto-service'
+export * from './reconocimiento-service'
+export * from './register-service'
+export * from './venta-service'

@@ -12,11 +12,16 @@ type UsuarioRow = {
   auth_uid?: string
   nombre: string
   email: string
+  telefono?: string | null
   rol: 'admin' | 'empleado'
   estado?: 'activo' | 'inactivo'
   created_at?: string
   createdAt?: string
 }
+
+type UpdateUsuarioInput = Partial<
+  Pick<Usuario, 'nombre' | 'email' | 'telefono' | 'rol' | 'estado'>
+>
 
 function mapUsuario(row?: UsuarioRow | null): Usuario | undefined {
   if (!row) return undefined
@@ -26,6 +31,7 @@ function mapUsuario(row?: UsuarioRow | null): Usuario | undefined {
     authUid: row.auth_uid ?? row.id,
     nombre: row.nombre,
     email: row.email,
+    telefono: row.telefono ?? null,
     rol: row.rol,
     estado: row.estado ?? 'activo',
     createdAt: createdValue,
@@ -68,9 +74,10 @@ export class AuthService {
     return { success: true }
   }
 
-  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado' }): Promise<AuthResponse> {
-    const { nombre, email, password, rol } = params
+  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado'; telefono?: string }): Promise<AuthResponse> {
+    const { nombre, email, password, rol, telefono } = params
     const normalizedEmail = email.trim().toLowerCase()
+  const normalizedPhone = telefono ? telefono.replace(/\s+/g, "") : null
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -79,6 +86,7 @@ export class AuthService {
         data: {
           nombre,
           rol,
+          telefono: normalizedPhone ?? undefined,
         },
       },
     })
@@ -95,11 +103,31 @@ export class AuthService {
     }
 
     if (!data.session) {
+      await supabase.from('usuarios').upsert({
+        id: user.id,
+        auth_uid: user.id,
+        nombre,
+        email: normalizedEmail,
+        rol,
+        telefono: normalizedPhone,
+        estado: 'activo',
+      })
+
       return {
         success: true,
         message: 'Usuario registrado. Revisa tu correo para confirmar la cuenta.',
       }
     }
+
+    await supabase.from('usuarios').upsert({
+      id: user.id,
+      auth_uid: user.id,
+      nombre,
+      email: normalizedEmail,
+      rol,
+      telefono: normalizedPhone,
+      estado: 'activo',
+    })
 
     const { data: profile } = await supabase
       .from('usuarios')
@@ -127,7 +155,7 @@ export class AuthService {
         .maybeSingle()
 
       return mapUsuario(profile as UsuarioRow) ?? null
-    } catch (error) {
+    } catch (_error) {
       return null
     }
   }
@@ -159,5 +187,51 @@ export class AuthService {
     return (data as UsuarioRow[])
       .map((row) => mapUsuario(row))
       .filter((user): user is Usuario => Boolean(user))
+  }
+
+  static async updateUsuario(id: string, updates: UpdateUsuarioInput): Promise<Usuario | null> {
+    if (!id) {
+      throw new Error('El identificador del usuario es obligatorio.')
+    }
+
+    const payload: Partial<UsuarioRow> = {}
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'nombre')) {
+      payload.nombre = updates.nombre?.trim() ?? ''
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'email') && updates.email) {
+      payload.email = updates.email.trim().toLowerCase()
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'telefono')) {
+      const telefonoNormalizado = updates.telefono?.trim() ?? null
+      payload.telefono = telefonoNormalizado === '' ? null : telefonoNormalizado
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'rol') && updates.rol) {
+      payload.rol = updates.rol
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'estado') && updates.estado) {
+      payload.estado = updates.estado
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return null
+    }
+
+    const { data, error } = await supabase
+      .from('usuarios')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(error.message || 'No se pudo actualizar el usuario.')
+    }
+
+    return mapUsuario(data as UsuarioRow) ?? null
   }
 }

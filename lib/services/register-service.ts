@@ -27,7 +27,7 @@ interface RegistroAdminData {
  */
 async function createSupabaseClient() {
   const cookieStore = await cookies()
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL = "https://ubzabtbearqsbprabqce.supabase.co", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InViemFidGJlYXJxc2JwcmFicWNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzNTk1MjIsImV4cCI6MjA3NzkzNTUyMn0.y1fs4e4HfW5UkRy4p8CudP0RitYvGU32kXoNFle3rJI", {
     cookies: {
       getAll() {
         return cookieStore.getAll()
