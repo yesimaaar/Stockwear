@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
+import { usePathname, useRouter } from "next/navigation";
+import * as LucideIcons from "lucide-react";
+const {
 	ArrowLeftRight,
 	BarChart3,
 	Boxes,
 	Clock,
 	Cog,
+	Home,
 	Layers3,
 	Package,
-	Receipt,
 	Settings,
 	Shirt,
 	Users
-} from "lucide-react";
+} = LucideIcons;
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,11 +35,10 @@ import {
 } from "@/components/ui/tooltip";
 
 const NAV_ITEMS = [
-	{ href: "/admin", icon: BarChart3, label: "Dashboard" },
+	{ href: "/admin", icon: Home, label: "Inicio" },
 	{ href: "/admin/almacenes", icon: Boxes, label: "Almacenes" },
 	{ href: "/admin/categorias", icon: Layers3, label: "Categorías" },
 	{ href: "/admin/productos", icon: Package, label: "Productos y Stock" },
-	{ href: "/admin/facturacion", icon: Receipt, label: "Facturación y ventas" },
 	{ href: "/admin/movimientos", icon: ArrowLeftRight, label: "Movimientos" },
 	{ href: "/admin/tallas", icon: Shirt, label: "Tallas" },
 	{ href: "/admin/usuarios", icon: Users, label: "Usuarios" },
@@ -72,8 +72,10 @@ function useIsDesktop() {
 
 export function AdminSidebar() {
 	const pathname = usePathname();
+ const router = useRouter();
 	const isDesktop = useIsDesktop();
 	const [sidebarMode, setSidebarMode] = useState<SidebarMode>("condensed");
+ const prefetchedRoutesRef = useRef(new Set<string>());
 
 	useEffect(() => {
 		setSidebarMode((previous) => {
@@ -88,6 +90,55 @@ export function AdminSidebar() {
 	const showLabels = sidebarMode === "open";
 	const tooltipsEnabled =
 		isDesktop && (sidebarMode === "closed" || sidebarMode === "condensed");
+
+	const prefetchRoute = useCallback(
+		(href: string) => {
+			if (!href) return;
+			const current = prefetchedRoutesRef.current;
+			if (current.has(href)) return;
+			try {
+				router.prefetch(href);
+				current.add(href);
+			} catch (error) {
+				current.delete(href);
+				if (process.env.NODE_ENV !== "production") {
+					console.debug("No se pudo prefetch la ruta", href, error);
+				}
+			}
+		},
+		[router]
+	);
+
+	useEffect(() => {
+		if (!isDesktop) return;
+		let canceled = false;
+
+		const prefetchAll = () => {
+			if (canceled) return;
+			for (const item of NAV_ITEMS) {
+				prefetchRoute(item.href);
+			}
+		};
+
+		const browserWindow = window as Window & {
+			requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+			cancelIdleCallback?: (handle: number) => void;
+		};
+
+		if (typeof browserWindow.requestIdleCallback === "function") {
+			const handle = browserWindow.requestIdleCallback(prefetchAll, { timeout: 1500 });
+			return () => {
+				canceled = true;
+				browserWindow.cancelIdleCallback?.(handle);
+			};
+		}
+
+		const timeout = window.setTimeout(prefetchAll, 400);
+		return () => {
+			canceled = true;
+			window.clearTimeout(timeout);
+		};
+	}, [isDesktop, prefetchRoute]);
 
 	const wrapperClass = useMemo(
 		() =>
@@ -127,6 +178,8 @@ export function AdminSidebar() {
 							const linkContent = (
 								<Link
 									href={item.href}
+									onMouseEnter={() => prefetchRoute(item.href)}
+									onFocus={() => prefetchRoute(item.href)}
 									className={cn(
 										"group flex h-12 items-center justify-center rounded-xl border border-transparent bg-card text-muted-foreground transition-all duration-200 hover:bg-secondary hover:text-foreground",
 										hoverEnabled &&

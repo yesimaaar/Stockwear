@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useTheme } from "next-themes"
-import { Bell, Shield, Database, Palette } from "lucide-react"
+import * as LucideIcons from "lucide-react"
+const { Bell, Shield, Database, Palette } = LucideIcons
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"

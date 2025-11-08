@@ -6,11 +6,29 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import Head from "next/head"
 import { cn } from "@/lib/utils"
-import { UserPlus, ShieldCheck } from "lucide-react"
+import * as LucideIcons from "lucide-react"
+const { UserPlus, ShieldCheck } = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { AuthService } from "@/lib/services/auth-service"
+
+const phonePrefixes = [
+  { value: "+52", label: "México (+52)" },
+  { value: "+57", label: "Colombia (+57)" },
+  { value: "+1", label: "Estados Unidos (+1)" },
+  { value: "+34", label: "España (+34)" },
+  { value: "+51", label: "Perú (+51)" },
+  { value: "+56", label: "Chile (+56)" },
+  { value: "+54", label: "Argentina (+54)" },
+]
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -19,6 +37,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [telefono, setTelefono] = useState("")
+  const [prefijo, setPrefijo] = useState("+52")
   const [rol, setRol] = useState<"admin" | "empleado">("empleado")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -36,12 +55,15 @@ export default function RegisterPage() {
 
     setLoading(true)
 
+  const telefonoNormalizado = telefono.replace(/\D+/g, "")
+    const telefonoConPrefijo = `${prefijo}${telefonoNormalizado}`
+
     const result = await AuthService.register({
       nombre: nombre.trim(),
       email: email.trim(),
       password,
       rol,
-      telefono: telefono.trim(),
+      telefono: telefonoConPrefijo,
     })
 
     if (!result.success) {
@@ -149,15 +171,33 @@ export default function RegisterPage() {
                 <Label htmlFor="telefono" className="text-sm text-muted-foreground">
                   Número de teléfono
                 </Label>
-                <Input
-                  id="telefono"
-                  type="tel"
-                  value={telefono}
-                  onChange={(event) => setTelefono(event.target.value)}
-                  placeholder="55 1234 5678"
-                  required
-                  disabled={loading}
-                />
+                <div className="grid gap-2 sm:grid-cols-[minmax(120px,0.4fr)_1fr]">
+                  <Select value={prefijo} onValueChange={setPrefijo} disabled={loading}>
+                    <SelectTrigger aria-label="Prefijo telefónico">
+                      <SelectValue placeholder="Prefijo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {phonePrefixes.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    id="telefono"
+                    type="tel"
+                    value={telefono}
+                    onChange={(event) => setTelefono(event.target.value.replace(/\D+/g, ""))}
+                    placeholder="1234567890"
+                    inputMode="tel"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Escribe el número sin prefijo; lo añadiremos automáticamente.
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

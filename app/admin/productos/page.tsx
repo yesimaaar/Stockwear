@@ -3,16 +3,20 @@
 import Image from "next/image"
 import Link from "next/link"
 import { Fragment, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
-import {
+import * as LucideIcons from "lucide-react"
+const {
   Package,
   Plus,
   Search,
   ArrowLeft,
-  AlertTriangle,
+  TriangleAlert,
   ChevronDown,
   ChevronUp,
   SlidersHorizontal,
-} from "lucide-react"
+  Edit,
+  Trash2,
+  X,
+} = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -44,10 +48,10 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet"
 import {
@@ -62,6 +66,16 @@ import { useToast } from "@/hooks/use-toast"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
 import type { Categoria } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type EstadoFiltro = "todos" | "activo" | "inactivo"
 type CategoriaFiltro = "todas" | string
@@ -104,6 +118,13 @@ export default function ProductosPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [loadingCategorias, setLoadingCategorias] = useState(true)
   const [nuevoProducto, setNuevoProducto] = useState<NuevoProductoForm>(getDefaultNuevoProducto)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ProductoConStock | null>(null)
+  const [deletingProducto, setDeletingProducto] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editForm, setEditForm] = useState<NuevoProductoForm | null>(null)
+  const [editTarget, setEditTarget] = useState<ProductoConStock | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const pageSize = 10
 
@@ -117,6 +138,120 @@ export default function ProductosPage() {
       setLoading(false)
     }
   }, [])
+
+  const handleDeleteDialogChange = (open: boolean) => {
+    setDeleteConfirmOpen(open)
+    if (!open) {
+      setDeleteTarget(null)
+      setDeletingProducto(false)
+    }
+  }
+
+  const abrirConfirmacionEliminar = (producto: ProductoConStock) => {
+    setDeleteTarget(producto)
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmarEliminarProducto = async () => {
+    if (!deleteTarget) return
+    const producto = deleteTarget
+    setDeletingProducto(true)
+    const exito = await ProductoService.delete(producto.id)
+    setDeletingProducto(false)
+    if (!exito) {
+      toast({
+        title: "No se pudo eliminar",
+        description: "Ocurrió un error al actualizar el estado del producto",
+        variant: "destructive",
+      })
+      return
+    }
+
+    toast({
+      title: "Producto actualizado",
+      description: `${producto.nombre} fue marcado como inactivo`,
+    })
+
+    handleDeleteDialogChange(false)
+    await cargarProductos()
+  }
+
+  const handleEditDialogChange = (open: boolean) => {
+    setEditDialogOpen(open)
+    if (!open) {
+      setEditForm(null)
+      setEditTarget(null)
+      setSavingEdit(false)
+    }
+  }
+
+  const mapProductoToForm = (producto: ProductoConStock): NuevoProductoForm => ({
+    codigo: producto.codigo,
+    nombre: producto.nombre,
+    categoriaId: String(producto.categoriaId),
+    precio: String(producto.precio),
+    descuento: String(producto.descuento ?? 0),
+    proveedor: producto.proveedor ?? "",
+    stockMinimo: String(producto.stockMinimo),
+    descripcion: producto.descripcion ?? "",
+    imagen: producto.imagen ?? "",
+  })
+
+  const buildPayloadFromForm = (form: NuevoProductoForm) => {
+    if (!form.categoriaId) {
+      toast({
+        title: "Selecciona una categoría",
+        description: "Todos los productos deben pertenecer a una categoría.",
+        variant: "destructive",
+      })
+      return null
+    }
+
+    const precio = Number(form.precio)
+    const descuento = form.descuento ? Number(form.descuento) : 0
+    const stockMinimo = Number(form.stockMinimo)
+    const categoriaId = Number(form.categoriaId)
+
+    if (Number.isNaN(precio) || precio <= 0) {
+      toast({
+        title: "Precio inválido",
+        description: "Ingresa un precio mayor a cero.",
+        variant: "destructive",
+      })
+      return null
+    }
+
+    if (Number.isNaN(stockMinimo) || stockMinimo < 0) {
+      toast({
+        title: "Stock mínimo inválido",
+        description: "El stock mínimo no puede ser negativo.",
+        variant: "destructive",
+      })
+      return null
+    }
+
+    return {
+      codigo: form.codigo.trim(),
+      nombre: form.nombre.trim(),
+      categoriaId,
+      descripcion: form.descripcion.trim() || null,
+      precio,
+      descuento: Number.isNaN(descuento) ? 0 : descuento,
+      proveedor: form.proveedor.trim() || null,
+      imagen: form.imagen.trim() || null,
+      stockMinimo,
+    }
+  }
+
+  const abrirEdicionProducto = (producto: ProductoConStock) => {
+    setEditTarget(producto)
+    setEditForm(mapProductoToForm(producto))
+    setEditDialogOpen(true)
+  }
+
+  const updateEditFormField = <K extends keyof NuevoProductoForm>(field: K, value: NuevoProductoForm[K]) => {
+    setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev))
+  }
 
   useEffect(() => {
     void cargarProductos()
@@ -158,6 +293,11 @@ export default function ProductosPage() {
   const ejecutarBusqueda = useCallback(() => {
     setSearchQuery(searchInput.trim())
   }, [searchInput])
+
+  const clearSearchInput = () => {
+    setSearchInput("")
+    setSearchQuery("")
+  }
 
   useEffect(() => {
     if (!filterSheetOpen) {
@@ -275,54 +415,12 @@ export default function ProductosPage() {
   const onSubmitNuevoProducto = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!nuevoProducto.categoriaId) {
-      toast({
-        title: "Selecciona una categoría",
-        description: "Todos los productos deben pertenecer a una categoría.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const precio = Number(nuevoProducto.precio)
-    const descuento = nuevoProducto.descuento ? Number(nuevoProducto.descuento) : 0
-    const stockMinimo = Number(nuevoProducto.stockMinimo)
-    const categoriaId = Number(nuevoProducto.categoriaId)
-
-    if (Number.isNaN(precio) || precio <= 0) {
-      toast({
-        title: "Precio inválido",
-        description: "Ingresa un precio mayor a cero.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (Number.isNaN(stockMinimo) || stockMinimo < 0) {
-      toast({
-        title: "Stock mínimo inválido",
-        description: "El stock mínimo no puede ser negativo.",
-        variant: "destructive",
-      })
-      return
-    }
+    const payload = buildPayloadFromForm(nuevoProducto)
+    if (!payload) return
 
     setSavingProducto(true)
     try {
-      const payload = {
-        codigo: nuevoProducto.codigo.trim(),
-        nombre: nuevoProducto.nombre.trim(),
-        categoriaId,
-        descripcion: nuevoProducto.descripcion.trim() || null,
-        precio,
-        descuento: Number.isNaN(descuento) ? 0 : descuento,
-        proveedor: nuevoProducto.proveedor.trim() || null,
-        imagen: nuevoProducto.imagen.trim() || null,
-        stockMinimo,
-        estado: "activo" as const,
-      }
-
-      const creado = await ProductoService.create(payload)
+      const creado = await ProductoService.create({ ...payload, estado: "activo" as const })
 
       if (!creado) {
         toast({
@@ -353,11 +451,50 @@ export default function ProductosPage() {
     }
   }
 
+  const onSubmitEditarProducto = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editForm || !editTarget) return
+
+    const payload = buildPayloadFromForm(editForm)
+    if (!payload) return
+
+    setSavingEdit(true)
+    try {
+      const actualizado = await ProductoService.update(editTarget.id, payload)
+      if (!actualizado) {
+        toast({
+          title: "No se pudo actualizar",
+          description: "Supabase devolvió un error al guardar los cambios.",
+          variant: "destructive",
+        })
+        setSavingEdit(false)
+        return
+      }
+
+      toast({
+        title: "Producto actualizado",
+        description: `${payload.nombre} se guardó correctamente`,
+      })
+
+      handleEditDialogChange(false)
+      await cargarProductos()
+    } catch (error) {
+      console.error("Error actualizando producto", error)
+      toast({
+        title: "Error inesperado",
+        description: "Revisa la consola para más detalles.",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
-  <main className="mx-auto w-full max-w-[88rem] px-3 py-5 space-y-4 sm:px-4 sm:py-6 sm:space-y-5">
+  <main className="mx-auto w-full max-w-[88rem] px-3 py-3 space-y-4 sm:px-4 sm:py-4 sm:space-y-5">
         <div className="rounded-2xl border border-border bg-card/70 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-5 sm:py-3">
             <div className="flex items-center gap-3">
               <Link href="/admin">
                 <Button
@@ -388,7 +525,7 @@ export default function ProductosPage() {
             </Button>
           </div>
 
-          <div className="border-t border-border/80 px-4 py-3 sm:px-5">
+          <div className="border-t border-border/80 px-4 py-2 sm:px-5 sm:py-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex flex-1 gap-2">
                 <div className="relative flex-1">
@@ -409,8 +546,18 @@ export default function ProductosPage() {
                       }
                     }}
                     placeholder="Buscar por nombre, código o almacén..."
-                    className="h-11 rounded-xl border-border bg-background/70 pl-10"
+                    className="h-11 rounded-xl border-border bg-background/70 pl-10 pr-11"
                   />
+                  {searchInput ? (
+                    <button
+                      type="button"
+                      onClick={clearSearchInput}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : null}
                 </div>
                 <Button
                   variant="outline"
@@ -520,7 +667,7 @@ export default function ProductosPage() {
         {totalStockBajo > 0 && (
           <div className="mb-6 rounded-lg bg-yellow-50 p-4">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              <TriangleAlert className="h-5 w-5 text-yellow-600" />
               <p className="font-semibold text-yellow-900">
                 {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
               </p>
@@ -582,14 +729,15 @@ export default function ProductosPage() {
                           </TableCell>
                           <TableCell className="py-3">
                             <div className="flex items-center gap-3">
-                              <Image
-                                src={producto.imagen || "/placeholder.svg"}
-                                alt={producto.nombre}
-                                width={48}
-                                height={48}
-                                loading="lazy"
-                                className="h-12 w-12 shrink-0 rounded-md object-cover"
-                              />
+                              <div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                                <Image
+                                  src={producto.imagen || "/placeholder.svg"}
+                                  alt={producto.nombre}
+                                  fill
+                                  sizes="48px"
+                                  className="object-cover transition-transform duration-200 group-hover:scale-110"
+                                />
+                              </div>
                               <div>
                                 <p className="font-medium text-foreground">{producto.nombre}</p>
                                 <p className="text-xs text-muted-foreground">Código: {producto.codigo}</p>
@@ -621,17 +769,31 @@ export default function ProductosPage() {
                           </TableCell>
                           <TableCell className="py-3 text-right">
                             <div className="flex justify-end gap-2">
-                              <Link href={`/admin/productos/${producto.id}`}>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                  }}
-                                >
-                                  Ver detalle
-                                </Button>
-                              </Link>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  abrirEdicionProducto(producto)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                                <span className="sr-only">Editar</span>
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  abrirConfirmacionEliminar(producto)
+                                }}
+                                disabled={deletingProducto && deleteTarget?.id === producto.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Eliminar</span>
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -643,6 +805,55 @@ export default function ProductosPage() {
                                 <p className="text-xs text-muted-foreground">
                                   Stock mínimo configurado: {producto.stockMinimo} unidades
                                 </p>
+                              </div>
+                              <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+                                <div className="flex flex-col gap-3 rounded-lg border border-border/70 bg-card/70 p-4 sm:flex-row">
+                                  <div className="relative h-28 w-full overflow-hidden rounded-md bg-muted sm:h-32 sm:w-40">
+                                    <Image
+                                      src={producto.imagen || "/placeholder.svg"}
+                                      alt={producto.nombre}
+                                      fill
+                                      sizes="(min-width: 640px) 160px, 100vw"
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                  <div className="space-y-2 text-sm text-muted-foreground">
+                                    <p>
+                                      <span className="font-semibold text-foreground">Descripción: </span>
+                                      {producto.descripcion ? producto.descripcion : "Sin descripción"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold text-foreground">Proveedor: </span>
+                                      {producto.proveedor ? producto.proveedor : "No especificado"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold text-foreground">Creado: </span>
+                                      {new Date(producto.createdAt).toLocaleDateString("es-CO")}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="grid gap-2 rounded-lg border border-border/70 bg-card/70 p-4 text-sm">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Precio base</span>
+                                    <span className="font-semibold text-foreground">
+                                      ${producto.precio.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Descuento</span>
+                                    <span className="font-semibold text-foreground">{producto.descuento}%</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Estado</span>
+                                    <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
+                                      {producto.estado.toUpperCase()}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Stock total</span>
+                                    <span className="font-semibold text-foreground">{producto.stockTotal} u.</span>
+                                  </div>
+                                </div>
                               </div>
                               <div className="mt-3 grid gap-2 md:grid-cols-2">
                                 {producto.stockPorTalla.map((detalle, index) => {
@@ -733,6 +944,209 @@ export default function ProductosPage() {
           </div>
         )}
       </main>
+      <Dialog open={editDialogOpen} onOpenChange={handleEditDialogChange}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar producto</DialogTitle>
+            <DialogDescription>Realiza cambios sin salir del listado.</DialogDescription>
+          </DialogHeader>
+          {editForm ? (
+            <form onSubmit={onSubmitEditarProducto} className="space-y-5">
+              <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Información básica</p>
+                    <p className="text-xs text-muted-foreground">Actualiza los datos principales del producto.</p>
+                  </header>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-codigo">Código</Label>
+                      <Input
+                        id="editar-codigo"
+                        value={editForm.codigo}
+                        onChange={(event) => updateEditFormField("codigo", event.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-nombre">Nombre</Label>
+                      <Input
+                        id="editar-nombre"
+                        value={editForm.nombre}
+                        onChange={(event) => updateEditFormField("nombre", event.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editar-descripcion">Descripción</Label>
+                    <Textarea
+                      id="editar-descripcion"
+                      value={editForm.descripcion}
+                      onChange={(event) => updateEditFormField("descripcion", event.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                </section>
+
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Categorización</p>
+                    <p className="text-xs text-muted-foreground">Gestiona la categoría y proveedor.</p>
+                  </header>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Categoría</Label>
+                      <Select
+                        value={editForm.categoriaId}
+                        onValueChange={(value) => updateEditFormField("categoriaId", value)}
+                        disabled={loadingCategorias}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              loadingCategorias
+                                ? "Cargando categorías..."
+                                : categorias.length > 0
+                                  ? "Selecciona una categoría"
+                                  : "No hay categorías activas"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categorias.map((categoria) => (
+                            <SelectItem key={categoria.id} value={String(categoria.id)}>
+                              {categoria.nombre}
+                            </SelectItem>
+                          ))}
+                          {!loadingCategorias && categorias.length === 0 && (
+                            <SelectItem value="" disabled>
+                              No hay categorías activas disponibles
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-proveedor">Proveedor</Label>
+                      <Input
+                        id="editar-proveedor"
+                        value={editForm.proveedor}
+                        onChange={(event) => updateEditFormField("proveedor", event.target.value)}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Precios y stock</p>
+                    <p className="text-xs text-muted-foreground">Ajusta los valores comerciales.</p>
+                  </header>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-precio">Precio (COP)</Label>
+                      <Input
+                        id="editar-precio"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.precio}
+                        onChange={(event) => updateEditFormField("precio", event.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-descuento">Descuento (%)</Label>
+                      <Input
+                        id="editar-descuento"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.descuento}
+                        onChange={(event) => updateEditFormField("descuento", event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-stock-minimo">Stock mínimo</Label>
+                      <Input
+                        id="editar-stock-minimo"
+                        type="number"
+                        min="0"
+                        value={editForm.stockMinimo}
+                        onChange={(event) => updateEditFormField("stockMinimo", event.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Imagen</p>
+                    <p className="text-xs text-muted-foreground">Actualiza la vista previa del producto.</p>
+                  </header>
+                  <div className="space-y-2">
+                    <Label htmlFor="editar-imagen">URL de imagen</Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="editar-imagen"
+                        value={editForm.imagen}
+                        onChange={(event) => updateEditFormField("imagen", event.target.value)}
+                      />
+                      {editForm.imagen && (
+                        <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
+                          <Image
+                            src={editForm.imagen}
+                            alt="Vista previa"
+                            fill
+                            sizes="64px"
+                            loading="lazy"
+                            className="object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button type="button" variant="outline" onClick={() => handleEditDialogChange(false)} disabled={savingEdit}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={savingEdit || (!loadingCategorias && categorias.length === 0)}>
+                  {savingEdit ? "Guardando..." : "Guardar cambios"}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={handleDeleteDialogChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este producto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El producto se marcará como inactivo y dejará de mostrarse en el inventario activo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingProducto}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive"
+              disabled={deletingProducto}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmarEliminarProducto()
+              }}
+            >
+              {deletingProducto ? "Eliminando…" : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={formOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>

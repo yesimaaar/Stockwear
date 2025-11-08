@@ -5,7 +5,20 @@ import type React from "react"
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { Camera, Package, Search, LogOut, CheckCircle, XCircle, AlertCircle, Loader2, X, Clock, Sparkles } from "lucide-react"
+import * as LucideIcons from "lucide-react"
+const {
+  Camera,
+  Package,
+  Search,
+  LogOut,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  X,
+  Clock,
+  Sparkles,
+} = LucideIcons
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,7 +36,6 @@ export default function EmpleadoDashboard() {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
-  const [showDesktopModal, setShowDesktopModal] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -31,7 +43,6 @@ export default function EmpleadoDashboard() {
   const [resultado, setResultado] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
-  const [imageUrl, setImageUrl] = useState("")
   const [recommendedProducts, setRecommendedProducts] = useState<any[]>([])
 
   useEffect(() => {
@@ -127,6 +138,11 @@ export default function EmpleadoDashboard() {
     setSearchResults(results)
   }
 
+  const clearManualSearch = () => {
+    setSearchQuery("")
+    setSearchResults([])
+  }
+
   const handleConfirmarProducto = (confirmar: boolean) => {
     if (confirmar) {
       setResultado({ ...resultado, nivelConfianza: "alto" })
@@ -155,7 +171,6 @@ export default function EmpleadoDashboard() {
     try {
       setCameraError(null)
       setResultado(null)
-      setShowDesktopModal(false)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
@@ -216,7 +231,6 @@ export default function EmpleadoDashboard() {
     if (!file) return
 
     setScanning(true)
-    setShowDesktopModal(false)
 
     const reader = new FileReader()
     reader.onload = async (event) => {
@@ -226,21 +240,6 @@ export default function EmpleadoDashboard() {
       setScanning(false)
     }
     reader.readAsDataURL(file)
-  }
-
-  const handleUrlUpload = async () => {
-    if (!imageUrl.trim()) return
-
-    setScanning(true)
-    setShowDesktopModal(false)
-
-    // Simular procesamiento de URL
-    setTimeout(async () => {
-      const result = await ReconocimientoService.procesarImagen(imageUrl, user!.id)
-      setResultado(result)
-      setScanning(false)
-      setImageUrl("")
-    }, 1000)
   }
 
   useEffect(() => {
@@ -564,12 +563,26 @@ export default function EmpleadoDashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
-              <Input
-                placeholder="Buscar por nombre o código..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              />
+              <div className="relative flex-1">
+                <Input
+                  placeholder="Buscar por nombre o código..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="pr-11"
+                />
+                {searchQuery && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearManualSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               <Button onClick={handleSearch}>
                 <Search className="h-4 w-4" />
               </Button>

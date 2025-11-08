@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Scan } from "lucide-react"
+import * as LucideIcons from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { AuthService } from "@/lib/services/auth-service"
 import Head from "next/head"
+
+const { Scan } = LucideIcons
 
 export default function LoginPage() {
   const router = useRouter()
