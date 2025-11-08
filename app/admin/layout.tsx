@@ -76,8 +76,8 @@ export default function AdminLayout({
 	return (
 		<div className="min-h-screen bg-background flex flex-col lg:flex-row">
 			<div className="flex min-h-screen flex-1 flex-col pb-20 lg:pb-0">
-				<header className="sticky top-0 z-40 border-b border-border bg-background">
-					<div className="flex h-14 w-full items-center justify-between gap-3 px-5 lg:px-10">
+				<header className="sticky top-0 z-40 border-b border-border bg-card">
+					<div className="flex h-12 w-full items-center justify-between gap-3 px-5 lg:px-10">
 						<div className="flex items-center gap-2">
 							<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground lg:hidden">
 								<div className="relative h-6 w-6">

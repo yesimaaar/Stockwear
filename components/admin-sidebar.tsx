@@ -5,12 +5,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+	ArrowLeftRight,
 	BarChart3,
 	Boxes,
 	Clock,
 	Cog,
 	Layers3,
 	Package,
+	Receipt,
 	Settings,
 	Shirt,
 	Users
@@ -36,6 +38,8 @@ const NAV_ITEMS = [
 	{ href: "/admin/almacenes", icon: Boxes, label: "Almacenes" },
 	{ href: "/admin/categorias", icon: Layers3, label: "Categorías" },
 	{ href: "/admin/productos", icon: Package, label: "Productos y Stock" },
+	{ href: "/admin/facturacion", icon: Receipt, label: "Facturación y ventas" },
+	{ href: "/admin/movimientos", icon: ArrowLeftRight, label: "Movimientos" },
 	{ href: "/admin/tallas", icon: Shirt, label: "Tallas" },
 	{ href: "/admin/usuarios", icon: Users, label: "Usuarios" },
 	{ href: "/admin/reportes", icon: BarChart3, label: "Reportes" },
@@ -47,9 +51,9 @@ type SidebarMode = "closed" | "condensed" | "open" | "hover";
 
 const SIDEBAR_WIDTH: Record<SidebarMode, string> = {
 	closed: "w-[68px]",
-	condensed: "w-[84px]",
-	hover: "w-[84px]",
-	open: "w-64"
+	condensed: "w-[72px]",
+	hover: "w-[72px]",
+	open: "w-60"
 };
 
 function useIsDesktop() {
@@ -88,9 +92,9 @@ export function AdminSidebar() {
 	const wrapperClass = useMemo(
 		() =>
 			cn(
-				"group/sidebar relative z-20 hidden flex-col border-r border-border bg-background transition-all duration-200 lg:flex lg:sticky lg:top-0 lg:h-screen",
+				"group/sidebar relative z-20 hidden flex-col border-r border-border bg-card transition-all duration-200 lg:flex lg:sticky lg:top-0 lg:h-screen",
 				SIDEBAR_WIDTH[sidebarMode],
-				hoverEnabled && "lg:hover:w-64"
+				hoverEnabled && "lg:hover:w-60"
 			),
 		[hoverEnabled, sidebarMode]
 	);
@@ -126,7 +130,7 @@ export function AdminSidebar() {
 									className={cn(
 										"group flex h-12 items-center justify-center rounded-xl border border-transparent bg-card text-muted-foreground transition-all duration-200 hover:bg-secondary hover:text-foreground",
 										hoverEnabled &&
-											"lg:group-hover/sidebar:w-64 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-4 lg:group-hover/sidebar:bg-secondary",
+											"lg:group-hover/sidebar:w-60 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-4 lg:group-hover/sidebar:bg-secondary",
 										isActive && "border-primary bg-primary text-primary-foreground",
 										showLabels ? " justify-start gap-3 px-4" : ""
 									)}

@@ -1,6 +1,7 @@
 'use client';
 
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import type { ChartTooltipContentProps } from '@/components/ui/chart';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 interface SalesChartProps {
@@ -44,7 +45,23 @@ export function SalesChart({ data, formatter }: SalesChartProps) {
           className="text-xs"
         />
         <ChartTooltip
-          content={<ChartTooltipContent formatter={(value) => formatter(value as number)} />}
+          content={(contentProps) => {
+            if (!contentProps) {
+              return null;
+            }
+
+            const { allowEscapeViewBox: _allowEscapeViewBox, ...tooltipProps } =
+              contentProps as ChartTooltipContentProps & {
+                allowEscapeViewBox?: unknown;
+              };
+
+            return (
+              <ChartTooltipContent
+                {...tooltipProps}
+                formatter={(value) => formatter(value as number)}
+              />
+            );
+          }}
         />
         <Area
           type="monotone"

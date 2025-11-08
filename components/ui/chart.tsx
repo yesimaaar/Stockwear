@@ -137,22 +137,23 @@ interface ChartTooltipContentProps
   labelKey?: string
 }
 
-function ChartTooltipContent({
-  active,
-  payload = [],
-  className,
-  indicator = 'dot',
-  hideLabel = false,
-  hideIndicator = false,
-  label,
-  labelFormatter,
-  labelClassName,
-  formatter,
-  color,
-  nameKey,
-  labelKey,
-  ...rest
-}: ChartTooltipContentProps) {
+function ChartTooltipContent(props: ChartTooltipContentProps) {
+  const {
+    active,
+    payload: payloadProp = [],
+    className,
+    indicator = 'dot',
+    hideLabel = false,
+    hideIndicator = false,
+    label,
+    labelFormatter,
+    labelClassName,
+    formatter,
+    color,
+    nameKey,
+    labelKey,
+  } = props
+  const payload = payloadProp
   const { config } = useChart()
 
   const tooltipLabel = React.useMemo(() => {
@@ -392,3 +393,5 @@ export {
   ChartLegendContent,
   ChartStyle,
 }
+
+export type { ChartTooltipContentProps }
