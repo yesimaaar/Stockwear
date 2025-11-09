@@ -4,9 +4,6 @@ import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
 
-// Fonts are loaded via CSS fallback in globals.css to avoid build-time network issues
-const fontVariables = "--font-sans --font-mono"
-
 export const metadata: Metadata = {
   title: "StockWear - Sistema de Gestión de Inventario",
   description: "Sistema de gestión de inventario y ventas para calzado y ropa deportiva con reconocimiento visual",

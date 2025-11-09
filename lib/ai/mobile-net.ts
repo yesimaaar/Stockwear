@@ -3,7 +3,7 @@ import { normalizeL2 } from './embedding-utils'
 const MODEL_PRIMARY_URL = '/api/tfhub-proxy/model.json';
 const MODEL_SECONDARY_URL =
   'https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_140_224/feature_vector/5/default/1';
-const WASM_BUNDLE_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/'
+const WASM_BUNDLE_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.20.0/dist/'
 
 let tfModulePromise: Promise<typeof import('@tensorflow/tfjs')> | null = null
 let backendReadyPromise: Promise<void> | null = null
@@ -96,16 +96,19 @@ export async function generateEmbedding(input: EmbeddableInput): Promise<Float32
   await ensureBackend(tf)
   const model = await loadModelInstance()
 
-  return tf.tidy(() => {
+  const data = tf.tidy(() => {
     const pixels = tf.browser.fromPixels(input as any)
     const resized = tf.image.resizeBilinear(pixels, [224, 224], true)
     const batched = resized.expandDims(0).toFloat().div(255)
     const prediction = model.predict(batched)
     const tensor = Array.isArray(prediction) ? prediction[0].squeeze() : prediction.squeeze()
-    const data = tensor.dataSync() as Float32Array
-    const normalized = normalizeL2(data)
-    return normalized
+    // Extract data synchronously before tensors are disposed
+    return tensor.dataSync() as Float32Array
   })
+  
+  // Normalize after tidy to avoid issues with disposed tensors
+  const normalized = normalizeL2(data)
+  return normalized
 }
 
 export async function preloadEmbeddingModel(): Promise<void> {
