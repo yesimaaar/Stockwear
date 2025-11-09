@@ -18,15 +18,19 @@ const {
   X,
   Clock,
   Sparkles,
+  Gauge,
 } = LucideIcons
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Slider } from "@/components/ui/slider"
 import { AuthService } from "@/lib/services/auth-service"
-import { ReconocimientoService } from "@/lib/services/reconocimiento-service"
+import { ReconocimientoService, type ReconocimientoResult } from "@/lib/services/reconocimiento-service"
 import { ProductoService } from "@/lib/services/producto-service"
 import type { Usuario } from "@/lib/types"
+import { useShoeRecognizer } from "@/hooks/use-shoe-recognizer"
+import { clampThreshold, getDefaultThreshold, persistThreshold } from "@/lib/config/recognition"
 
 export default function EmpleadoDashboard() {
   const router = useRouter()
@@ -40,10 +44,12 @@ export default function EmpleadoDashboard() {
   const streamRef = useRef<MediaStream | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraRequestedRef = useRef(false)
-  const [resultado, setResultado] = useState<any>(null)
+  const [resultado, setResultado] = useState<ReconocimientoResult | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [recommendedProducts, setRecommendedProducts] = useState<any[]>([])
+  const { computeEmbedding, loadingModel, error: recognizerError, resetError } = useShoeRecognizer()
+  const [threshold, setThreshold] = useState(() => getDefaultThreshold())
 
   useEffect(() => {
     const checkMobile = () => {
@@ -67,6 +73,12 @@ export default function EmpleadoDashboard() {
 
     void loadUser()
   }, [router])
+
+  useEffect(() => {
+    if (recognizerError) {
+      setCameraError(recognizerError)
+    }
+  }, [recognizerError])
 
   useEffect(() => {
     if (!user || cameraRequestedRef.current || cameraActive) {
@@ -143,12 +155,25 @@ export default function EmpleadoDashboard() {
     setSearchResults([])
   }
 
+  const handleThresholdChange = useCallback((values: number[]) => {
+    const rawValue = values[0] ?? threshold
+    const clamped = clampThreshold(rawValue)
+    setThreshold(clamped)
+  }, [threshold])
+
+  const handleThresholdCommit = useCallback((values: number[]) => {
+    const rawValue = values[0] ?? threshold
+    const clamped = clampThreshold(rawValue)
+    setThreshold(clamped)
+    persistThreshold(clamped)
+  }, [threshold])
+
   const handleConfirmarProducto = (confirmar: boolean) => {
     if (confirmar) {
-      setResultado({ ...resultado, nivelConfianza: "alto" })
+      setResultado((prev: any) => (prev ? { ...prev, nivelConfianza: "alto" } : prev))
     } else {
       setResultado(null)
-      startCamera()
+      void startCamera()
     }
   }
 
@@ -170,6 +195,7 @@ export default function EmpleadoDashboard() {
   const startCamera = async () => {
     try {
       setCameraError(null)
+      resetError()
       setResultado(null)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -205,23 +231,34 @@ export default function EmpleadoDashboard() {
   }
 
   const capturePhoto = async () => {
-    if (!videoRef.current) return
+    if (!videoRef.current || !user) return
 
     setScanning(true)
 
-    const canvas = document.createElement("canvas")
-    canvas.width = videoRef.current.videoWidth
-    canvas.height = videoRef.current.videoHeight
-    const ctx = canvas.getContext("2d")
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.width = videoRef.current.videoWidth
+      canvas.height = videoRef.current.videoHeight
+      const ctx = canvas.getContext("2d")
 
-    if (ctx) {
+      if (!ctx) {
+        throw new Error("No se pudo acceder al contexto del canvas")
+      }
+
       ctx.drawImage(videoRef.current, 0, 0)
-      const imageData = canvas.toDataURL("image/jpeg")
 
-      // No detener la cámara después de capturar
-      const result = await ReconocimientoService.procesarImagen(imageData, user!.id)
+      const embedding = await computeEmbedding(canvas)
+      const result = await ReconocimientoService.procesarEmbedding({
+        embedding,
+        empleadoId: user.id,
+        umbral: threshold,
+      })
 
       setResultado(result)
+    } catch (error) {
+      console.error("Error al procesar la captura", error)
+      setCameraError("No se pudo identificar el producto. Inténtalo nuevamente.")
+    } finally {
       setScanning(false)
     }
   }
@@ -232,14 +269,40 @@ export default function EmpleadoDashboard() {
 
     setScanning(true)
 
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const imageData = event.target?.result as string
-      const result = await ReconocimientoService.procesarImagen(imageData, user!.id)
+    try {
+      let imageSource: ImageBitmap | HTMLImageElement
+      if (typeof window !== "undefined" && "createImageBitmap" in window) {
+        imageSource = await createImageBitmap(file)
+      } else {
+        imageSource = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image()
+          img.onload = () => resolve(img)
+          img.onerror = (error) => reject(error)
+          img.src = URL.createObjectURL(file)
+        })
+      }
+
+      const embedding = await computeEmbedding(imageSource)
+
+      if (imageSource instanceof ImageBitmap) {
+        imageSource.close()
+      } else if (imageSource instanceof HTMLImageElement) {
+        URL.revokeObjectURL(imageSource.src)
+      }
+
+      const result = await ReconocimientoService.procesarEmbedding({
+        embedding,
+        empleadoId: user?.id ?? null,
+        umbral: threshold,
+      })
+
       setResultado(result)
+    } catch (error) {
+      console.error("Error al procesar la imagen cargada", error)
+      setCameraError("No se pudo utilizar la imagen seleccionada para el reconocimiento.")
+    } finally {
       setScanning(false)
     }
-    reader.readAsDataURL(file)
   }
 
   useEffect(() => {
@@ -303,11 +366,13 @@ export default function EmpleadoDashboard() {
             {/* Botón principal de captura */}
             <button
               onClick={capturePhoto}
-              disabled={scanning}
+              disabled={scanning || loadingModel}
               className="relative h-20 w-20 rounded-full bg-white shadow-2xl hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {scanning ? (
                 <Loader2 className="h-10 w-10 text-primary animate-spin" />
+              ) : loadingModel ? (
+                <Loader2 className="h-10 w-10 text-secondary animate-spin" />
               ) : (
                 <Search className="h-10 w-10 text-primary" />
               )}
@@ -395,7 +460,42 @@ export default function EmpleadoDashboard() {
                 <CardDescription>Captura una foto del producto para identificarlo automáticamente</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-            {/* Vista de cámara en tiempo real integrada en el dashboard */}
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-3">
+                      <Gauge className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Umbral de similitud</p>
+                        <p className="text-xs text-muted-foreground">
+                          Ajusta la sensibilidad del reconocimiento. Valor actual: {(threshold * 100).toFixed(0)}%
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex w-full max-w-md flex-col gap-2">
+                      <Slider
+                        value={[threshold]}
+                        min={0.5}
+                        max={0.99}
+                        step={0.01}
+                        onValueChange={handleThresholdChange}
+                        onValueCommit={handleThresholdCommit}
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>0.50</span>
+                        <span>0.75</span>
+                        <span>0.99</span>
+                      </div>
+                    </div>
+                  </div>
+                  {loadingModel && (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Cargando modelo de reconocimiento, esto puede tardar unos segundos…</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Vista de cámara en tiempo real integrada en el dashboard */}
             <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
               {cameraActive ? (
                 <>
@@ -410,11 +510,17 @@ export default function EmpleadoDashboard() {
 
                       <Button
                         onClick={capturePhoto}
-                        disabled={scanning}
+                        disabled={scanning || loadingModel}
                         size="lg"
                         className="rounded-full w-16 h-16 bg-white hover:bg-white/90 text-primary"
                       >
-                        {scanning ? <Loader2 className="h-6 w-6 animate-spin" /> : <Search className="h-6 w-6" />}
+                        {scanning ? (
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        ) : loadingModel ? (
+                          <Loader2 className="h-6 w-6 animate-spin text-secondary" />
+                        ) : (
+                          <Search className="h-6 w-6" />
+                        )}
                       </Button>
 
                       <Button
@@ -471,6 +577,17 @@ export default function EmpleadoDashboard() {
                           Confirmación requerida
                         </Badge>
                       )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span>Similitud {Math.round(resultado.similitud * 100)}%</span>
+                      </div>
+                      <Badge variant="secondary">Umbral {Math.round(resultado.umbral * 100)}%</Badge>
+                      <Badge variant="secondary" className="capitalize">
+                        Confianza {resultado.nivelConfianza}
+                      </Badge>
                     </div>
 
                     {resultado.producto && (
@@ -543,9 +660,24 @@ export default function EmpleadoDashboard() {
                     )}
                   </>
                 ) : (
-                  <div className="flex items-center gap-2 text-red-600">
-                    <XCircle className="h-5 w-5" />
-                    <span className="font-medium">{resultado.message}</span>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-red-600">
+                      <XCircle className="h-5 w-5" />
+                      <span className="font-medium">{resultado.message}</span>
+                    </div>
+                    {resultado.coincidencias && resultado.coincidencias.length > 0 && (
+                      <div className="rounded-lg border border-dashed border-muted-foreground/40 p-4">
+                        <p className="text-sm font-medium text-foreground mb-2">Coincidencias más cercanas</p>
+                        <ul className="space-y-1 text-sm text-muted-foreground">
+                          {resultado.coincidencias.map((item) => (
+                            <li key={item.productoId} className="flex justify-between">
+                              <span>{item.nombre}</span>
+                              <span>{Math.round(item.similitud * 100)}%</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

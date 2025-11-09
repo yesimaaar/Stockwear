@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { Producto, Categoria } from '@/lib/types'
+import type { Producto, Categoria, ProductoEmbedding } from '@/lib/types'
 
 export interface ProductoConStock extends Producto {
   categoria: string
@@ -12,6 +12,7 @@ export interface ProductoConStock extends Producto {
     almacen: string
     cantidad: number
   }>
+  embeddings?: ProductoEmbedding[]
 }
 
 type CategoriaRelacion = {
@@ -38,6 +39,14 @@ type ProductoRow = Producto & {
     cantidad: number | null
     talla?: TallaRelacion | null
     almacen?: AlmacenRelacion | null
+  }> | null
+  embeddings?: Array<{
+    id: number | null
+    productoId: number | null
+    embedding: number[] | null
+    fuente?: string | null
+    createdAt?: string | null
+    updatedAt?: string | null
   }> | null
 }
 
@@ -71,6 +80,14 @@ const PRODUCTO_SELECT = `
       id,
       nombre
     )
+  ),
+  embeddings:producto_embeddings(
+    id,
+    "productoId",
+    embedding,
+    fuente,
+    "createdAt",
+    "updatedAt"
   )
 `
 
@@ -128,7 +145,7 @@ const resolveCategoriaNombre = (categoria: ProductoRow['categoria']): string => 
 }
 
 const mapProductoRow = (row: ProductoRow): ProductoConStock => {
-  const { categoria, stock, ...productoBase } = row
+  const { categoria, stock, embeddings, ...productoBase } = row
   const stockPorTalla = (stock ?? []).map((registro) => ({
     stockId: registro.id ?? 0,
     tallaId: registro.tallaId ?? null,
@@ -140,11 +157,25 @@ const mapProductoRow = (row: ProductoRow): ProductoConStock => {
 
   const stockTotal = stockPorTalla.reduce((total, detalle) => total + (detalle.cantidad ?? 0), 0)
 
+  const mappedEmbeddings: ProductoEmbedding[] | undefined = embeddings
+    ? embeddings
+        .filter((item): item is NonNullable<typeof item> => Array.isArray(item.embedding) && item.productoId != null)
+        .map((item) => ({
+          id: item.id ?? 0,
+          productoId: item.productoId ?? productoBase.id,
+          embedding: item.embedding ?? [],
+          fuente: item.fuente ?? null,
+          createdAt: item.createdAt ?? new Date().toISOString(),
+          updatedAt: item.updatedAt ?? new Date().toISOString(),
+        }))
+    : undefined
+
   return {
     ...productoBase,
     categoria: resolveCategoriaNombre(categoria),
     stockTotal,
     stockPorTalla,
+    embeddings: mappedEmbeddings,
   }
 }
 

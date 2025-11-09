@@ -27,6 +27,15 @@ export interface Producto {
   createdAt: string
 }
 
+export interface ProductoEmbedding {
+  id: number
+  productoId: number
+  embedding: number[]
+  fuente?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Categoria {
   id: number
   nombre: string
