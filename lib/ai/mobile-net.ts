@@ -2,8 +2,8 @@ import { normalizeL2 } from './embedding-utils'
 
 const MODEL_PRIMARY_URL = '/api/tfhub-proxy/model.json';
 const MODEL_SECONDARY_URL =
-  'https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_140_224/feature_vector/5/default/1';
-const WASM_BUNDLE_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.20.0/dist/'
+  'https://storage.googleapis.com/tfhub-tfjs-modules/google/imagenet/mobilenet_v2_140_224/feature_vector/5/default/1/model.json';
+const WASM_BUNDLE_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/'
 
 let tfModulePromise: Promise<typeof import('@tensorflow/tfjs')> | null = null
 let backendReadyPromise: Promise<void> | null = null
@@ -66,7 +66,7 @@ async function loadModelInstance() {
     try {
       const loaders: Array<() => Promise<any>> = [
         () => tfconv.loadGraphModel(MODEL_PRIMARY_URL),
-        () => tfconv.loadGraphModel(MODEL_SECONDARY_URL, { fromTFHub: true })
+        () => tfconv.loadGraphModel(MODEL_SECONDARY_URL)
       ]
       let lastError
       for (const load of loaders) {
