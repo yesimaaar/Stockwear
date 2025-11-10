@@ -9,9 +9,9 @@ const nextConfig = {
       transform: "@radix-ui/react-icons/{{member}}",
     },
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+
+  turbopack: {}, 
+  
   typescript: {
     ignoreBuildErrors: true,
   },
