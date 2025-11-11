@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { Producto, Categoria, ProductoEmbedding } from '@/lib/types'
+import type { Producto, Categoria, ProductoEmbedding, ProductoReferenceImage } from '@/lib/types'
 
 export interface ProductoConStock extends Producto {
   categoria: string
@@ -13,6 +13,7 @@ export interface ProductoConStock extends Producto {
     cantidad: number
   }>
   embeddings?: ProductoEmbedding[]
+  referenceImages?: ProductoReferenceImage[]
 }
 
 type CategoriaRelacion = {
@@ -45,6 +46,19 @@ type ProductoRow = Producto & {
     productoId: number | null
     embedding: number[] | null
     fuente?: string | null
+    referenceImageId?: number | null
+    createdAt?: string | null
+    updatedAt?: string | null
+  }> | null
+  referenceImages?: Array<{
+    id: number | null
+    productoId: number | null
+    url: string | null
+    path: string | null
+    bucket?: string | null
+    filename?: string | null
+    mimeType?: string | null
+    size?: number | null
     createdAt?: string | null
     updatedAt?: string | null
   }> | null
@@ -86,6 +100,19 @@ const PRODUCTO_SELECT = `
     "productoId",
     embedding,
     fuente,
+    "referenceImageId",
+    "createdAt",
+    "updatedAt"
+  ),
+  referenceImages:producto_reference_images(
+    id,
+    "productoId",
+    url,
+    path,
+    bucket,
+    filename,
+    "mimeType",
+    size,
     "createdAt",
     "updatedAt"
   )
@@ -145,7 +172,7 @@ const resolveCategoriaNombre = (categoria: ProductoRow['categoria']): string => 
 }
 
 const mapProductoRow = (row: ProductoRow): ProductoConStock => {
-  const { categoria, stock, embeddings, ...productoBase } = row
+  const { categoria, stock, embeddings, referenceImages, ...productoBase } = row
   const stockPorTalla = (stock ?? []).map((registro) => ({
     stockId: registro.id ?? 0,
     tallaId: registro.tallaId ?? null,
@@ -165,6 +192,29 @@ const mapProductoRow = (row: ProductoRow): ProductoConStock => {
           productoId: item.productoId ?? productoBase.id,
           embedding: item.embedding ?? [],
           fuente: item.fuente ?? null,
+          referenceImageId: item.referenceImageId ?? null,
+          createdAt: item.createdAt ?? new Date().toISOString(),
+          updatedAt: item.updatedAt ?? new Date().toISOString(),
+        }))
+    : undefined
+
+  const mappedReferenceImages: ProductoReferenceImage[] | undefined = referenceImages
+    ? referenceImages
+        .filter((item): item is NonNullable<typeof item> => Boolean(item?.id) && Boolean(item?.url))
+        .map((item) => ({
+          id: item.id ?? 0,
+          productoId: item.productoId ?? productoBase.id,
+          url: item.url ?? '',
+          path: item.path ?? '',
+          bucket: item.bucket ?? null,
+          filename: item.filename ?? null,
+          mimeType: item.mimeType ?? null,
+          size:
+            typeof item.size === 'number'
+              ? item.size
+              : item.size != null
+                ? Number(item.size)
+                : null,
           createdAt: item.createdAt ?? new Date().toISOString(),
           updatedAt: item.updatedAt ?? new Date().toISOString(),
         }))
@@ -176,6 +226,7 @@ const mapProductoRow = (row: ProductoRow): ProductoConStock => {
     stockTotal,
     stockPorTalla,
     embeddings: mappedEmbeddings,
+    referenceImages: mappedReferenceImages,
   }
 }
 

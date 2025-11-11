@@ -4,11 +4,22 @@ CREATE TABLE IF NOT EXISTS producto_embeddings (
   "productoId" BIGINT NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
   embedding DOUBLE PRECISION[] NOT NULL,
   fuente TEXT,
+  "referenceImageId" BIGINT REFERENCES public.producto_reference_images(id),
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', NOW()),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', NOW())
 );
 
+alter table public.producto_reference_images
+  add column if not exists bucket text,
+  add column if not exists filename text,
+  add column if not exists "mimeType" text,
+  add column if not exists size bigint;
+
+alter table public.producto_embeddings
+  add column if not exists "referenceImageId" bigint references public.producto_reference_images(id);
+
 CREATE INDEX IF NOT EXISTS producto_embeddings_producto_idx ON producto_embeddings ("productoId");
+CREATE INDEX IF NOT EXISTS producto_embeddings_reference_idx ON producto_embeddings ("referenceImageId");
 
 CREATE OR REPLACE FUNCTION set_producto_embedding_updated_at()
 RETURNS TRIGGER AS $$
@@ -23,103 +34,3 @@ CREATE TRIGGER trg_producto_embedding_updated_at
 BEFORE UPDATE ON producto_embeddings
 FOR EACH ROW
 EXECUTE FUNCTION set_producto_embedding_updated_at();
-
-ALTER TABLE producto_embeddings ENABLE ROW LEVEL SECURITY;
-
--- Políticas: lectura para autenticados, escritura únicamente para admins del sistema
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'producto_embeddings'
-      AND policyname = 'producto_embeddings_select_authenticated'
-  ) THEN
-    CREATE POLICY "producto_embeddings_select_authenticated"
-      ON producto_embeddings
-      FOR SELECT
-      USING (auth.uid() IS NOT NULL);
-  END IF;
-END;
-$$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'producto_embeddings'
-      AND policyname = 'producto_embeddings_insert_admin'
-  ) THEN
-    CREATE POLICY "producto_embeddings_insert_admin"
-      ON producto_embeddings
-      FOR INSERT
-      WITH CHECK (
-        EXISTS (
-          SELECT 1
-          FROM usuarios u
-          WHERE u.id = auth.uid()
-            AND u.rol = 'admin'
-        )
-      );
-  END IF;
-END;
-$$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'producto_embeddings'
-      AND policyname = 'producto_embeddings_update_admin'
-  ) THEN
-    CREATE POLICY "producto_embeddings_update_admin"
-      ON producto_embeddings
-      FOR UPDATE
-      USING (
-        EXISTS (
-          SELECT 1
-          FROM usuarios u
-          WHERE u.id = auth.uid()
-            AND u.rol = 'admin'
-        )
-      )
-      WITH CHECK (
-        EXISTS (
-          SELECT 1
-          FROM usuarios u
-          WHERE u.id = auth.uid()
-            AND u.rol = 'admin'
-        )
-      );
-  END IF;
-END;
-$$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'producto_embeddings'
-      AND policyname = 'producto_embeddings_delete_admin'
-  ) THEN
-    CREATE POLICY "producto_embeddings_delete_admin"
-      ON producto_embeddings
-      FOR DELETE
-      USING (
-        EXISTS (
-          SELECT 1
-          FROM usuarios u
-          WHERE u.id = auth.uid()
-            AND u.rol = 'admin'
-        )
-      );
-  END IF;
-END;
-$$;

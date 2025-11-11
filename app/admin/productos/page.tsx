@@ -64,6 +64,7 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
+import { uploadProductImage } from "@/lib/services/product-image-service"
 import type { Categoria } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
@@ -125,6 +126,8 @@ export default function ProductosPage() {
   const [editForm, setEditForm] = useState<NuevoProductoForm | null>(null)
   const [editTarget, setEditTarget] = useState<ProductoConStock | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [uploadingEditImage, setUploadingEditImage] = useState(false)
+  const [uploadingNewImage, setUploadingNewImage] = useState(false)
 
   const pageSize = 10
 
@@ -1084,28 +1087,68 @@ export default function ProductosPage() {
                 <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
                   <header>
                     <p className="text-sm font-semibold text-foreground">Imagen</p>
-                    <p className="text-xs text-muted-foreground">Actualiza la vista previa del producto.</p>
+                    <p className="text-xs text-muted-foreground">Sube o actualiza la vista previa del producto.</p>
                   </header>
-                  <div className="space-y-2">
-                    <Label htmlFor="editar-imagen">URL de imagen</Label>
-                    <div className="flex items-center gap-3">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-imagen-file">Subir imagen</Label>
                       <Input
-                        id="editar-imagen"
-                        value={editForm.imagen}
-                        onChange={(event) => updateEditFormField("imagen", event.target.value)}
+                        id="editar-imagen-file"
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingEditImage}
+                        onChange={async (event) => {
+                          const file = event.target.files?.[0]
+                          if (!file || !editForm) return
+                          setUploadingEditImage(true)
+                          try {
+                            const { url } = await uploadProductImage(file, {
+                              productId: editTarget?.id,
+                              productCode: editForm.codigo,
+                            })
+                            setEditForm((prev) => (prev ? { ...prev, imagen: url } : prev))
+                            toast({
+                              title: "Imagen actualizada",
+                              description: "La imagen se almacenó correctamente.",
+                            })
+                          } catch (error) {
+                            console.error("Error subiendo imagen", error)
+                            toast({
+                              title: "No se pudo subir la imagen",
+                              description: error instanceof Error ? error.message : "Intenta nuevamente con otro archivo",
+                              variant: "destructive",
+                            })
+                          } finally {
+                            setUploadingEditImage(false)
+                            event.target.value = ""
+                          }
+                        }}
                       />
-                      {editForm.imagen && (
-                        <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
-                          <Image
-                            src={editForm.imagen}
-                            alt="Vista previa"
-                            fill
-                            sizes="64px"
-                            loading="lazy"
-                            className="object-cover"
-                          />
-                        </div>
-                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Selecciona un archivo desde tu dispositivo. Se cargará automáticamente a Supabase Storage.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-imagen">URL de imagen</Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="editar-imagen"
+                          value={editForm.imagen}
+                          onChange={(event) => updateEditFormField("imagen", event.target.value)}
+                        />
+                        {editForm.imagen && (
+                          <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
+                            <Image
+                              src={editForm.imagen}
+                              alt="Vista previa"
+                              fill
+                              sizes="64px"
+                              loading="lazy"
+                              className="object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -1114,7 +1157,10 @@ export default function ProductosPage() {
                 <Button type="button" variant="outline" onClick={() => handleEditDialogChange(false)} disabled={savingEdit}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={savingEdit || (!loadingCategorias && categorias.length === 0)}>
+                <Button
+                  type="submit"
+                  disabled={savingEdit || uploadingEditImage || (!loadingCategorias && categorias.length === 0)}
+                >
                   {savingEdit ? "Guardando..." : "Guardar cambios"}
                 </Button>
               </DialogFooter>
@@ -1298,33 +1344,68 @@ export default function ProductosPage() {
               <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Imagen opcional</p>
-                  <p className="text-xs text-muted-foreground">Utiliza una URL pública para mostrar una vista previa.</p>
-                </header>
-                <div className="space-y-2">
-                  <Label htmlFor="nuevo-imagen">URL de imagen</Label>
-                  <div className="flex items-center gap-3">
-                    <Input
-                      id="nuevo-imagen"
-                      placeholder="https://..."
-                      value={nuevoProducto.imagen}
-                      onChange={(event) => setNuevoProducto((prev) => ({ ...prev, imagen: event.target.value }))}
-                    />
-                    {nuevoProducto.imagen && (
-                      <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
-                        <Image
-                          src={nuevoProducto.imagen}
-                          alt="Vista previa"
-                          fill
-                          sizes="64px"
-                          loading="lazy"
-                          className="object-cover"
-                        />
-                      </div>
-                    )}
-                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Sube la imagen a tu almacenamiento preferido y pega aquí la URL pública.
+                    Sube un archivo o pega una URL pública para mostrar la vista previa del producto.
                   </p>
+                </header>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-imagen-file">Subir imagen</Label>
+                    <Input
+                      id="nuevo-imagen-file"
+                      type="file"
+                      accept="image/*"
+                      disabled={uploadingNewImage}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0]
+                        if (!file) return
+                        setUploadingNewImage(true)
+                        try {
+                          const { url } = await uploadProductImage(file, {
+                            productCode: nuevoProducto.codigo,
+                          })
+                          setNuevoProducto((prev) => ({ ...prev, imagen: url }))
+                          toast({ title: "Imagen subida", description: "La imagen se almacenó correctamente." })
+                        } catch (error) {
+                          console.error("Error subiendo imagen", error)
+                          toast({
+                            title: "No se pudo subir la imagen",
+                            description: error instanceof Error ? error.message : "Intenta con otro archivo",
+                            variant: "destructive",
+                          })
+                        } finally {
+                          setUploadingNewImage(false)
+                          event.target.value = ""
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      La imagen se almacena en Supabase Storage y se asocia automáticamente al producto.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-imagen">URL de imagen</Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="nuevo-imagen"
+                        placeholder="https://..."
+                        value={nuevoProducto.imagen}
+                        onChange={(event) => setNuevoProducto((prev) => ({ ...prev, imagen: event.target.value }))}
+                      />
+                      {nuevoProducto.imagen && (
+                        <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
+                          <Image
+                            src={nuevoProducto.imagen}
+                            alt="Vista previa"
+                            fill
+                            sizes="64px"
+                            loading="lazy"
+                            className="object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
@@ -1333,7 +1414,7 @@ export default function ProductosPage() {
                 type="button"
                 variant="outline"
                 onClick={() => handleDialogOpenChange(false)}
-                disabled={savingProducto}
+                disabled={savingProducto || uploadingNewImage}
               >
                 Cancelar
               </Button>
@@ -1341,6 +1422,7 @@ export default function ProductosPage() {
                 type="submit"
                 disabled={
                   savingProducto ||
+                  uploadingNewImage ||
                   (!loadingCategorias && categorias.length === 0)
                 }
               >
