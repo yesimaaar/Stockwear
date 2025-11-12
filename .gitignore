@@ -7,6 +7,18 @@
 /.next/
 /out/
 
+#venv
+
+venv/
+.venv/
+
+#Mi entorno de python
+.venv310/
+
+#VS Code settings
+.vscode/
+
+
 # production
 /build
 

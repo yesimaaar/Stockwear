@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { Producto, Categoria } from '@/lib/types'
+import type { Producto, Categoria, ProductoEmbedding, ProductoReferenceImage } from '@/lib/types'
 
 export interface ProductoConStock extends Producto {
   categoria: string
@@ -12,6 +12,8 @@ export interface ProductoConStock extends Producto {
     almacen: string
     cantidad: number
   }>
+  embeddings?: ProductoEmbedding[]
+  referenceImages?: ProductoReferenceImage[]
 }
 
 type CategoriaRelacion = {
@@ -38,6 +40,27 @@ type ProductoRow = Producto & {
     cantidad: number | null
     talla?: TallaRelacion | null
     almacen?: AlmacenRelacion | null
+  }> | null
+  embeddings?: Array<{
+    id: number | null
+    productoId: number | null
+    embedding: number[] | null
+    fuente?: string | null
+    referenceImageId?: number | null
+    createdAt?: string | null
+    updatedAt?: string | null
+  }> | null
+  referenceImages?: Array<{
+    id: number | null
+    productoId: number | null
+    url: string | null
+    path: string | null
+    bucket?: string | null
+    filename?: string | null
+    mimeType?: string | null
+    size?: number | null
+    createdAt?: string | null
+    updatedAt?: string | null
   }> | null
 }
 
@@ -71,6 +94,27 @@ const PRODUCTO_SELECT = `
       id,
       nombre
     )
+  ),
+  embeddings:producto_embeddings(
+    id,
+    "productoId",
+    embedding,
+    fuente,
+    "referenceImageId",
+    "createdAt",
+    "updatedAt"
+  ),
+  referenceImages:producto_reference_images(
+    id,
+    "productoId",
+    url,
+    path,
+    bucket,
+    filename,
+    "mimeType",
+    size,
+    "createdAt",
+    "updatedAt"
   )
 `
 
@@ -128,7 +172,7 @@ const resolveCategoriaNombre = (categoria: ProductoRow['categoria']): string => 
 }
 
 const mapProductoRow = (row: ProductoRow): ProductoConStock => {
-  const { categoria, stock, ...productoBase } = row
+  const { categoria, stock, embeddings, referenceImages, ...productoBase } = row
   const stockPorTalla = (stock ?? []).map((registro) => ({
     stockId: registro.id ?? 0,
     tallaId: registro.tallaId ?? null,
@@ -140,11 +184,49 @@ const mapProductoRow = (row: ProductoRow): ProductoConStock => {
 
   const stockTotal = stockPorTalla.reduce((total, detalle) => total + (detalle.cantidad ?? 0), 0)
 
+  const mappedEmbeddings: ProductoEmbedding[] | undefined = embeddings
+    ? embeddings
+        .filter((item): item is NonNullable<typeof item> => Array.isArray(item.embedding) && item.productoId != null)
+        .map((item) => ({
+          id: item.id ?? 0,
+          productoId: item.productoId ?? productoBase.id,
+          embedding: item.embedding ?? [],
+          fuente: item.fuente ?? null,
+          referenceImageId: item.referenceImageId ?? null,
+          createdAt: item.createdAt ?? new Date().toISOString(),
+          updatedAt: item.updatedAt ?? new Date().toISOString(),
+        }))
+    : undefined
+
+  const mappedReferenceImages: ProductoReferenceImage[] | undefined = referenceImages
+    ? referenceImages
+        .filter((item): item is NonNullable<typeof item> => Boolean(item?.id) && Boolean(item?.url))
+        .map((item) => ({
+          id: item.id ?? 0,
+          productoId: item.productoId ?? productoBase.id,
+          url: item.url ?? '',
+          path: item.path ?? '',
+          bucket: item.bucket ?? null,
+          filename: item.filename ?? null,
+          mimeType: item.mimeType ?? null,
+          size:
+            typeof item.size === 'number'
+              ? item.size
+              : item.size != null
+                ? Number(item.size)
+                : null,
+          createdAt: item.createdAt ?? new Date().toISOString(),
+          updatedAt: item.updatedAt ?? new Date().toISOString(),
+        }))
+    : undefined
+
   return {
     ...productoBase,
     categoria: resolveCategoriaNombre(categoria),
     stockTotal,
     stockPorTalla,
+    embeddings: mappedEmbeddings,
+    referenceImages: mappedReferenceImages,
   }
 }
 
@@ -300,12 +382,49 @@ export class ProductoService {
     return updated as Producto
   }
 
-  static async delete(id: number): Promise<boolean> {
-    const { error } = await supabase.from('productos').update({ estado: 'inactivo' }).eq('id', id)
-    if (!error) {
+  static async delete(
+    id: number,
+    options?: {
+      mode?: 'inactive' | 'hard'
+    },
+  ): Promise<boolean> {
+    const mode = options?.mode === 'hard' ? 'hard' : 'soft'
+
+    try {
+      const origin =
+        typeof window === 'undefined'
+          ? process.env.NEXT_PUBLIC_SITE_URL
+            || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined)
+            || 'http://localhost:3000'
+          : window.location.origin
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[ProductoService.delete] request', { id, mode, origin })
+      }
+
+      const response = await fetch(`${origin}/api/admin/productos/${id}?mode=${mode}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => null)
+        console.error('Error eliminando producto', { status: response.status, details })
+        return false
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[ProductoService.delete] success', { id, mode })
+      }
+
       invalidateProductosCache()
+      return true
+    } catch (error) {
+      console.error('Falló la solicitud para eliminar producto', error)
+      return false
     }
-    return !error
   }
 
   static async warmCache(): Promise<void> {

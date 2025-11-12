@@ -27,6 +27,29 @@ export interface Producto {
   createdAt: string
 }
 
+export interface ProductoEmbedding {
+  id: number
+  productoId: number
+  embedding: number[]
+  fuente?: string | null
+  referenceImageId?: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProductoReferenceImage {
+  id: number
+  productoId: number
+  url: string
+  path: string
+  bucket?: string | null
+  filename?: string | null
+  mimeType?: string | null
+  size?: number | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Categoria {
   id: number
   nombre: string

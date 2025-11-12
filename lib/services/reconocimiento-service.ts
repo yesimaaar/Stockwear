@@ -1,75 +1,136 @@
 import { supabase } from '@/lib/supabase'
-import { ProductoService } from './producto-service'
+import { ProductoService, type ProductoConStock } from './producto-service'
+import { ProductoEmbeddingService } from './producto-embedding-service'
+import { cosineSimilarity } from '@/lib/ai/embedding-utils'
 import type { Consulta } from '@/lib/types'
+
+type NivelConfianza = 'alto' | 'medio' | 'bajo'
 
 export interface ReconocimientoResult {
   success: boolean
-  producto?: Awaited<ReturnType<typeof ProductoService.getById>>
-  nivelConfianza: 'alto' | 'medio' | 'bajo'
+  similitud: number
+  umbral: number
+  nivelConfianza: NivelConfianza
+  producto?: ProductoConStock | null
+  coincidencias?: Array<{
+    productoId: number
+    nombre: string
+    similitud: number
+  }>
   message?: string
 }
 
+export interface ProcesarEmbeddingParams {
+  embedding: Float32Array
+  empleadoId?: string | null
+  umbral: number
+}
+
+function calcularNivelConfianza(similitud: number, umbral: number): NivelConfianza {
+  if (similitud >= umbral + 0.1) return 'alto'
+  if (similitud >= umbral) return 'medio'
+  return 'bajo'
+}
+
+async function registrarConsulta(options: {
+  productoId: number | null
+  empleadoId?: string | null
+  nivelConfianza: NivelConfianza
+  resultado: 'exitoso' | 'fallido'
+}) {
+  const payload: Partial<Consulta> = {
+    tipo: 'reconocimiento_visual',
+    productoId: options.productoId,
+    empleadoId: options.empleadoId ?? null,
+    nivelConfianza: options.nivelConfianza,
+    resultado: options.resultado,
+    createdAt: new Date().toISOString(),
+  }
+
+  await supabase.from('consultas').insert(payload)
+}
+
 export class ReconocimientoService {
-  static async procesarImagen(imageData: string, empleadoId: string | number): Promise<ReconocimientoResult> {
-    // Simular procesamiento de imagen con delay
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+  static async procesarEmbedding(params: ProcesarEmbeddingParams): Promise<ReconocimientoResult> {
+    const { embedding, empleadoId, umbral } = params
 
-    // Simular reconocimiento aleatorio (mismo comportamiento que antes)
-    const random = Math.random()
-    let nivelConfianza: 'alto' | 'medio' | 'bajo'
-    let productoId: number | null = null
-
-    if (random > 0.7) {
-      nivelConfianza = 'alto'
-    } else if (random > 0.4) {
-      nivelConfianza = 'medio'
-    } else {
-      nivelConfianza = 'bajo'
-    }
-
-    // Intentar seleccionar producto aleatorio de la tabla productos
-    if (nivelConfianza !== 'bajo') {
-      const { data: productos } = await supabase.from('productos').select('id')
-      if (productos && productos.length > 0) {
-        const randomItem = productos[Math.floor(Math.random() * productos.length)] as any
-        productoId = (randomItem.id as number) || null
-      }
-    }
-
-    const consultaProductoId = productoId ?? null
-    const consultaEmpleadoId =
-      typeof empleadoId === 'string' && empleadoId.trim().length > 0 ? empleadoId : null
-
-    // Registrar consulta en tabla `consultas`
-    const nuevaConsulta: Partial<Consulta> = {
-      tipo: 'reconocimiento_visual',
-      productoId: consultaProductoId,
-      nivelConfianza,
-      resultado: consultaProductoId ? 'exitoso' : 'fallido',
-      createdAt: new Date().toISOString(),
-    }
-
-    if (consultaEmpleadoId) {
-      nuevaConsulta.empleadoId = consultaEmpleadoId
-    }
-
-  await supabase.from('consultas').insert(nuevaConsulta)
-
-    if (!consultaProductoId) {
+    const catalogo = await ProductoEmbeddingService.getCatalogEmbeddings()
+    if (catalogo.length === 0) {
       return {
         success: false,
-        nivelConfianza,
-        message: 'No se pudo identificar el producto. Intente con mejor iluminación.',
+        similitud: 0,
+        umbral,
+        nivelConfianza: 'bajo',
+        message: 'Aún no se han registrado embeddings para los productos en el catálogo.',
       }
     }
 
-    const producto = await ProductoService.getById(consultaProductoId)
+    let mejorSimilitud = -1
+    let mejorProducto: (typeof catalogo)[number] | null = null
+    const coincidencias: Array<{ productoId: number; nombre: string; similitud: number }> = []
+
+    for (const producto of catalogo) {
+      let similitudProducto = -1
+      for (const candidato of producto.embeddings) {
+        if (candidato.length !== embedding.length) {
+          continue
+        }
+        const similitud = cosineSimilarity(embedding, candidato)
+        if (similitud > similitudProducto) {
+          similitudProducto = similitud
+        }
+      }
+
+      if (similitudProducto >= 0) {
+        coincidencias.push({ productoId: producto.productoId, nombre: producto.nombre, similitud: similitudProducto })
+        if (similitudProducto > mejorSimilitud) {
+          mejorSimilitud = similitudProducto
+          mejorProducto = producto
+        }
+      }
+    }
+
+    coincidencias.sort((a, b) => b.similitud - a.similitud)
+    const nivelConfianza = calcularNivelConfianza(mejorSimilitud, umbral)
+
+    if (!mejorProducto || mejorSimilitud < umbral) {
+      await registrarConsulta({
+        productoId: null,
+        empleadoId,
+        nivelConfianza,
+        resultado: 'fallido',
+      })
+
+      return {
+        success: false,
+        similitud: mejorSimilitud,
+        umbral,
+        nivelConfianza,
+        coincidencias: coincidencias.slice(0, 3),
+        message: 'No se encontró un zapato con suficiente similitud. Intenta capturar otra imagen.',
+      }
+    }
+
+    const productoDetallado = await ProductoService.getById(mejorProducto.productoId)
+
+    await registrarConsulta({
+      productoId: mejorProducto.productoId,
+      empleadoId,
+      nivelConfianza,
+      resultado: 'exitoso',
+    })
 
     return {
       success: true,
-      producto: producto || undefined,
+      similitud: mejorSimilitud,
+      umbral,
       nivelConfianza,
-      message: nivelConfianza === 'medio' ? '¿Es este el producto correcto?' : 'Producto identificado correctamente',
+      producto: productoDetallado,
+      coincidencias: coincidencias.slice(0, 3),
+      message:
+        nivelConfianza === 'alto'
+          ? 'Producto identificado correctamente.'
+          : 'Confirma que el producto sugerido coincide con la captura.',
     }
   }
 

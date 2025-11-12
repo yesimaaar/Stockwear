@@ -18,15 +18,22 @@ const {
   X,
   Clock,
   Sparkles,
+  Gauge,
+  Upload,
+  Image: ImageIcon,
 } = LucideIcons
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Slider } from "@/components/ui/slider"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AuthService } from "@/lib/services/auth-service"
-import { ReconocimientoService } from "@/lib/services/reconocimiento-service"
+import { ReconocimientoService, type ReconocimientoResult } from "@/lib/services/reconocimiento-service"
 import { ProductoService } from "@/lib/services/producto-service"
 import type { Usuario } from "@/lib/types"
+import { useShoeRecognizer } from "@/hooks/use-shoe-recognizer"
+import { clampThreshold, getDefaultThreshold, persistThreshold } from "@/lib/config/recognition"
 
 export default function EmpleadoDashboard() {
   const router = useRouter()
@@ -39,11 +46,14 @@ export default function EmpleadoDashboard() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const manualSearchRef = useRef<HTMLInputElement>(null)
   const cameraRequestedRef = useRef(false)
-  const [resultado, setResultado] = useState<any>(null)
+  const [resultado, setResultado] = useState<ReconocimientoResult | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [recommendedProducts, setRecommendedProducts] = useState<any[]>([])
+  const { computeEmbedding, loadingModel, error: recognizerError, resetError } = useShoeRecognizer()
+  const [threshold, setThreshold] = useState(() => getDefaultThreshold())
 
   useEffect(() => {
     const checkMobile = () => {
@@ -67,6 +77,12 @@ export default function EmpleadoDashboard() {
 
     void loadUser()
   }, [router])
+
+  useEffect(() => {
+    if (recognizerError) {
+      setCameraError(recognizerError)
+    }
+  }, [recognizerError])
 
   useEffect(() => {
     if (!user || cameraRequestedRef.current || cameraActive) {
@@ -143,12 +159,25 @@ export default function EmpleadoDashboard() {
     setSearchResults([])
   }
 
+  const handleThresholdChange = useCallback((values: number[]) => {
+    const rawValue = values[0] ?? threshold
+    const clamped = clampThreshold(rawValue)
+    setThreshold(clamped)
+  }, [threshold])
+
+  const handleThresholdCommit = useCallback((values: number[]) => {
+    const rawValue = values[0] ?? threshold
+    const clamped = clampThreshold(rawValue)
+    setThreshold(clamped)
+    persistThreshold(clamped)
+  }, [threshold])
+
   const handleConfirmarProducto = (confirmar: boolean) => {
     if (confirmar) {
-      setResultado({ ...resultado, nivelConfianza: "alto" })
+      setResultado((prev: any) => (prev ? { ...prev, nivelConfianza: "alto" } : prev))
     } else {
       setResultado(null)
-      startCamera()
+      void startCamera()
     }
   }
 
@@ -170,6 +199,7 @@ export default function EmpleadoDashboard() {
   const startCamera = async () => {
     try {
       setCameraError(null)
+      resetError()
       setResultado(null)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -205,23 +235,34 @@ export default function EmpleadoDashboard() {
   }
 
   const capturePhoto = async () => {
-    if (!videoRef.current) return
+    if (!videoRef.current || !user) return
 
     setScanning(true)
 
-    const canvas = document.createElement("canvas")
-    canvas.width = videoRef.current.videoWidth
-    canvas.height = videoRef.current.videoHeight
-    const ctx = canvas.getContext("2d")
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.width = videoRef.current.videoWidth
+      canvas.height = videoRef.current.videoHeight
+      const ctx = canvas.getContext("2d")
 
-    if (ctx) {
+      if (!ctx) {
+        throw new Error("No se pudo acceder al contexto del canvas")
+      }
+
       ctx.drawImage(videoRef.current, 0, 0)
-      const imageData = canvas.toDataURL("image/jpeg")
 
-      // No detener la cámara después de capturar
-      const result = await ReconocimientoService.procesarImagen(imageData, user!.id)
+      const embedding = await computeEmbedding(canvas)
+      const result = await ReconocimientoService.procesarEmbedding({
+        embedding,
+        empleadoId: user.id,
+        umbral: threshold,
+      })
 
       setResultado(result)
+    } catch (error) {
+      console.error("Error al procesar la captura", error)
+      setCameraError("No se pudo identificar el producto. Inténtalo nuevamente.")
+    } finally {
       setScanning(false)
     }
   }
@@ -232,14 +273,41 @@ export default function EmpleadoDashboard() {
 
     setScanning(true)
 
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const imageData = event.target?.result as string
-      const result = await ReconocimientoService.procesarImagen(imageData, user!.id)
+    try {
+      let imageSource: ImageBitmap | HTMLImageElement
+      if (typeof window !== "undefined" && "createImageBitmap" in window) {
+        imageSource = await createImageBitmap(file)
+      } else {
+        imageSource = await new Promise<HTMLImageElement>((resolve, reject) => {
+          // use the global Image constructor to avoid collision with the imported Next.js Image component
+          const img = new window.Image()
+          img.onload = () => resolve(img)
+          img.onerror = (e: Event | string) => reject(e)
+          img.src = URL.createObjectURL(file)
+        })
+      }
+
+      const embedding = await computeEmbedding(imageSource)
+
+      if (imageSource instanceof ImageBitmap) {
+        imageSource.close()
+      } else if (imageSource instanceof HTMLImageElement) {
+        URL.revokeObjectURL(imageSource.src)
+      }
+
+      const result = await ReconocimientoService.procesarEmbedding({
+        embedding,
+        empleadoId: user?.id ?? null,
+        umbral: threshold,
+      })
+
       setResultado(result)
+    } catch (error) {
+      console.error("Error al procesar la imagen cargada", error)
+      setCameraError("No se pudo utilizar la imagen seleccionada para el reconocimiento.")
+    } finally {
       setScanning(false)
     }
-    reader.readAsDataURL(file)
   }
 
   useEffect(() => {
@@ -262,82 +330,537 @@ export default function EmpleadoDashboard() {
   // Vista de cámara completa solo para móviles
   if (cameraActive && isMobile && !resultado) {
     return (
-      <div className="fixed inset-0 z-50 bg-black">
+      <div className="fixed inset-0 z-50 flex flex-col bg-black">
         <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/80" />
 
-        {/* Header overlay */}
-        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent p-4 z-10">
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon" onClick={stopCamera} className="text-white hover:bg-white/20">
-              <X className="h-6 w-6" />
-            </Button>
-            <h1 className="text-lg font-semibold text-white">StockWear Lens</h1>
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20">
-              <Clock className="h-6 w-6" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Marco de enfoque estilo Google Lens */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="relative w-[80%] h-[60%]">
-            {/* Esquina superior izquierda */}
-            <div className="absolute top-0 left-0 w-16 h-16 border-l-4 border-t-4 border-white rounded-tl-2xl" />
-            {/* Esquina superior derecha */}
-            <div className="absolute top-0 right-0 w-16 h-16 border-r-4 border-t-4 border-white rounded-tr-2xl" />
-            {/* Esquina inferior izquierda */}
-            <div className="absolute bottom-0 left-0 w-16 h-16 border-l-4 border-b-4 border-white rounded-bl-2xl" />
-            {/* Esquina inferior derecha */}
-            <div className="absolute bottom-0 right-0 w-16 h-16 border-r-4 border-b-4 border-white rounded-br-2xl" />
-          </div>
-        </div>
-
-        {/* Botones inferiores */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-8 z-10">
-          <div className="flex items-center justify-center gap-8">
-            {/* Botón pequeño izquierdo (historial) */}
-            <button className="h-14 w-14 rounded-full bg-gray-800/80 backdrop-blur-sm flex items-center justify-center">
-              <Clock className="h-6 w-6 text-white" />
-            </button>
-
-            {/* Botón principal de captura */}
-            <button
-              onClick={capturePhoto}
-              disabled={scanning}
-              className="relative h-20 w-20 rounded-full bg-white shadow-2xl hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {scanning ? (
-                <Loader2 className="h-10 w-10 text-primary animate-spin" />
-              ) : (
-                <Search className="h-10 w-10 text-primary" />
-              )}
-            </button>
-
-            {/* Botón pequeño derecho (placeholder) */}
-            <div className="h-14 w-14" />
-          </div>
-
-          {/* Botones de acción inferiores */}
-          <div className="flex items-center justify-center gap-4 mt-6">
-            <button className="px-6 py-3 rounded-full bg-gray-800/80 backdrop-blur-sm text-white font-medium flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              Search
-            </button>
-            <button className="px-6 py-3 rounded-full bg-gray-800/80 backdrop-blur-sm text-white font-medium flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Translate
-            </button>
-          </div>
-        </div>
-
-        {cameraError && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-20">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              <span>{cameraError}</span>
+        <div className="relative z-10 flex h-full flex-col justify-between">
+          <div className="px-4 pt-6">
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={stopCamera}
+                className="rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+              <div className="text-center">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/60">StockWear</p>
+                <p className="text-base font-semibold text-white">Lens</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-white/70">
+                <Clock className="h-4 w-4" />
+                <span>{Math.round(threshold * 100)}%</span>
+              </div>
             </div>
           </div>
-        )}
+
+          <div className="relative flex flex-1 items-center justify-center">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="relative h-[65%] w-[78%] max-w-sm">
+                <div className="absolute inset-0 rounded-[36px] border border-white/15" />
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium uppercase tracking-[0.4em] text-white/70">
+                  Enfoca el producto
+                </div>
+                <div className="absolute inset-x-6 inset-y-6 rounded-[28px] border-transparent">
+                  <div className="absolute -top-1 left-0 h-8 w-8 border-l-2 border-t-2 border-white" />
+                  <div className="absolute -top-1 right-0 h-8 w-8 border-r-2 border-t-2 border-white" />
+                  <div className="absolute -bottom-1 left-0 h-8 w-8 border-b-2 border-l-2 border-white" />
+                  <div className="absolute -bottom-1 right-0 h-8 w-8 border-b-2 border-r-2 border-white" />
+                </div>
+              </div>
+            </div>
+
+            {scanning && (
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 rounded-full border border-white/20 bg-black/60 px-4 py-1 text-xs font-medium uppercase tracking-wide text-white">
+                Analizando…
+              </div>
+            )}
+
+            {cameraError && (
+              <div className="absolute inset-x-10 top-1/2 -translate-y-1/2 rounded-2xl border border-destructive/30 bg-destructive/90 p-4 text-sm text-destructive-foreground shadow-2xl">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4" />
+                  <div>
+                    <p className="font-semibold">No se pudo identificar el producto</p>
+                    <p className="text-destructive-foreground/80">{cameraError}</p>
+                  </div>
+                </div>
+                <Button
+                  onClick={startCamera}
+                  variant="secondary"
+                  className="mt-3 w-full rounded-full bg-white text-destructive hover:bg-white/90"
+                >
+                  Reintentar
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="px-4 pb-8">
+            <div className="rounded-3xl border border-white/10 bg-black/60 p-4 backdrop-blur">
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20"
+                >
+                  <Clock className="h-5 w-5" />
+                </Button>
+
+                <button
+                  onClick={capturePhoto}
+                  disabled={scanning || loadingModel}
+                  className="relative flex h-20 w-20 items-center justify-center rounded-full border-8 border-white/20 bg-white text-primary shadow-xl transition-transform duration-200 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-80"
+                  aria-label="Capturar imagen"
+                >
+                  <span className="absolute inset-2 rounded-full bg-primary/10" />
+                  {scanning ? (
+                    <Loader2 className="relative h-8 w-8 animate-spin" />
+                  ) : loadingModel ? (
+                    <Loader2 className="relative h-8 w-8 animate-spin text-secondary" />
+                  ) : (
+                    <Search className="relative h-7 w-7" />
+                  )}
+                </button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20"
+                >
+                  <ImageIcon className="h-5 w-5" />
+                </Button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <Button
+                  variant="outline"
+                  className="rounded-2xl border-white/20 bg-white/10 text-white hover:bg-white/20"
+                  onClick={() => manualSearchRef.current?.focus()}
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  Buscar manualmente
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-2xl border-white/20 bg-white/10 text-white hover:bg-white/20"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Subir imagen
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (isMobile) {
+    return (
+      <div className="flex min-h-screen flex-col bg-background">
+        <header className="relative overflow-hidden bg-gradient-to-b from-gray-950 via-gray-900 to-background pb-10 pt-12 text-white">
+          <div className="absolute inset-x-0 top-0 h-24 bg-primary/30 blur-3xl opacity-40" />
+          <div className="relative flex items-center justify-between px-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+                <Image
+                  src="/stockwear-icon.png"
+                  alt="StockWear"
+                  width={28}
+                  height={28}
+                  className="object-contain brightness-0 invert"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-widest text-white/70">Panel empleado</p>
+                <p className="text-lg font-semibold leading-tight">Hola, {user?.nombre?.split(" ")?.[0] ?? "Equipo"}</p>
+                <p className="text-xs text-white/60">{user?.email}</p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
+
+          <div className="relative mx-4 mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+            <div className="flex items-center justify-between text-sm">
+              <div>
+                <p className="text-xs uppercase text-white/60">Umbral actual</p>
+                <p className="text-2xl font-semibold">{Math.round(threshold * 100)}%</p>
+              </div>
+              <Badge variant="secondary" className="bg-white/10 text-white">
+                {loadingModel ? "Cargando" : "Listo"}
+              </Badge>
+            </div>
+            <p className="mt-2 text-xs text-white/70">
+              Ajusta la sensibilidad del reconocimiento en configuración rápida.
+            </p>
+          </div>
+        </header>
+
+        <main className="relative -mt-6 flex-1 space-y-6 px-4 pb-24">
+          <Card className="border-none bg-card/95 shadow-xl">
+            <CardContent className="grid grid-cols-2 gap-3 p-4">
+              <Button
+                onClick={startCamera}
+                disabled={cameraActive && !resultado}
+                className="h-24 flex-col items-start justify-between rounded-2xl bg-primary text-left text-primary-foreground"
+              >
+                <Camera className="h-6 w-6" />
+                <span className="text-sm font-medium">Escanear ahora</span>
+                <span className="text-xs text-primary-foreground/80">Usa la cámara para identificar</span>
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-24 flex-col items-start justify-between rounded-2xl bg-secondary/80 text-left"
+              >
+                <Upload className="h-6 w-6" />
+                <span className="text-sm font-medium">Subir imagen</span>
+                <span className="text-xs text-muted-foreground">Galería o archivos</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => manualSearchRef.current?.focus()}
+                className="col-span-2 h-16 justify-between rounded-2xl border-dashed"
+              >
+                <div className="flex flex-col items-start">
+                  <span className="text-sm font-medium text-foreground">Buscar manualmente</span>
+                  <span className="text-xs text-muted-foreground">Nombre, código o categoría</span>
+                </div>
+                <Search className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none bg-card shadow-md">
+            <CardContent className="space-y-4 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Sensibilidad del reconocimiento</p>
+                  <p className="text-xs text-muted-foreground">
+                    Ajusta el umbral para mejorar coincidencias.
+                  </p>
+                </div>
+                <Badge variant="outline">{Math.round(threshold * 100)}%</Badge>
+              </div>
+              <Slider
+                value={[threshold]}
+                min={0.5}
+                max={0.99}
+                step={0.01}
+                onValueChange={handleThresholdChange}
+                onValueCommit={handleThresholdCommit}
+              />
+              {loadingModel && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Preparando modelo de reconocimiento…</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {cameraActive && (
+            <Card className="overflow-hidden border-none">
+              <CardContent className="p-0">
+                <div className="relative aspect-video bg-black">
+                  <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                  <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-3">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="rounded-full bg-black/60 text-white hover:bg-black/80"
+                      onClick={stopCamera}
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      onClick={capturePhoto}
+                      disabled={scanning || loadingModel}
+                      className="h-14 w-14 rounded-full bg-white text-primary hover:bg-white/90"
+                    >
+                      {scanning ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : loadingModel ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-secondary" />
+                      ) : (
+                        <Search className="h-5 w-5" />
+                      )}
+                    </Button>
+                  </div>
+                  {scanning && (
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-xs font-semibold text-primary-foreground">
+                      Analizando…
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {cameraError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Problema con la cámara</AlertTitle>
+              <AlertDescription>{cameraError}</AlertDescription>
+            </Alert>
+          )}
+
+          {resultado && (
+            <Card className="border-none bg-card shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  {resultado.success ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-destructive" />
+                  )}
+                  {resultado.message}
+                </CardTitle>
+                <CardDescription>
+                  {resultado.success
+                    ? `Similitud ${Math.round(resultado.similitud * 100)}% · Umbral ${Math.round(
+                        resultado.umbral * 100,
+                      )}%`
+                    : "No encontramos una coincidencia exacta."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {resultado.success && resultado.producto ? (
+                  <>
+                    <div className="flex gap-4">
+                      <div className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-muted">
+                        <Image
+                          src={resultado.producto.imagen || "/placeholder.svg"}
+                          alt={resultado.producto.nombre}
+                          fill
+                          sizes="112px"
+                          className="object-cover"
+                        />
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <p className="text-base font-semibold text-foreground">{resultado.producto.nombre}</p>
+                        <p className="text-muted-foreground">{resultado.producto.codigo}</p>
+                        <p className="text-muted-foreground capitalize">{resultado.producto.categoria}</p>
+                        <p className="text-2xl font-bold text-primary">
+                          ${resultado.producto.precio.toLocaleString()}
+                        </p>
+                        {resultado.producto.descuento > 0 && (
+                          <Badge variant="destructive" className="w-fit">
+                            {resultado.producto.descuento}% OFF
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Disponibilidad por talla</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {resultado.producto.stockPorTalla.map((s: any, i: number) => (
+                          <div key={i} className="rounded-xl bg-muted p-2 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">Talla {s.talla}</span>
+                              <span className={s.cantidad > 0 ? "text-foreground" : "text-destructive"}>
+                                {s.cantidad > 0 ? `${s.cantidad} uds` : "Sin stock"}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {resultado.nivelConfianza === "medio" && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Button onClick={() => handleConfirmarProducto(true)} variant="default">
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Confirmar producto
+                        </Button>
+                        <Button onClick={() => handleConfirmarProducto(false)} variant="outline">
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Volver a escanear
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-3 text-sm text-muted-foreground">
+                    <p>Intenta nuevamente con otro ángulo o usa la búsqueda manual.</p>
+                    {resultado?.coincidencias?.length ? (
+                      <div className="space-y-1 rounded-xl border border-dashed border-muted-foreground/40 p-3">
+                        {resultado.coincidencias.map((item) => (
+                          <div key={item.productoId} className="flex justify-between text-xs">
+                            <span>{item.nombre}</span>
+                            <span>{Math.round(item.similitud * 100)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="border-none bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Búsqueda manual</CardTitle>
+              <CardDescription>Encuentra productos por nombre o código</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="relative">
+                <Input
+                  ref={manualSearchRef}
+                  id="mobile-search"
+                  placeholder="Buscar producto…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="pr-10"
+                />
+                {searchQuery && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearManualSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <Button onClick={handleSearch} className="w-full">
+                <Search className="mr-2 h-4 w-4" />
+                Buscar
+              </Button>
+
+              {searchResults.length > 0 && (
+                <div className="space-y-3">
+                  {searchResults.map((producto) => (
+                    <Card key={producto.id} className="border border-border/70">
+                      <CardContent className="flex gap-3 p-3">
+                        <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg">
+                          <Image
+                            src={producto.imagen || "/placeholder.svg"}
+                            alt={producto.nombre}
+                            fill
+                            sizes="80px"
+                            className="object-cover"
+                          />
+                        </div>
+                        <div className="space-y-1 text-sm">
+                          <p className="font-semibold text-foreground">{producto.nombre}</p>
+                          <p className="text-muted-foreground">{producto.codigo}</p>
+                          <p className="text-muted-foreground capitalize">{producto.categoria}</p>
+                          <p className="text-base font-bold text-primary">
+                            ${producto.precio.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Stock: {producto.stockTotal} unidades</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {searchQuery && searchResults.length === 0 && (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  <AlertCircle className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                  No se encontraron coincidencias
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-none bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-5 w-5" />
+                Recomendaciones
+              </CardTitle>
+              <CardDescription>Productos relacionados a tus búsquedas</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {recommendedProducts.length > 0 ? (
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {recommendedProducts.map((producto) => (
+                    <div
+                      key={producto.id}
+                      className="min-w-[180px] flex-1 rounded-2xl border border-border/60 bg-background p-3"
+                    >
+                      <div className="relative mb-3 h-28 overflow-hidden rounded-xl">
+                        <Image
+                          src={producto.imagen || "/placeholder.svg"}
+                          alt={producto.nombre}
+                          fill
+                          sizes="180px"
+                          className="object-cover"
+                        />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground line-clamp-2">{producto.nombre}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{producto.categoria}</p>
+                      <p className="mt-2 text-sm font-bold text-primary">
+                        ${Number(producto.precio || 0).toLocaleString()}
+                      </p>
+                      <Button
+                        variant="link"
+                        className="px-0 text-xs"
+                        onClick={() => setSearchResults([producto])}
+                      >
+                        Ver disponibilidad
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Escanea o busca un producto para activar sugerencias personalizadas.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </main>
+
+        <footer className="fixed inset-x-0 bottom-0 border-t border-border/60 bg-card/95 backdrop-blur">
+          <div className="mx-auto flex max-w-md items-center justify-between px-6 py-3">
+            <Button
+              variant="ghost"
+              className="flex-1 justify-center"
+              onClick={() => manualSearchRef.current?.focus()}
+            >
+              <Search className="mr-2 h-5 w-5" />
+              Buscar
+            </Button>
+            <Button
+              variant="default"
+              className="mx-2 flex-1 justify-center rounded-full"
+              onClick={startCamera}
+              disabled={cameraActive && !resultado}
+            >
+              <Camera className="mr-2 h-5 w-5" />
+              Escanear
+            </Button>
+            <Button
+              variant="ghost"
+              className="flex-1 justify-center"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="mr-2 h-5 w-5" />
+              Subir
+            </Button>
+          </div>
+        </footer>
+
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
       </div>
     )
   }
@@ -395,7 +918,42 @@ export default function EmpleadoDashboard() {
                 <CardDescription>Captura una foto del producto para identificarlo automáticamente</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-            {/* Vista de cámara en tiempo real integrada en el dashboard */}
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-3">
+                      <Gauge className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Umbral de similitud</p>
+                        <p className="text-xs text-muted-foreground">
+                          Ajusta la sensibilidad del reconocimiento. Valor actual: {(threshold * 100).toFixed(0)}%
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex w-full max-w-md flex-col gap-2">
+                      <Slider
+                        value={[threshold]}
+                        min={0.5}
+                        max={0.99}
+                        step={0.01}
+                        onValueChange={handleThresholdChange}
+                        onValueCommit={handleThresholdCommit}
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>0.50</span>
+                        <span>0.75</span>
+                        <span>0.99</span>
+                      </div>
+                    </div>
+                  </div>
+                  {loadingModel && (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Cargando modelo de reconocimiento, esto puede tardar unos segundos…</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Vista de cámara en tiempo real integrada en el dashboard */}
             <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
               {cameraActive ? (
                 <>
@@ -410,11 +968,17 @@ export default function EmpleadoDashboard() {
 
                       <Button
                         onClick={capturePhoto}
-                        disabled={scanning}
+                        disabled={scanning || loadingModel}
                         size="lg"
                         className="rounded-full w-16 h-16 bg-white hover:bg-white/90 text-primary"
                       >
-                        {scanning ? <Loader2 className="h-6 w-6 animate-spin" /> : <Search className="h-6 w-6" />}
+                        {scanning ? (
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        ) : loadingModel ? (
+                          <Loader2 className="h-6 w-6 animate-spin text-secondary" />
+                        ) : (
+                          <Search className="h-6 w-6" />
+                        )}
                       </Button>
 
                       <Button
@@ -471,6 +1035,17 @@ export default function EmpleadoDashboard() {
                           Confirmación requerida
                         </Badge>
                       )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span>Similitud {Math.round(resultado.similitud * 100)}%</span>
+                      </div>
+                      <Badge variant="secondary">Umbral {Math.round(resultado.umbral * 100)}%</Badge>
+                      <Badge variant="secondary" className="capitalize">
+                        Confianza {resultado.nivelConfianza}
+                      </Badge>
                     </div>
 
                     {resultado.producto && (
@@ -543,9 +1118,24 @@ export default function EmpleadoDashboard() {
                     )}
                   </>
                 ) : (
-                  <div className="flex items-center gap-2 text-red-600">
-                    <XCircle className="h-5 w-5" />
-                    <span className="font-medium">{resultado.message}</span>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-red-600">
+                      <XCircle className="h-5 w-5" />
+                      <span className="font-medium">{resultado.message}</span>
+                    </div>
+                    {resultado.coincidencias && resultado.coincidencias.length > 0 && (
+                      <div className="rounded-lg border border-dashed border-muted-foreground/40 p-4">
+                        <p className="text-sm font-medium text-foreground mb-2">Coincidencias más cercanas</p>
+                        <ul className="space-y-1 text-sm text-muted-foreground">
+                          {resultado.coincidencias.map((item) => (
+                            <li key={item.productoId} className="flex justify-between">
+                              <span>{item.nombre}</span>
+                              <span>{Math.round(item.similitud * 100)}%</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -565,6 +1155,7 @@ export default function EmpleadoDashboard() {
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input
+                  ref={manualSearchRef}
                   placeholder="Buscar por nombre o código..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
