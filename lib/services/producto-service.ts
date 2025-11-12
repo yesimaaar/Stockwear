@@ -382,12 +382,49 @@ export class ProductoService {
     return updated as Producto
   }
 
-  static async delete(id: number): Promise<boolean> {
-    const { error } = await supabase.from('productos').update({ estado: 'inactivo' }).eq('id', id)
-    if (!error) {
+  static async delete(
+    id: number,
+    options?: {
+      mode?: 'inactive' | 'hard'
+    },
+  ): Promise<boolean> {
+    const mode = options?.mode === 'hard' ? 'hard' : 'soft'
+
+    try {
+      const origin =
+        typeof window === 'undefined'
+          ? process.env.NEXT_PUBLIC_SITE_URL
+            || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined)
+            || 'http://localhost:3000'
+          : window.location.origin
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[ProductoService.delete] request', { id, mode, origin })
+      }
+
+      const response = await fetch(`${origin}/api/admin/productos/${id}?mode=${mode}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => null)
+        console.error('Error eliminando producto', { status: response.status, details })
+        return false
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[ProductoService.delete] success', { id, mode })
+      }
+
       invalidateProductosCache()
+      return true
+    } catch (error) {
+      console.error('Falló la solicitud para eliminar producto', error)
+      return false
     }
-    return !error
   }
 
   static async warmCache(): Promise<void> {

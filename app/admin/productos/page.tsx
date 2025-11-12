@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { Fragment, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import * as LucideIcons from "lucide-react"
 const {
   Package,
@@ -65,7 +65,12 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
 import { uploadProductImage } from "@/lib/services/product-image-service"
-import type { Categoria } from "@/lib/types"
+import {
+  deleteReferenceImage,
+  regenerateProductEmbeddings,
+  uploadReferenceImage,
+} from "@/lib/services/product-reference-service"
+import type { Categoria, ProductoReferenceImage } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
   AlertDialog,
@@ -77,6 +82,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group"
 
 type EstadoFiltro = "todos" | "activo" | "inactivo"
 type CategoriaFiltro = "todas" | string
@@ -102,6 +111,10 @@ const getDefaultNuevoProducto = () => ({
 
 type NuevoProductoForm = ReturnType<typeof getDefaultNuevoProducto>
 
+type ReferenceDraft = { file: File; preview: string }
+
+type DeleteMode = "inactive" | "hard"
+
 export default function ProductosPage() {
   const { toast } = useToast()
   const [productos, setProductos] = useState<ProductoConStock[]>([])
@@ -121,6 +134,7 @@ export default function ProductosPage() {
   const [nuevoProducto, setNuevoProducto] = useState<NuevoProductoForm>(getDefaultNuevoProducto)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProductoConStock | null>(null)
+  const [deleteMode, setDeleteMode] = useState<DeleteMode>("inactive")
   const [deletingProducto, setDeletingProducto] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editForm, setEditForm] = useState<NuevoProductoForm | null>(null)
@@ -128,6 +142,13 @@ export default function ProductosPage() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [uploadingEditImage, setUploadingEditImage] = useState(false)
   const [uploadingNewImage, setUploadingNewImage] = useState(false)
+  const [newReferenceDrafts, setNewReferenceDrafts] = useState<ReferenceDraft[]>([])
+  const [uploadingNewReferences, setUploadingNewReferences] = useState(false)
+  const [editReferenceDrafts, setEditReferenceDrafts] = useState<ReferenceDraft[]>([])
+  const [uploadingEditReferences, setUploadingEditReferences] = useState(false)
+  const [editReferenceImages, setEditReferenceImages] = useState<ProductoReferenceImage[]>([])
+  const [removingReferenceId, setRemovingReferenceId] = useState<number | null>(null)
+  const [regeneratingEmbeddings, setRegeneratingEmbeddings] = useState(false)
 
   const pageSize = 10
 
@@ -147,11 +168,13 @@ export default function ProductosPage() {
     if (!open) {
       setDeleteTarget(null)
       setDeletingProducto(false)
+      setDeleteMode("inactive")
     }
   }
 
   const abrirConfirmacionEliminar = (producto: ProductoConStock) => {
     setDeleteTarget(producto)
+    setDeleteMode("inactive")
     setDeleteConfirmOpen(true)
   }
 
@@ -159,20 +182,28 @@ export default function ProductosPage() {
     if (!deleteTarget) return
     const producto = deleteTarget
     setDeletingProducto(true)
-    const exito = await ProductoService.delete(producto.id)
+    const exito = await ProductoService.delete(producto.id, {
+      mode: deleteMode,
+    })
     setDeletingProducto(false)
     if (!exito) {
       toast({
         title: "No se pudo eliminar",
-        description: "Ocurrió un error al actualizar el estado del producto",
+        description:
+          deleteMode === "hard"
+            ? "No fue posible eliminar el producto de forma definitiva."
+            : "Ocurrió un error al actualizar el estado del producto.",
         variant: "destructive",
       })
       return
     }
 
     toast({
-      title: "Producto actualizado",
-      description: `${producto.nombre} fue marcado como inactivo`,
+      title: deleteMode === "hard" ? "Producto eliminado" : "Producto actualizado",
+      description:
+        deleteMode === "hard"
+          ? `${producto.nombre} se eliminó definitivamente del inventario.`
+          : `${producto.nombre} fue marcado como inactivo`,
     })
 
     handleDeleteDialogChange(false)
@@ -185,6 +216,12 @@ export default function ProductosPage() {
       setEditForm(null)
       setEditTarget(null)
       setSavingEdit(false)
+      editReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+      setEditReferenceDrafts([])
+      setEditReferenceImages([])
+      setUploadingEditReferences(false)
+      setRemovingReferenceId(null)
+      setRegeneratingEmbeddings(false)
     }
   }
 
@@ -199,6 +236,46 @@ export default function ProductosPage() {
     descripcion: producto.descripcion ?? "",
     imagen: producto.imagen ?? "",
   })
+
+  const mapReferenceRecord = (record: any): ProductoReferenceImage | null => {
+    const rawId = record?.id
+    const parsedId =
+      typeof rawId === "number"
+        ? rawId
+        : typeof rawId === "string"
+          ? Number(rawId)
+          : Number.NaN
+
+    if (!Number.isFinite(parsedId) || parsedId <= 0) {
+      console.warn("Referencia recibida sin identificador válido", record)
+      return null
+    }
+
+    const productIdCandidate =
+      typeof record?.productoId === "number"
+        ? record.productoId
+        : typeof record?.productoId === "string"
+          ? Number(record.productoId)
+          : undefined
+
+    return {
+      id: parsedId,
+      productoId: productIdCandidate && Number.isFinite(productIdCandidate) ? productIdCandidate : editTarget?.id ?? 0,
+      url: record?.url ?? "",
+      path: record?.path ?? "",
+      bucket: record?.bucket ?? null,
+      filename: record?.filename ?? null,
+      mimeType: record?.mimeType ?? null,
+      size:
+        typeof record?.size === "number"
+          ? record.size
+          : record?.size != null
+            ? Number(record.size)
+            : null,
+      createdAt: record?.createdAt ?? new Date().toISOString(),
+      updatedAt: record?.updatedAt ?? new Date().toISOString(),
+    }
+  }
 
   const buildPayloadFromForm = (form: NuevoProductoForm) => {
     if (!form.categoriaId) {
@@ -246,9 +323,141 @@ export default function ProductosPage() {
     }
   }
 
+  const handleNewReferenceFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
+      return
+    }
+
+    const drafts = files.map<ReferenceDraft>((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }))
+
+    setNewReferenceDrafts((prev) => [...prev, ...drafts])
+    event.target.value = ""
+  }
+
+  const handleRemoveNewReferenceDraft = (index: number) => {
+    setNewReferenceDrafts((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(index, 1)
+      if (removed) {
+        URL.revokeObjectURL(removed.preview)
+      }
+      return next
+    })
+  }
+
+  const handleEditReferenceFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
+      return
+    }
+
+    const drafts = files.map<ReferenceDraft>((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }))
+
+    setEditReferenceDrafts((prev) => [...prev, ...drafts])
+    event.target.value = ""
+  }
+
+  const handleRemoveEditReferenceDraft = (index: number) => {
+    setEditReferenceDrafts((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(index, 1)
+      if (removed) {
+        URL.revokeObjectURL(removed.preview)
+      }
+      return next
+    })
+  }
+
+  const handleDeleteReference = async (referenceId: number) => {
+    try {
+      const safeId = Number(referenceId)
+      if (!Number.isFinite(safeId) || safeId <= 0) {
+        toast({
+          title: "No se pudo eliminar la referencia",
+          description: "El identificador de la imagen no es válido.",
+          variant: "destructive",
+        })
+        return
+      }
+      setRemovingReferenceId(safeId)
+      await deleteReferenceImage(safeId)
+      setEditReferenceImages((prev) => prev.filter((item) => item.id !== safeId))
+      setEditTarget((prev) =>
+        prev
+          ? {
+              ...prev,
+              referenceImages: prev.referenceImages?.filter((item) => item.id !== safeId),
+            }
+          : prev,
+      )
+      toast({
+        title: "Referencia eliminada",
+        description: "La imagen de referencia se eliminó correctamente.",
+      })
+    } catch (error) {
+      console.error("Error eliminando imagen de referencia", error)
+      toast({
+        title: "No se pudo eliminar la referencia",
+        description: error instanceof Error ? error.message : "Intenta nuevamente",
+        variant: "destructive",
+      })
+    } finally {
+      setRemovingReferenceId(null)
+    }
+  }
+
+  const handleRegenerateEmbeddings = async () => {
+    if (!editTarget) return
+    try {
+      setRegeneratingEmbeddings(true)
+      const result = await regenerateProductEmbeddings(editTarget.id)
+      toast({
+        title: "Embeddings regenerados",
+        description:
+          result.processed === 0
+            ? "No se generaron embeddings porque no hay referencias."
+            : `${result.processed} referencia${result.processed === 1 ? "" : "s"} procesada${
+                result.processed === 1 ? "" : "s"
+              } correctamente`,
+      })
+      if (Array.isArray((result as any)?.failures) && (result as any).failures.length > 0) {
+        const failures = (result as any).failures as Array<{ id: number; reason: string }>
+        toast({
+          title: "Algunas referencias no generaron embeddings",
+          description: failures
+            .slice(0, 3)
+            .map((failure) => `Referencia ${failure.id}: ${failure.reason}`)
+            .join(" | "),
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error regenerando embeddings", error)
+      toast({
+        title: "No se pudieron regenerar los embeddings",
+        description: error instanceof Error ? error.message : "Intenta nuevamente",
+        variant: "destructive",
+      })
+    } finally {
+      setRegeneratingEmbeddings(false)
+    }
+  }
+
   const abrirEdicionProducto = (producto: ProductoConStock) => {
     setEditTarget(producto)
     setEditForm(mapProductoToForm(producto))
+    setEditReferenceImages(producto.referenceImages ?? [])
+    editReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+    setEditReferenceDrafts([])
+    setRemovingReferenceId(null)
+    setRegeneratingEmbeddings(false)
     setEditDialogOpen(true)
   }
 
@@ -259,6 +468,18 @@ export default function ProductosPage() {
   useEffect(() => {
     void cargarProductos()
   }, [cargarProductos])
+
+  useEffect(() => {
+    return () => {
+      newReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+    }
+  }, [newReferenceDrafts])
+
+  useEffect(() => {
+    return () => {
+      editReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+    }
+  }, [editReferenceDrafts])
 
   useEffect(() => {
     let active = true
@@ -412,6 +633,9 @@ export default function ProductosPage() {
     if (!open) {
       setSavingProducto(false)
       setNuevoProducto(getDefaultNuevoProducto())
+      newReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+      setNewReferenceDrafts([])
+      setUploadingNewReferences(false)
     }
   }
 
@@ -435,10 +659,67 @@ export default function ProductosPage() {
         return
       }
 
+      let referenceSuccess = 0
+      const referenceErrors: Array<{ name: string; message: string }> = []
+      if (newReferenceDrafts.length > 0) {
+        setUploadingNewReferences(true)
+        try {
+          for (const draft of newReferenceDrafts) {
+            try {
+              const response = await uploadReferenceImage(creado.id, draft.file, {
+                productCode: nuevoProducto.codigo,
+              })
+              if (!response?.embedding) {
+                referenceErrors.push({
+                  name: draft.file.name,
+                  message:
+                    response?.embeddingError ??
+                    response?.message ??
+                    "La imagen se guardó, pero no se pudo generar el embedding automáticamente.",
+                })
+              }
+              referenceSuccess += 1
+            } catch (uploadError) {
+              console.error("Error subiendo imagen de referencia", uploadError)
+              referenceErrors.push({
+                name: draft.file.name,
+                message:
+                  uploadError instanceof Error ? uploadError.message : "No se pudo procesar la imagen de referencia",
+              })
+            } finally {
+              URL.revokeObjectURL(draft.preview)
+            }
+          }
+        } finally {
+          setNewReferenceDrafts([])
+          setUploadingNewReferences(false)
+        }
+      }
+
       toast({
         title: "Producto registrado",
         description: `${creado.nombre} se añadió al inventario`,
       })
+
+      if (referenceSuccess > 0) {
+        toast({
+          title: referenceSuccess === 1 ? "Imagen de referencia registrada" : "Imágenes de referencia registradas",
+          description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${
+            referenceSuccess > 1 ? "s" : ""
+          } correctamente`,
+        })
+      }
+
+      if (referenceErrors.length > 0) {
+        toast({
+          title: "Algunas referencias no se procesaron",
+          description: referenceErrors
+            .map((item) => `${item.name}: ${item.message}`)
+            .slice(0, 3)
+            .join(" | "),
+          variant: "destructive",
+        })
+      }
 
       handleDialogOpenChange(false)
       await cargarProductos()
@@ -474,10 +755,92 @@ export default function ProductosPage() {
         return
       }
 
+      let referenceSuccess = 0
+      const referenceErrors: Array<{ name: string; message: string }> = []
+      const newReferenceRecords: ProductoReferenceImage[] = []
+
+      if (editReferenceDrafts.length > 0) {
+        setUploadingEditReferences(true)
+        try {
+          for (const draft of editReferenceDrafts) {
+            try {
+              const response = await uploadReferenceImage(editTarget.id, draft.file, {
+                productCode: editForm.codigo,
+              })
+              if (response?.referenceImage) {
+                const mapped = mapReferenceRecord(response.referenceImage)
+                if (mapped) {
+                  newReferenceRecords.push(mapped)
+                } else {
+                  referenceErrors.push({
+                    name: draft.file.name,
+                    message: "La referencia se registró pero no devolvió un identificador válido.",
+                  })
+                }
+              }
+              if (!response?.embedding) {
+                referenceErrors.push({
+                  name: draft.file.name,
+                  message:
+                    response?.embeddingError ??
+                    response?.message ??
+                    "La imagen se guardó, pero no se pudo generar el embedding automáticamente.",
+                })
+              }
+              referenceSuccess += 1
+            } catch (uploadError) {
+              console.error("Error subiendo imagen de referencia", uploadError)
+              referenceErrors.push({
+                name: draft.file.name,
+                message:
+                  uploadError instanceof Error ? uploadError.message : "No se pudo procesar la imagen de referencia",
+              })
+            } finally {
+              URL.revokeObjectURL(draft.preview)
+            }
+          }
+        } finally {
+          setEditReferenceDrafts([])
+          setUploadingEditReferences(false)
+        }
+      }
+
+      if (newReferenceRecords.length > 0) {
+        setEditReferenceImages((prev) => [...prev, ...newReferenceRecords])
+        setEditTarget((prev) =>
+          prev
+            ? {
+                ...prev,
+                referenceImages: [...(prev.referenceImages ?? []), ...newReferenceRecords],
+              }
+            : prev,
+        )
+      }
+
       toast({
         title: "Producto actualizado",
         description: `${payload.nombre} se guardó correctamente`,
       })
+
+      if (referenceSuccess > 0) {
+        toast({
+          title: referenceSuccess === 1 ? "Referencia registrada" : "Referencias registradas",
+          description: `${referenceSuccess} referencia${referenceSuccess === 1 ? "" : "s"} procesada${
+            referenceSuccess === 1 ? "" : "s"
+          } correctamente`,
+        })
+      }
+
+      if (referenceErrors.length > 0) {
+        toast({
+          title: "Algunas referencias no se procesaron",
+          description: referenceErrors
+            .map((item) => `${item.name}: ${item.message}`)
+            .slice(0, 3)
+            .join(" | "),
+          variant: "destructive",
+        })
+      }
 
       handleEditDialogChange(false)
       await cargarProductos()
@@ -1152,16 +1515,160 @@ export default function ProductosPage() {
                     </div>
                   </div>
                 </section>
+
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Imágenes de referencia</p>
+                    <p className="text-xs text-muted-foreground">
+                      Estas imágenes se usan para el reconocimiento visual del producto.
+                    </p>
+                  </header>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Imágenes registradas</Label>
+                      {editReferenceImages.length > 0 ? (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {editReferenceImages.map((reference) => {
+                            const previewSrc = reference.url && reference.url.length > 0 ? reference.url : undefined
+                            return (
+                              <div key={reference.id} className="flex flex-col gap-2">
+                                <div className="relative h-24 w-full overflow-hidden rounded-md border border-border">
+                                  {previewSrc ? (
+                                    <Image
+                                      src={previewSrc}
+                                      alt={reference.filename ?? `Referencia ${reference.id}`}
+                                      fill
+                                      sizes="120px"
+                                      loading="lazy"
+                                      className="object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">
+                                      Sin vista previa
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex-1 truncate text-xs text-muted-foreground">
+                                    {reference.filename ?? reference.path}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => handleDeleteReference(reference.id)}
+                                    disabled={
+                                      removingReferenceId === reference.id ||
+                                      uploadingEditReferences ||
+                                      savingEdit
+                                    }
+                                  >
+                                    {removingReferenceId === reference.id ? "Eliminando…" : "Eliminar"}
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Aún no hay imágenes de referencia registradas para este producto.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-referencias">Añadir nuevas imágenes</Label>
+                      <Input
+                        id="editar-referencias"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={savingEdit || uploadingEditImage || uploadingEditReferences}
+                        onChange={handleEditReferenceFilesChange}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Agrega diferentes vistas del producto para mejorar los resultados del sistema de coincidencia.
+                      </p>
+                    </div>
+
+                    {editReferenceDrafts.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Imágenes pendientes de registro</Label>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {editReferenceDrafts.map((draft, index) => (
+                            <div key={`${draft.preview}-${index}`} className="flex flex-col gap-2">
+                              <div className="relative h-24 w-full overflow-hidden rounded-md border border-border">
+                                <Image
+                                  src={draft.preview}
+                                  alt={`Referencia pendiente ${index + 1}`}
+                                  fill
+                                  sizes="120px"
+                                  className="object-cover"
+                                  unoptimized
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleRemoveEditReferenceDraft(index)}
+                                disabled={savingEdit || uploadingEditReferences}
+                              >
+                                Quitar
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleRegenerateEmbeddings}
+                        disabled={
+                          regeneratingEmbeddings ||
+                          uploadingEditReferences ||
+                          editReferenceImages.length === 0 ||
+                          savingEdit
+                        }
+                      >
+                        {regeneratingEmbeddings ? "Regenerando…" : "Regenerar embeddings"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Úsalo cuando reemplaces o elimines referencias existentes.
+                      </p>
+                    </div>
+                  </div>
+                </section>
               </div>
               <DialogFooter className="gap-2">
-                <Button type="button" variant="outline" onClick={() => handleEditDialogChange(false)} disabled={savingEdit}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleEditDialogChange(false)}
+                  disabled={
+                    savingEdit ||
+                    uploadingEditReferences ||
+                    regeneratingEmbeddings ||
+                    removingReferenceId !== null
+                  }
+                >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
-                  disabled={savingEdit || uploadingEditImage || (!loadingCategorias && categorias.length === 0)}
+                  disabled={
+                    savingEdit ||
+                    uploadingEditImage ||
+                    uploadingEditReferences ||
+                    regeneratingEmbeddings ||
+                    (!loadingCategorias && categorias.length === 0)
+                  }
                 >
-                  {savingEdit ? "Guardando..." : "Guardar cambios"}
+                  {savingEdit || uploadingEditReferences ? "Procesando..." : "Guardar cambios"}
                 </Button>
               </DialogFooter>
             </form>
@@ -1174,20 +1681,68 @@ export default function ProductosPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este producto?</AlertDialogTitle>
             <AlertDialogDescription>
-              El producto se marcará como inactivo y dejará de mostrarse en el inventario activo.
+              Selecciona cómo deseas proceder. Puedes marcarlo como inactivo para conservar su historial o eliminarlo
+              definitivamente junto con su stock, imágenes de referencia y embeddings.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <RadioGroup
+            value={deleteMode}
+            onValueChange={(value) =>
+              setDeleteMode(value === "hard" ? "hard" : "inactive")
+            }
+            className="space-y-2"
+          >
+            <label
+              htmlFor="delete-mode-inactive"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 text-left transition hover:bg-muted/50",
+                deleteMode === "inactive" ? "ring-2 ring-primary" : undefined,
+              )}
+            >
+              <RadioGroupItem id="delete-mode-inactive" value="inactive" className="mt-1" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Marcar como inactivo</p>
+                <p className="text-xs text-muted-foreground">
+                  Oculta el producto del catálogo activo pero conserva su información y referencias para reactivarlo
+                  más adelante.
+                </p>
+              </div>
+            </label>
+            <label
+              htmlFor="delete-mode-hard"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-left transition hover:bg-destructive/20",
+                deleteMode === "hard" ? "ring-2 ring-destructive" : undefined,
+              )}
+            >
+              <RadioGroupItem id="delete-mode-hard" value="hard" className="mt-1" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-destructive">Eliminar definitivamente</p>
+                <p className="text-xs text-muted-foreground">
+                  Borra el producto, su stock y sus imágenes de referencia. Esta acción no se puede deshacer.
+                </p>
+              </div>
+            </label>
+          </RadioGroup>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletingProducto}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive"
+              className={cn(
+                deleteMode === "hard"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90",
+              )}
               disabled={deletingProducto}
               onClick={(event) => {
                 event.preventDefault()
                 void confirmarEliminarProducto()
               }}
             >
-              {deletingProducto ? "Eliminando…" : "Confirmar"}
+              {deletingProducto
+                ? "Procesando…"
+                : deleteMode === "hard"
+                  ? "Eliminar definitivamente"
+                  : "Marcar como inactivo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1408,13 +1963,69 @@ export default function ProductosPage() {
                   </div>
                 </div>
               </section>
+
+              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                <header>
+                  <p className="text-sm font-semibold text-foreground">Imágenes de referencia</p>
+                  <p className="text-xs text-muted-foreground">
+                    Añade fotos adicionales que se usarán para el reconocimiento visual (perfil, suela, detalles, etc.).
+                  </p>
+                </header>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-referencias">Subir imágenes de referencia</Label>
+                    <Input
+                      id="nuevo-referencias"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
+                      onChange={handleNewReferenceFilesChange}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Se almacenarán en Supabase y servirán como muestras para el sistema de coincidencia.
+                    </p>
+                  </div>
+
+                  {newReferenceDrafts.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Imágenes listas para registrar</Label>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        {newReferenceDrafts.map((draft, index) => (
+                          <div key={`${draft.preview}-${index}`} className="flex flex-col gap-2">
+                            <div className="relative h-24 w-full overflow-hidden rounded-md border border-border">
+                              <Image
+                                src={draft.preview}
+                                alt={`Referencia ${index + 1}`}
+                                fill
+                                sizes="96px"
+                                className="object-cover"
+                                unoptimized
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleRemoveNewReferenceDraft(index)}
+                              disabled={savingProducto || uploadingNewReferences}
+                            >
+                              Quitar
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
             <DialogFooter className="gap-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => handleDialogOpenChange(false)}
-                disabled={savingProducto || uploadingNewImage}
+                disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
               >
                 Cancelar
               </Button>
@@ -1423,6 +2034,7 @@ export default function ProductosPage() {
                 disabled={
                   savingProducto ||
                   uploadingNewImage ||
+                  uploadingNewReferences ||
                   (!loadingCategorias && categorias.length === 0)
                 }
               >

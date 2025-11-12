@@ -19,6 +19,8 @@ export interface ProductReferenceUploadResponse {
     createdAt?: string
     updatedAt?: string
   } | null
+  message?: string
+  embeddingError?: string
 }
 
 const BASE_ENDPOINT = '/api/admin/product-reference-images'
@@ -56,8 +58,29 @@ export async function uploadReferenceImage(
   return data as ProductReferenceUploadResponse
 }
 
-export async function deleteReferenceImage(referenceId: number): Promise<void> {
-  const response = await fetch(`${BASE_ENDPOINT}/${referenceId}`, {
+export async function deleteReferenceImage(referenceId: number | string): Promise<void> {
+  const normalizedId = typeof referenceId === 'number' ? referenceId : referenceId?.toString().trim()
+
+  if (normalizedId === '' || normalizedId == null || (typeof normalizedId === 'number' && Number.isNaN(normalizedId))) {
+    throw new Error('Identificador inválido.')
+  }
+
+  const origin =
+    typeof window === 'undefined'
+      ? process.env.NEXT_PUBLIC_SITE_URL
+        || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined)
+        || 'http://localhost:3000'
+      : window.location.origin
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[ProductReferenceService.deleteReferenceImage] request', {
+      referenceId: normalizedId,
+      origin,
+      url: `${origin}${BASE_ENDPOINT}/${encodeURIComponent(String(normalizedId))}`,
+    })
+  }
+
+  const response = await fetch(`${origin}${BASE_ENDPOINT}/${encodeURIComponent(String(normalizedId))}`, {
     method: 'DELETE',
   })
 
@@ -68,8 +91,31 @@ export async function deleteReferenceImage(referenceId: number): Promise<void> {
   }
 }
 
-export async function regenerateProductEmbeddings(productId: number): Promise<{ processed: number }> {
-  const response = await fetch(`/api/admin/productos/${productId}/embeddings`, {
+export async function regenerateProductEmbeddings(productId: number | string): Promise<{ processed: number }> {
+  const normalizedId = typeof productId === 'number' ? productId : productId?.toString().trim()
+
+  if (normalizedId === '' || normalizedId == null || (typeof normalizedId === 'number' && Number.isNaN(normalizedId))) {
+    throw new Error('Identificador de producto inválido.')
+  }
+
+  const origin =
+    typeof window === 'undefined'
+      ? process.env.NEXT_PUBLIC_SITE_URL
+        || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined)
+        || 'http://localhost:3000'
+      : window.location.origin
+
+  const requestUrl = `${origin}/api/admin/productos/${encodeURIComponent(String(normalizedId))}/embeddings`
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[ProductReferenceService.regenerateProductEmbeddings] request', {
+      productId: normalizedId,
+      origin,
+      url: requestUrl,
+    })
+  }
+
+  const response = await fetch(requestUrl, {
     method: 'POST',
   })
 

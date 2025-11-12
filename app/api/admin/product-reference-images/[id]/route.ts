@@ -5,20 +5,22 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 
-interface RouteParams {
-  params: {
-    id: string
-  }
+type RouteParams = {
+  params: { id?: string | string[] } | Promise<{ id?: string | string[] }>
 }
 
 export async function DELETE(_request: Request, context: RouteParams) {
   try {
-    const rawId = context.params?.id
-    const referenceId = Number(rawId)
+    const params = context.params instanceof Promise ? await context.params : context.params
+    const rawId = params?.id
+    const referenceKey = Array.isArray(rawId) ? rawId[0] : rawId
+    const parsedReferenceId = typeof referenceKey === 'string' ? Number(referenceKey.trim()) : Number(referenceKey)
 
-    if (!referenceId || Number.isNaN(referenceId)) {
+    if (!Number.isFinite(parsedReferenceId) || parsedReferenceId <= 0) {
       return NextResponse.json({ message: 'Identificador inválido.' }, { status: 400 })
     }
+
+    const referenceId = parsedReferenceId
 
     const { data: reference, error: fetchError } = await supabaseAdmin
       .from('producto_reference_images')

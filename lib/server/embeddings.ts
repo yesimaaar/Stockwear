@@ -1,12 +1,22 @@
 import path from 'node:path'
 
-import * as tf from '@tensorflow/tfjs-node'
-
 import { normalizeL2 } from '@/lib/ai/embedding-utils'
 
 const MODEL_RELATIVE_PATH = ['public', 'models', 'mobilenet', 'model.json']
 
-let modelPromise: Promise<tf.LayersModel> | null = null
+type TfModule = typeof import('@tensorflow/tfjs-node')
+type LayersModel = Awaited<ReturnType<TfModule['loadLayersModel']>>
+type Tensor = ReturnType<TfModule['tensor']>
+
+let tfPromise: Promise<TfModule> | null = null
+let modelPromise: Promise<LayersModel> | null = null
+
+async function loadTf(): Promise<TfModule> {
+  if (!tfPromise) {
+    tfPromise = import('@tensorflow/tfjs-node')
+  }
+  return tfPromise
+}
 
 function resolveModelPath(): string {
   const absolutePath = path.join(process.cwd(), ...MODEL_RELATIVE_PATH)
@@ -14,15 +24,19 @@ function resolveModelPath(): string {
   return fileUrl
 }
 
-async function loadModel(): Promise<tf.LayersModel> {
+async function loadModel(): Promise<LayersModel> {
   if (!modelPromise) {
-    const modelUrl = resolveModelPath()
-    modelPromise = tf.loadLayersModel(modelUrl)
+    modelPromise = (async () => {
+      const tf = await loadTf()
+      const modelUrl = resolveModelPath()
+      return tf.loadLayersModel(modelUrl)
+    })()
   }
   return modelPromise
 }
 
 export async function generateEmbeddingFromBuffer(buffer: Buffer): Promise<Float32Array> {
+  const tf = await loadTf()
   const model = await loadModel()
 
   const embedding = tf.tidy(() => {
@@ -32,7 +46,7 @@ export async function generateEmbeddingFromBuffer(buffer: Buffer): Promise<Float
     const batched = normalized.expandDims(0)
 
     const prediction = model.predict(batched)
-    const tensor = Array.isArray(prediction) ? prediction[0].squeeze() : (prediction as tf.Tensor).squeeze()
+  const tensor = Array.isArray(prediction) ? prediction[0].squeeze() : (prediction as Tensor).squeeze()
     const data = tensor.dataSync() as Float32Array
     return new Float32Array(data)
   })

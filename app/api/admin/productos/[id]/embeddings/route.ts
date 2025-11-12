@@ -7,10 +7,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 
-interface RouteParams {
-  params: {
-    id: string
-  }
+type RouteParams = {
+  params: { id?: string | string[] } | Promise<{ id?: string | string[] }>
 }
 
 async function toBuffer(data: unknown): Promise<Buffer> {
@@ -48,12 +46,21 @@ async function toBuffer(data: unknown): Promise<Buffer> {
 
 export async function POST(_request: Request, context: RouteParams) {
   try {
-    const rawId = context.params?.id
-    const productId = Number(rawId)
+    const params = context.params instanceof Promise ? await context.params : context.params
+    const rawParam = params?.id
+    const rawId = Array.isArray(rawParam) ? rawParam[0] : rawParam
+    const productKey = typeof rawId === 'string' ? rawId.trim() : ''
 
-    if (!productId || Number.isNaN(productId)) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[api] regenerate embeddings raw product id:', rawId)
+    }
+
+    if (!productKey) {
       return NextResponse.json({ message: 'Identificador de producto inválido.' }, { status: 400 })
     }
+
+    const numericProduct = Number(productKey)
+    const productId = Number.isFinite(numericProduct) ? numericProduct : productKey
 
     const { data: references, error: fetchError } = await supabaseAdmin
       .from('producto_reference_images')
@@ -103,6 +110,13 @@ export async function POST(_request: Request, context: RouteParams) {
 
       try {
         const embedding = await generateEmbeddingFromBuffer(buffer)
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[api] regenerate embedding generated', {
+            referenceId: reference.id,
+            productId,
+            length: embedding.length,
+          })
+        }
 
         await supabaseAdmin
           .from('producto_embeddings')
@@ -121,6 +135,13 @@ export async function POST(_request: Request, context: RouteParams) {
           console.error('Error guardando embedding regenerado', insertError)
           failures.push({ id: reference.id, reason: insertError.message ?? 'Error guardando el embedding.' })
           continue
+        }
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[api] regenerate embedding stored', {
+            referenceId: reference.id,
+            productId,
+          })
         }
 
         processed += 1

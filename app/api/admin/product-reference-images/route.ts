@@ -74,7 +74,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'No se pudo registrar la imagen de referencia.' }, { status: 500 })
     }
 
-    const embeddingVector = await generateEmbeddingFromBuffer(buffer)
+    let embeddingVector: Float32Array | null = null
+    try {
+      embeddingVector = await generateEmbeddingFromBuffer(buffer)
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[api] reference embedding generated', {
+          referenceId: referenceRecord.id,
+          productId,
+          length: embeddingVector.length,
+        })
+      }
+    } catch (embeddingGenerationError) {
+      console.error('No se pudo generar el embedding de la referencia', embeddingGenerationError)
+      return NextResponse.json(
+        {
+          referenceImage: referenceRecord,
+          embeddingError:
+            embeddingGenerationError instanceof Error
+              ? embeddingGenerationError.message
+              : 'No se pudo generar el embedding de la imagen.',
+        },
+        { status: 202 },
+      )
+    }
+    if (!embeddingVector) {
+      return NextResponse.json(
+        {
+          referenceImage: referenceRecord,
+          embeddingError: 'No se pudo generar el embedding de la imagen.',
+        },
+        { status: 202 },
+      )
+    }
 
     await supabaseAdmin
       .from('producto_embeddings')
@@ -99,15 +130,30 @@ export async function POST(request: Request) {
         message:
           'La imagen se subió correctamente pero no fue posible guardar el embedding. Reintenta regenerarlo manualmente.',
         referenceImage: referenceRecord,
+        embeddingError: insertEmbeddingError.message,
+      }, { status: 202 })
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[api] reference embedding stored', {
+        embeddingId: embeddingRecord?.id,
+        productId,
+        referenceId: referenceRecord.id,
       })
     }
 
     return NextResponse.json({
       referenceImage: referenceRecord,
       embedding: embeddingRecord,
-    })
+    }, { status: 201 })
   } catch (error) {
     console.error('Error inesperado al procesar imagen de referencia', error)
-    return NextResponse.json({ message: 'Error inesperado al procesar la imagen de referencia.' }, { status: 500 })
+    return NextResponse.json(
+      {
+        message: 'Error inesperado al procesar la imagen de referencia.',
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }
