@@ -50,6 +50,9 @@ const nextConfig = {
       "aws-sdk": false,
       nock: false,
       rimraf: false,
+      "@/lib/server/embeddings": process.env.ENABLE_TFJS_NODE === "true"
+        ? path.resolve(hereDir, "lib", "server", "embeddings.ts")
+        : path.resolve(hereDir, "lib", "server", "embeddings-disabled.ts"),
     };
 
     if (isServer) {
@@ -134,4 +137,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig
+export default nextConfig;
