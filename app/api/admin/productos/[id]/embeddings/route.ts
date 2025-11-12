@@ -2,6 +2,7 @@ import { Readable } from 'node:stream'
 import { NextResponse } from 'next/server'
 
 import { ensureEmbeddingModelLoaded, generateEmbeddingFromBuffer } from '@/lib/server/embeddings'
+import { isRemoteEmbeddingEnabled, requestRemoteEmbedding } from '@/lib/server/external-embedding-client'
 import { PRODUCT_IMAGE_BUCKET } from '@/lib/services/product-image-path'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
@@ -76,7 +77,10 @@ export async function POST(_request: Request, context: RouteParams) {
       return NextResponse.json({ processed: 0, message: 'No hay imágenes de referencia registradas.' })
     }
 
-    await ensureEmbeddingModelLoaded()
+    const useRemoteEmbedding = isRemoteEmbeddingEnabled()
+    if (!useRemoteEmbedding) {
+      await ensureEmbeddingModelLoaded()
+    }
 
     let processed = 0
     const failures: Array<{ id: number; reason: string }> = []
@@ -109,12 +113,21 @@ export async function POST(_request: Request, context: RouteParams) {
       }
 
       try {
-        const embedding = await generateEmbeddingFromBuffer(buffer)
+        const embedding = useRemoteEmbedding
+          ? await requestRemoteEmbedding({
+              buffer,
+              mimeType: reference.mimeType ?? undefined,
+              productId,
+              referenceImageId: reference.id,
+            })
+          : await generateEmbeddingFromBuffer(buffer)
+
         if (process.env.NODE_ENV !== 'production') {
           console.debug('[api] regenerate embedding generated', {
             referenceId: reference.id,
             productId,
             length: embedding.length,
+            source: useRemoteEmbedding ? 'remote' : 'local',
           })
         }
 
