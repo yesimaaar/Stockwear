@@ -53,7 +53,20 @@ const nextConfig: NextConfig = {
     };
 
     if (isServer) {
-      const externalModules = ["aws-sdk", "mock-aws-s3", "nock", "rimraf"];
+      // ** MODIFICACIÓN CRÍTICA PARA REDUCIR EL TAMAÑO **
+      // Marcar módulos de TensorFlow de cliente como externos para evitar que se empaqueten
+      // en las Serverless Functions.
+      const externalModules = [
+        "aws-sdk", 
+        "mock-aws-s3", 
+        "nock", 
+        "rimraf",
+        // Dependencias de TensorFlow de cliente
+        "@tensorflow/tfjs",
+        "@tensorflow/tfjs-backend-wasm",
+        "@tensorflow/tfjs-backend-webgl",
+        "@tensorflow-models/mobilenet",
+      ];
       const existingExternals = config.externals ?? [];
 
       config.externals = [
@@ -134,6 +147,8 @@ const nextConfig: NextConfig = {
     ];
   },
   experimental: {
+    // La propiedad disableNativeTurbopack fue eliminada.
+    // serverComponentsExternalPackages es crucial para tfjs-node
     serverComponentsExternalPackages: ["@tensorflow/tfjs-node", "@mapbox/node-pre-gyp", "canvas"],
   },
 };
