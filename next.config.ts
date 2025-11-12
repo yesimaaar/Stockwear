@@ -50,22 +50,17 @@ const nextConfig: NextConfig = {
       "aws-sdk": false,
       nock: false,
       rimraf: false,
+      "@/lib/server/embeddings": process.env.ENABLE_TFJS_NODE === "true"
+        ? path.resolve(hereDir, "lib", "server", "embeddings.ts")
+        : path.resolve(hereDir, "lib", "server", "embeddings-disabled.ts"),
     };
 
     if (isServer) {
-      // ** MODIFICACIÓN CRÍTICA PARA REDUCIR EL TAMAÑO **
-      // Marcar módulos de TensorFlow de cliente como externos para evitar que se empaqueten
-      // en las Serverless Functions.
       const externalModules = [
         "aws-sdk", 
         "mock-aws-s3", 
         "nock", 
         "rimraf",
-        // Dependencias de TensorFlow de cliente
-        "@tensorflow/tfjs",
-        "@tensorflow/tfjs-backend-wasm",
-        "@tensorflow/tfjs-backend-webgl",
-        "@tensorflow-models/mobilenet",
       ];
       const existingExternals = config.externals ?? [];
 
@@ -146,11 +141,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  experimental: {
-    // La propiedad disableNativeTurbopack fue eliminada.
-    // serverComponentsExternalPackages es crucial para tfjs-node
-    serverComponentsExternalPackages: ["@tensorflow/tfjs-node", "@mapbox/node-pre-gyp", "canvas"],
-  },
+  serverExternalPackages: ["@tensorflow/tfjs-node", "@mapbox/node-pre-gyp", "canvas"],
 };
 
 export default nextConfig;
