@@ -58,6 +58,11 @@ const nextConfig = {
         : path.resolve(hereDir, "lib", "server", "embeddings-disabled.ts"),
     };
 
+    if (!enableTfjsNode) {
+      config.resolve.alias["@tensorflow/tfjs-node"] = false;
+      config.resolve.alias["@mapbox/node-pre-gyp"] = false;
+    }
+
     if (isServer) {
       const externalModules = ["aws-sdk", "mock-aws-s3", "nock", "rimraf"];
       const existingExternals = config.externals ?? [];
