@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 const hereDir = path.dirname(fileURLToPath(import.meta.url));
+const enableTfjsNode = process.env.ENABLE_TFJS_NODE === "true";
 
 const nextConfig: NextConfig = {
   compress: true,
@@ -50,7 +51,7 @@ const nextConfig: NextConfig = {
       "aws-sdk": false,
       nock: false,
       rimraf: false,
-      "@/lib/server/embeddings": process.env.ENABLE_TFJS_NODE === "true"
+      "@/lib/server/embeddings": enableTfjsNode
         ? path.resolve(hereDir, "lib", "server", "embeddings.ts")
         : path.resolve(hereDir, "lib", "server", "embeddings-disabled.ts"),
     };
@@ -141,7 +142,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  serverExternalPackages: ["@tensorflow/tfjs-node", "@mapbox/node-pre-gyp", "canvas"],
+  serverExternalPackages: enableTfjsNode
+    ? ["@tensorflow/tfjs-node", "@mapbox/node-pre-gyp", "canvas"]
+    : ["@mapbox/node-pre-gyp", "canvas"],
 };
 
 export default nextConfig;
