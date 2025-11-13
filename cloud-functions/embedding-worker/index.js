@@ -1,7 +1,8 @@
 const path = require('node:path')
 const { Buffer } = require('node:buffer')
 const tf = require('@tensorflow/tfjs-node')
-const { onRequest } = require('@google-cloud/functions-framework')
+// Quita esta línea ya que no exportaremos onRequest directamente, sino la función
+// const { onRequest } = require('@google-cloud/functions-framework')
 
 const MODEL_RELATIVE_PATH = ['models', 'mobilenet', 'model.json']
 const WORKER_AUTH_TOKEN = process.env.AUTH_TOKEN ?? ''
@@ -66,7 +67,9 @@ function toBufferFromBase64(value) {
 	}
 }
 
-onRequest('generateEmbedding', async (req, res) => {
+// *** ¡ESTE ES EL CAMBIO CLAVE! ***
+// Exporta la función HTTP directamente con el nombre que usarás en --entry-point
+exports.generateEmbedding = async (req, res) => { // Renombrado y exportado
 	if (req.method !== 'POST') {
 		res.status(405).json({ message: 'Método no permitido. Usa POST.' })
 		return
@@ -106,4 +109,4 @@ onRequest('generateEmbedding', async (req, res) => {
 			details: error instanceof Error ? error.message : String(error),
 		})
 	}
-})
+}

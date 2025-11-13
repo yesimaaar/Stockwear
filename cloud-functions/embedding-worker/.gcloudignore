@@ -1,25 +1,22 @@
-# This file specifies files that are *not* uploaded to Google Cloud
-# using gcloud. It follows the same syntax as .gitignore, with the addition of
-# "#!include" directives (which insert the entries of the given .gitignore-style
-# file at that point).
-#
-# For more information, run:
-#   $ gcloud topic gcloudignore
-#
+# .gcloudignore
+# Este archivo especifica los archivos que NO se suben a Google Cloud.
+# Sigue la misma sintaxis que .gitignore.
+
+# Ignora el propio archivo .gcloudignore
 .gcloudignore
-# If you would like to upload your .git directory, .gitignore file or files
-# from your .gitignore file, remove the corresponding line
-# below:
+
+# Ignora directorios y archivos relacionados con Git
 .git
 .gitignore
 
-node_modules
+# Ignora los módulos de Node (se instalarán en Cloud Build)
+node_modules/
 
-# Exclude everything else by default.
-**
+# Ignora archivos temporales o de configuración local que no son necesarios
+# Añade aquí cualquier otro patrón que quieras excluir, como:
+# .env
+# npm-debug.log*
 
-# But include the files needed for the function.
-!package.json
-!package-lock.json
-!index.js
-!models/**
+# Por defecto, NO se ignora el código fuente y los modelos.
+# Se incluirán package.json, package-lock.json, index.js y la carpeta models/
+# ya que no están explícitamente ignorados.
