@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { Buffer } from 'node:buffer'
 
 import { generateEmbeddingFromBuffer } from '@/lib/server/embeddings'
+import { isRemoteEmbeddingEnabled, requestRemoteEmbedding } from '@/lib/server/external-embedding-client'
 import { PRODUCT_IMAGE_BUCKET, resolveReferenceStoragePath } from '@/lib/services/product-image-path'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
@@ -74,15 +75,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'No se pudo registrar la imagen de referencia.' }, { status: 500 })
     }
 
+    const useRemoteEmbedding = isRemoteEmbeddingEnabled()
     let embeddingVector: Float32Array | null = null
     try {
-      embeddingVector = await generateEmbeddingFromBuffer(buffer)
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[api] reference embedding generated', {
-          referenceId: referenceRecord.id,
+      if (useRemoteEmbedding) {
+        embeddingVector = await requestRemoteEmbedding({
+          buffer,
+          mimeType,
           productId,
-          length: embeddingVector.length,
+          referenceImageId: referenceRecord.id,
         })
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[api] reference embedding fetched remotely', {
+            referenceId: referenceRecord.id,
+            productId,
+            length: embeddingVector.length,
+          })
+        }
+      } else {
+        embeddingVector = await generateEmbeddingFromBuffer(buffer)
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[api] reference embedding generated', {
+            referenceId: referenceRecord.id,
+            productId,
+            length: embeddingVector.length,
+          })
+        }
       }
     } catch (embeddingGenerationError) {
       console.error('No se pudo generar el embedding de la referencia', embeddingGenerationError)
