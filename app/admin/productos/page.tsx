@@ -2,6 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Fragment, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import * as LucideIcons from "lucide-react"
 const {
@@ -64,13 +65,14 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
+import { InventarioService } from "@/lib/services/inventario-service"
 import { uploadProductImage } from "@/lib/services/product-image-service"
 import {
   deleteReferenceImage,
   regenerateProductEmbeddings,
   uploadReferenceImage,
 } from "@/lib/services/product-reference-service"
-import type { Categoria, ProductoReferenceImage } from "@/lib/types"
+import type { Almacen, Categoria, ProductoReferenceImage, Talla } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
   AlertDialog,
@@ -115,8 +117,25 @@ type ReferenceDraft = { file: File; preview: string }
 
 type DeleteMode = "inactive" | "hard"
 
+const STOCK_ALMACEN_NONE_VALUE = "none" as const
+const STOCK_TALLA_NONE_VALUE = "none" as const
+
+type StockFormEntry = {
+  almacenId: string
+  tallaId: string
+  cantidad: string
+}
+
+const createEmptyStockEntry = (): StockFormEntry => ({
+  almacenId: "",
+  tallaId: STOCK_TALLA_NONE_VALUE,
+  cantidad: "",
+})
+
 export default function ProductosPage() {
   const { toast } = useToast()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [productos, setProductos] = useState<ProductoConStock[]>([])
   const [filteredProductos, setFilteredProductos] = useState<ProductoConStock[]>([])
   const [searchInput, setSearchInput] = useState("")
@@ -131,7 +150,11 @@ export default function ProductosPage() {
   const [savingProducto, setSavingProducto] = useState(false)
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [loadingCategorias, setLoadingCategorias] = useState(true)
+  const [almacenesActivos, setAlmacenesActivos] = useState<Almacen[]>([])
+  const [tallasActivas, setTallasActivas] = useState<Talla[]>([])
+  const [loadingStockCatalogos, setLoadingStockCatalogos] = useState(true)
   const [nuevoProducto, setNuevoProducto] = useState<NuevoProductoForm>(getDefaultNuevoProducto)
+  const [nuevoStockEntries, setNuevoStockEntries] = useState<StockFormEntry[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProductoConStock | null>(null)
   const [deleteMode, setDeleteMode] = useState<DeleteMode>("inactive")
@@ -147,9 +170,9 @@ export default function ProductosPage() {
   const [editReferenceDrafts, setEditReferenceDrafts] = useState<ReferenceDraft[]>([])
   const [uploadingEditReferences, setUploadingEditReferences] = useState(false)
   const [editReferenceImages, setEditReferenceImages] = useState<ProductoReferenceImage[]>([])
+  const [editStockEntries, setEditStockEntries] = useState<StockFormEntry[]>([])
   const [removingReferenceId, setRemovingReferenceId] = useState<number | null>(null)
   const [regeneratingEmbeddings, setRegeneratingEmbeddings] = useState(false)
-
   const pageSize = 10
 
   const cargarProductos = useCallback(async () => {
@@ -222,10 +245,11 @@ export default function ProductosPage() {
       setUploadingEditReferences(false)
       setRemovingReferenceId(null)
       setRegeneratingEmbeddings(false)
+      setEditStockEntries([])
     }
   }
 
-  const mapProductoToForm = (producto: ProductoConStock): NuevoProductoForm => ({
+  const mapProductoToForm = useCallback((producto: ProductoConStock): NuevoProductoForm => ({
     codigo: producto.codigo,
     nombre: producto.nombre,
     categoriaId: String(producto.categoriaId),
@@ -235,7 +259,7 @@ export default function ProductosPage() {
     stockMinimo: String(producto.stockMinimo),
     descripcion: producto.descripcion ?? "",
     imagen: producto.imagen ?? "",
-  })
+  }), [])
 
   const mapReferenceRecord = (record: any): ProductoReferenceImage | null => {
     const rawId = record?.id
@@ -322,6 +346,158 @@ export default function ProductosPage() {
       stockMinimo,
     }
   }
+
+    const getAlmacenNombre = (almacenId: number | null) => {
+      if (almacenId == null) return "Sin almacén específico"
+      return (
+        almacenesActivos.find((almacen) => almacen.id === almacenId)?.nombre ??
+        `Almacén #${almacenId}`
+      )
+    }
+
+    const getTallaNombre = (tallaId: number | null) => {
+      if (tallaId == null) return "Sin talla asignada"
+      return tallasActivas.find((talla) => talla.id === tallaId)?.nombre ?? `Talla #${tallaId}`
+    }
+
+    const describeStockDestino = (almacenId: number | null, tallaId: number | null) => {
+      const almacen = getAlmacenNombre(almacenId)
+      const talla = getTallaNombre(tallaId)
+      return tallaId == null ? almacen : `${almacen} · ${talla}`
+    }
+
+    const normalizeStockEntries = (
+      entries: StockFormEntry[],
+      options: { allowZero: boolean },
+    ): Array<{ almacenId: number | null; tallaId: number | null; cantidad: number }> | null => {
+      const aggregated = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
+
+      for (const entry of entries) {
+        const rawCantidad = entry.cantidad.trim()
+        const hasCantidad = rawCantidad.length > 0
+        const hasAlmacen = entry.almacenId.trim().length > 0
+        const tallaSeleccionada = entry.tallaId && entry.tallaId !== STOCK_TALLA_NONE_VALUE
+
+        if (!hasCantidad && !hasAlmacen && !tallaSeleccionada) {
+          continue
+        }
+
+        if (!hasAlmacen) {
+          toast({
+            title: "Selecciona un almacén",
+            description: "Elige dónde se ubicará este stock.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        if (!hasCantidad) {
+          toast({
+            title: "Cantidad requerida",
+            description: "Escribe cuántas unidades registrarás para el producto.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        const cantidad = Number(rawCantidad)
+        if (!Number.isFinite(cantidad) || cantidad < 0) {
+          toast({
+            title: "Cantidad inválida",
+            description: "Las unidades deben ser un número mayor o igual a cero.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        if (!Number.isInteger(cantidad)) {
+          toast({
+            title: "Cantidad inválida",
+            description: "Las unidades deben ser un número entero.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        if (!options.allowZero && cantidad === 0) {
+          continue
+        }
+
+        let almacenId: number | null
+        if (entry.almacenId === STOCK_ALMACEN_NONE_VALUE) {
+          almacenId = null
+        } else {
+          const parsedAlmacen = Number(entry.almacenId)
+          if (!Number.isFinite(parsedAlmacen) || parsedAlmacen <= 0) {
+            toast({
+              title: "Almacén inválido",
+              description: "Selecciona un almacén válido para registrar el stock.",
+              variant: "destructive",
+            })
+            return null
+          }
+          almacenId = parsedAlmacen
+        }
+
+        let tallaId: number | null
+        if (!entry.tallaId || entry.tallaId === STOCK_TALLA_NONE_VALUE) {
+          tallaId = null
+        } else {
+          const parsedTalla = Number(entry.tallaId)
+          if (!Number.isFinite(parsedTalla) || parsedTalla <= 0) {
+            toast({
+              title: "Talla inválida",
+              description: "Selecciona una talla válida o deja la opción sin talla.",
+              variant: "destructive",
+            })
+            return null
+          }
+          tallaId = parsedTalla
+        }
+
+        const key = `${almacenId ?? "none"}-${tallaId ?? "none"}`
+        const current = aggregated.get(key)
+        if (current) {
+          aggregated.set(key, {
+            almacenId,
+            tallaId,
+            cantidad: current.cantidad + cantidad,
+          })
+        } else {
+          aggregated.set(key, { almacenId, tallaId, cantidad })
+        }
+      }
+
+      return Array.from(aggregated.values())
+    }
+
+    const addNuevoStockEntry = () => {
+      setNuevoStockEntries((prev) => [...prev, createEmptyStockEntry()])
+    }
+
+    const updateNuevoStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
+      setNuevoStockEntries((prev) =>
+        prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
+      )
+    }
+
+    const removeNuevoStockEntry = (index: number) => {
+      setNuevoStockEntries((prev) => prev.filter((_, idx) => idx !== index))
+    }
+
+    const addEditStockEntry = () => {
+      setEditStockEntries((prev) => [...prev, createEmptyStockEntry()])
+    }
+
+    const updateEditStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
+      setEditStockEntries((prev) =>
+        prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
+      )
+    }
+
+    const removeEditStockEntry = (index: number) => {
+      setEditStockEntries((prev) => prev.filter((_, idx) => idx !== index))
+    }
 
   const handleNewReferenceFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
@@ -450,16 +626,31 @@ export default function ProductosPage() {
     }
   }
 
-  const abrirEdicionProducto = (producto: ProductoConStock) => {
+  const abrirEdicionProducto = useCallback((producto: ProductoConStock) => {
     setEditTarget(producto)
     setEditForm(mapProductoToForm(producto))
     setEditReferenceImages(producto.referenceImages ?? [])
-    editReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
-    setEditReferenceDrafts([])
+    setEditReferenceDrafts((prev) => {
+      prev.forEach((draft) => URL.revokeObjectURL(draft.preview))
+      return []
+    })
+    setEditStockEntries(
+      (producto.stockPorTalla ?? []).map((detalle) => ({
+        almacenId:
+          detalle.almacenId == null
+            ? STOCK_ALMACEN_NONE_VALUE
+            : String(detalle.almacenId),
+        tallaId:
+          detalle.tallaId == null
+            ? STOCK_TALLA_NONE_VALUE
+            : String(detalle.tallaId),
+        cantidad: String(detalle.cantidad ?? 0),
+      }))
+    )
     setRemovingReferenceId(null)
     setRegeneratingEmbeddings(false)
     setEditDialogOpen(true)
-  }
+  }, [mapProductoToForm])
 
   const updateEditFormField = <K extends keyof NuevoProductoForm>(field: K, value: NuevoProductoForm[K]) => {
     setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev))
@@ -508,6 +699,42 @@ export default function ProductosPage() {
     }
 
     void loadCategorias()
+
+    return () => {
+      active = false
+    }
+  }, [toast])
+
+  useEffect(() => {
+    let active = true
+
+    const loadStockCatalogos = async () => {
+      setLoadingStockCatalogos(true)
+      try {
+        const [tallas, almacenes] = await Promise.all([
+          InventarioService.getTallasActivas(),
+          InventarioService.getAlmacenesActivos(),
+        ])
+        if (!active) return
+        setTallasActivas(tallas)
+        setAlmacenesActivos(almacenes)
+      } catch (error) {
+        if (active) {
+          console.error("Error cargando catálogos de inventario", error)
+          toast({
+            title: "No se cargaron los catálogos",
+            description: "Actualiza la página e inténtalo nuevamente.",
+            variant: "destructive",
+          })
+        }
+      } finally {
+        if (active) {
+          setLoadingStockCatalogos(false)
+        }
+      }
+    }
+
+    void loadStockCatalogos()
 
     return () => {
       active = false
@@ -636,6 +863,7 @@ export default function ProductosPage() {
       newReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
       setNewReferenceDrafts([])
       setUploadingNewReferences(false)
+      setNuevoStockEntries([])
     }
   }
 
@@ -644,6 +872,11 @@ export default function ProductosPage() {
 
     const payload = buildPayloadFromForm(nuevoProducto)
     if (!payload) return
+
+    const normalizedNewStock = normalizeStockEntries(nuevoStockEntries, { allowZero: false })
+    if (normalizedNewStock === null) {
+      return
+    }
 
     setSavingProducto(true)
     try {
@@ -661,6 +894,8 @@ export default function ProductosPage() {
 
       let referenceSuccess = 0
       const referenceErrors: Array<{ name: string; message: string }> = []
+      let stockSuccess = 0
+      const stockErrors: string[] = []
       if (newReferenceDrafts.length > 0) {
         setUploadingNewReferences(true)
         try {
@@ -701,12 +936,41 @@ export default function ProductosPage() {
         description: `${creado.nombre} se añadió al inventario`,
       })
 
+      if (normalizedNewStock.length > 0) {
+        for (const entry of normalizedNewStock) {
+          try {
+            await InventarioService.registrarEntrada({
+              productoId: creado.id,
+              tallaId: entry.tallaId,
+              almacenId: entry.almacenId,
+              cantidad: entry.cantidad,
+              motivo: "Registro inicial desde producto",
+            })
+            stockSuccess += 1
+          } catch (stockError) {
+            console.error("Error registrando stock inicial", stockError)
+            stockErrors.push(
+              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${
+                stockError instanceof Error ? stockError.message : "No se pudo guardar el stock inicial"
+              }`,
+            )
+          }
+        }
+      }
+
       if (referenceSuccess > 0) {
         toast({
           title: referenceSuccess === 1 ? "Imagen de referencia registrada" : "Imágenes de referencia registradas",
           description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${
             referenceSuccess > 1 ? "s" : ""
           } correctamente`,
+        })
+      }
+
+      if (stockSuccess > 0) {
+        toast({
+          title: stockSuccess === 1 ? "Stock inicial registrado" : "Stock inicial registrado",
+          description: `${stockSuccess} asignación${stockSuccess === 1 ? "" : "es"} de inventario aplicada correctamente`,
         })
       }
 
@@ -717,6 +981,14 @@ export default function ProductosPage() {
             .map((item) => `${item.name}: ${item.message}`)
             .slice(0, 3)
             .join(" | "),
+          variant: "destructive",
+        })
+      }
+
+      if (stockErrors.length > 0) {
+        toast({
+          title: "No se registró parte del stock",
+          description: stockErrors.slice(0, 3).join(" | "),
           variant: "destructive",
         })
       }
@@ -741,6 +1013,10 @@ export default function ProductosPage() {
 
     const payload = buildPayloadFromForm(editForm)
     if (!payload) return
+    const normalizedEditStock = normalizeStockEntries(editStockEntries, { allowZero: true })
+    if (normalizedEditStock === null) {
+      return
+    }
 
     setSavingEdit(true)
     try {
@@ -758,6 +1034,8 @@ export default function ProductosPage() {
       let referenceSuccess = 0
       const referenceErrors: Array<{ name: string; message: string }> = []
       const newReferenceRecords: ProductoReferenceImage[] = []
+      let stockAdjustSuccess = 0
+      const stockAdjustErrors: string[] = []
 
       if (editReferenceDrafts.length > 0) {
         setUploadingEditReferences(true)
@@ -838,6 +1116,94 @@ export default function ProductosPage() {
             .map((item) => `${item.name}: ${item.message}`)
             .slice(0, 3)
             .join(" | "),
+          variant: "destructive",
+        })
+      }
+
+      if (normalizedEditStock.length > 0 || (editTarget.stockPorTalla?.length ?? 0) > 0) {
+        const existingMap = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
+        for (const detalle of editTarget.stockPorTalla ?? []) {
+          const key = `${detalle.almacenId ?? "none"}-${detalle.tallaId ?? "none"}`
+          existingMap.set(key, {
+            almacenId: detalle.almacenId ?? null,
+            tallaId: detalle.tallaId ?? null,
+            cantidad: detalle.cantidad ?? 0,
+          })
+        }
+
+        const desiredMap = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
+        for (const entry of normalizedEditStock) {
+          const key = `${entry.almacenId ?? "none"}-${entry.tallaId ?? "none"}`
+          desiredMap.set(key, entry)
+        }
+
+        for (const [key, existing] of existingMap.entries()) {
+          const desired = desiredMap.get(key)
+          const desiredCantidad = desired?.cantidad ?? 0
+          const diff = desiredCantidad - existing.cantidad
+          if (diff === 0) {
+            desiredMap.delete(key)
+            continue
+          }
+          try {
+            await InventarioService.registrarAjuste({
+              tipo: diff > 0 ? "entrada" : "salida",
+              productoId: editTarget.id,
+              tallaId: existing.tallaId,
+              almacenId: existing.almacenId,
+              cantidad: Math.abs(diff),
+              motivo: "Ajuste desde formulario de producto",
+            })
+            stockAdjustSuccess += 1
+          } catch (stockError) {
+            console.error("Error ajustando stock del producto", stockError)
+            stockAdjustErrors.push(
+              `${describeStockDestino(existing.almacenId, existing.tallaId)}: ${
+                stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
+              }`,
+            )
+          }
+          desiredMap.delete(key)
+        }
+
+        for (const entry of desiredMap.values()) {
+          if (entry.cantidad === 0) {
+            continue
+          }
+          try {
+            await InventarioService.registrarAjuste({
+              tipo: "entrada",
+              productoId: editTarget.id,
+              tallaId: entry.tallaId,
+              almacenId: entry.almacenId,
+              cantidad: entry.cantidad,
+              motivo: "Ajuste desde formulario de producto",
+            })
+            stockAdjustSuccess += 1
+          } catch (stockError) {
+            console.error("Error registrando nuevo stock", stockError)
+            stockAdjustErrors.push(
+              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${
+                stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
+              }`,
+            )
+          }
+        }
+      }
+
+      if (stockAdjustSuccess > 0) {
+        toast({
+          title: stockAdjustSuccess === 1 ? "Stock actualizado" : "Stock actualizado",
+          description: `${stockAdjustSuccess} ajuste${stockAdjustSuccess === 1 ? "" : "s"} de inventario aplicado${
+            stockAdjustSuccess === 1 ? "" : "s"
+          } correctamente`,
+        })
+      }
+
+      if (stockAdjustErrors.length > 0) {
+        toast({
+          title: "No se actualizaron todos los ajustes",
+          description: stockAdjustErrors.slice(0, 3).join(" | "),
           variant: "destructive",
         })
       }
@@ -1447,6 +1813,146 @@ export default function ProductosPage() {
                   </div>
                 </section>
 
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Inventario por almacén</p>
+                    <p className="text-xs text-muted-foreground">
+                      Actualiza las unidades disponibles por almacén y talla desde este formulario.
+                    </p>
+                  </header>
+                  {almacenesActivos.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-4 text-xs text-muted-foreground">
+                      No hay almacenes activos. Regístralos en la sección de Almacenes para gestionar el stock desde aquí.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {editStockEntries.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border/60 bg-background/30 p-4 text-xs text-muted-foreground">
+                          Este producto no tiene unidades asignadas desde el formulario. Puedes agregarlas o gestionarlas más tarde en
+                          Movimientos.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {editStockEntries.map((entry, index) => (
+                            <div
+                              key={`edit-stock-${index}`}
+                              className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_auto]"
+                            >
+                              <div className="space-y-2">
+                                <Label>Almacén</Label>
+                                <Select
+                                  value={entry.almacenId || undefined}
+                                  onValueChange={(value) => updateEditStockEntry(index, "almacenId", value)}
+                                  disabled={
+                                    savingEdit ||
+                                    uploadingEditImage ||
+                                    uploadingEditReferences ||
+                                    regeneratingEmbeddings ||
+                                    loadingStockCatalogos
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecciona un almacén" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={STOCK_ALMACEN_NONE_VALUE}>Sin almacén específico</SelectItem>
+                                    {almacenesActivos.map((almacen) => (
+                                      <SelectItem key={almacen.id} value={String(almacen.id)}>
+                                        {almacen.nombre}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Talla</Label>
+                                <Select
+                                  value={entry.tallaId || STOCK_TALLA_NONE_VALUE}
+                                  onValueChange={(value) => updateEditStockEntry(index, "tallaId", value)}
+                                  disabled={
+                                    savingEdit ||
+                                    uploadingEditImage ||
+                                    uploadingEditReferences ||
+                                    regeneratingEmbeddings ||
+                                    loadingStockCatalogos
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Sin talla específica" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={STOCK_TALLA_NONE_VALUE}>Sin talla específica</SelectItem>
+                                    {tallasActivas.map((talla) => (
+                                      <SelectItem key={talla.id} value={String(talla.id)}>
+                                        {talla.nombre}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`editar-stock-cantidad-${index}`}>Cantidad</Label>
+                                <Input
+                                  id={`editar-stock-cantidad-${index}`}
+                                  type="number"
+                                  min="0"
+                                  value={entry.cantidad}
+                                  onChange={(event) => updateEditStockEntry(index, "cantidad", event.target.value)}
+                                  disabled={
+                                    savingEdit ||
+                                    uploadingEditImage ||
+                                    uploadingEditReferences ||
+                                    regeneratingEmbeddings
+                                  }
+                                  required
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeEditStockEntry(index)}
+                                disabled={
+                                  savingEdit ||
+                                  uploadingEditImage ||
+                                  uploadingEditReferences ||
+                                  regeneratingEmbeddings
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Eliminar fila de stock</span>
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={addEditStockEntry}
+                          disabled={
+                            savingEdit ||
+                            uploadingEditImage ||
+                            uploadingEditReferences ||
+                            regeneratingEmbeddings ||
+                            loadingStockCatalogos ||
+                            almacenesActivos.length === 0
+                          }
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Agregar fila de stock
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          {loadingStockCatalogos
+                            ? "Cargando catálogos de almacenes y tallas..."
+                            : "Si dejas este apartado sin cambios, se mantendrán las unidades actuales."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
                 <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
                   <header>
                     <p className="text-sm font-semibold text-foreground">Imagen</p>
@@ -1894,6 +2400,132 @@ export default function ProductosPage() {
                     />
                   </div>
                 </div>
+              </section>
+
+              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                <header>
+                  <p className="text-sm font-semibold text-foreground">Inventario inicial</p>
+                  <p className="text-xs text-muted-foreground">
+                    Registra las unidades disponibles por almacén y talla para iniciar el seguimiento de stock.
+                  </p>
+                </header>
+                {almacenesActivos.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-4 text-xs text-muted-foreground">
+                    No hay almacenes activos. Configúralos primero en la sección de Almacenes para asignar stock inicial.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {nuevoStockEntries.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-border/60 bg-background/30 p-4 text-xs text-muted-foreground">
+                        Puedes dejar este apartado vacío y registrar el stock más adelante desde Movimientos.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {nuevoStockEntries.map((entry, index) => (
+                          <div
+                            key={`nuevo-stock-${index}`}
+                            className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_auto]"
+                          >
+                            <div className="space-y-2">
+                              <Label>Almacén</Label>
+                              <Select
+                                value={entry.almacenId || undefined}
+                                onValueChange={(value) => updateNuevoStockEntry(index, "almacenId", value)}
+                                disabled={
+                                  savingProducto ||
+                                  uploadingNewImage ||
+                                  uploadingNewReferences ||
+                                  loadingStockCatalogos
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecciona un almacén" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={STOCK_ALMACEN_NONE_VALUE}>Sin almacén específico</SelectItem>
+                                  {almacenesActivos.map((almacen) => (
+                                    <SelectItem key={almacen.id} value={String(almacen.id)}>
+                                      {almacen.nombre}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Talla</Label>
+                              <Select
+                                value={entry.tallaId || STOCK_TALLA_NONE_VALUE}
+                                onValueChange={(value) => updateNuevoStockEntry(index, "tallaId", value)}
+                                disabled={
+                                  savingProducto ||
+                                  uploadingNewImage ||
+                                  uploadingNewReferences ||
+                                  loadingStockCatalogos
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Sin talla específica" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={STOCK_TALLA_NONE_VALUE}>Sin talla específica</SelectItem>
+                                  {tallasActivas.map((talla) => (
+                                    <SelectItem key={talla.id} value={String(talla.id)}>
+                                      {talla.nombre}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`nuevo-stock-cantidad-${index}`}>Cantidad</Label>
+                              <Input
+                                id={`nuevo-stock-cantidad-${index}`}
+                                type="number"
+                                min="0"
+                                value={entry.cantidad}
+                                onChange={(event) => updateNuevoStockEntry(index, "cantidad", event.target.value)}
+                                required
+                                disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeNuevoStockEntry(index)}
+                              disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Eliminar fila de stock</span>
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addNuevoStockEntry}
+                        disabled={
+                          savingProducto ||
+                          uploadingNewImage ||
+                          uploadingNewReferences ||
+                          loadingStockCatalogos ||
+                          almacenesActivos.length === 0
+                        }
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Agregar fila de stock
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        {loadingStockCatalogos
+                          ? "Cargando catálogos de almacenes y tallas..."
+                          : "Puedes registrar múltiples combinaciones de almacén y talla."}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </section>
 
               <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
