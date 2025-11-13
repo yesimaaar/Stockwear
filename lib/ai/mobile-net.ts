@@ -1,119 +1,136 @@
-import { normalizeL2 } from './embedding-utils'
+import { normalizeL2 } from "./embedding-utils";
 
-const MODEL_LOCAL_URL = '/models/mobilenet/model.json'
-const MODEL_PRIMARY_URL = '/api/tfhub-proxy/model.json'
-const MODEL_SECONDARY_URL =
-  'https://storage.googleapis.com/tfhub-tfjs-modules/google/imagenet/mobilenet_v2_140_224/feature_vector/5/default/1/model.json'
-const WASM_BUNDLE_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/'
+const EMBEDDING_ENDPOINT = "/api/recognizer/embed";
 
-let tfModulePromise: Promise<typeof import('@tensorflow/tfjs')> | null = null
-let backendReadyPromise: Promise<void> | null = null
-let modelPromise: Promise<any> | null = null
+export type EmbeddableInput =
+	| HTMLVideoElement
+	| HTMLImageElement
+	| HTMLCanvasElement
+	| ImageBitmap
+	| ImageData;
 
-async function loadTfModule() {
-  if (typeof window === 'undefined') {
-    throw new Error('El modelo de reconocimiento sólo puede cargarse en el navegador.')
-  }
-
-  if (!tfModulePromise) {
-    tfModulePromise = import('@tensorflow/tfjs')
-  }
-  return tfModulePromise
+function createCanvas(width: number, height: number): HTMLCanvasElement {
+	const canvas = document.createElement("canvas");
+	canvas.width = Math.max(1, Math.floor(width));
+	canvas.height = Math.max(1, Math.floor(height));
+	return canvas;
 }
 
-async function ensureBackend(tf: typeof import('@tensorflow/tfjs')) {
-  if (backendReadyPromise) {
-    return backendReadyPromise
-  }
-
-  backendReadyPromise = (async () => {
-    try {
-      const wasm = await import('@tensorflow/tfjs-backend-wasm')
-      if (wasm && typeof wasm.setWasmPaths === 'function') {
-        wasm.setWasmPaths(WASM_BUNDLE_URL)
-      }
-      await tf.setBackend('wasm')
-      await tf.ready()
-      return
-    } catch (error) {
-      console.warn('No se pudo inicializar el backend wasm, se intenta webgl.', error)
-    }
-
-    try {
-      await import('@tensorflow/tfjs-backend-webgl')
-      await tf.setBackend('webgl')
-      await tf.ready()
-      return
-    } catch (error) {
-      console.warn('No se pudo inicializar el backend webgl, se usa cpu.', error)
-    }
-
-    await tf.setBackend('cpu')
-    await tf.ready()
-  })()
-
-  return backendReadyPromise
+function extractBase64(dataUrl: string): string {
+	const commaIndex = dataUrl.indexOf(",");
+	return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 
-async function loadModelInstance() {
-  if (modelPromise) {
-    return modelPromise
-  }
+function drawInputToCanvas(input: EmbeddableInput): { canvas: HTMLCanvasElement; mimeType: string } {
+	if (typeof window === "undefined") {
+		throw new Error("El reconocimiento visual solo está disponible en el navegador.");
+	}
 
-  modelPromise = (async () => {
-    const tf = await loadTfModule() // ✅ Aquí se importa 'tf'
-    await ensureBackend(tf)
-    const tfconv = await import('@tensorflow/tfjs-converter')
-    try {
-      const loaders: Array<() => Promise<any>> = [
-        // ⬅️ CORRECCIÓN FINAL: Usamos 'tf' que es el módulo principal.
-        () => tf.loadLayersModel(MODEL_LOCAL_URL), 
-        //() => tfconv.loadGraphModel(MODEL_PRIMARY_URL),
-        //() => tfconv.loadGraphModel(MODEL_SECONDARY_URL),
-      ]
-      let lastError
-      for (const load of loaders) {
-        try {
-          return await load()
-        } catch (error) {
-          lastError = error
-          console.warn('Error cargando el modelo, intentando el siguiente.', error)
-        }
-      }
-      throw lastError
-    } catch (error) {
-      console.error('Fallo cargando el modelo', error)
-      throw new Error(
-        'No se pudo descargar el modelo de reconocimiento. Verifica tu conexión a internet o permisos de red.'
-      )
-    }
-  })()
+	const targetMime = "image/jpeg";
 
-  return modelPromise
+	if (input instanceof HTMLCanvasElement) {
+		return { canvas: input, mimeType: targetMime };
+	}
+
+	const width =
+		input instanceof HTMLVideoElement
+			? input.videoWidth || input.width || 1
+			: input instanceof HTMLImageElement
+				? input.naturalWidth || input.width || 1
+				: input instanceof ImageBitmap
+					? input.width || 1
+					: input instanceof ImageData
+						? input.width || 1
+						: 1;
+
+	const height =
+		input instanceof HTMLVideoElement
+			? input.videoHeight || input.height || 1
+			: input instanceof HTMLImageElement
+				? input.naturalHeight || input.height || 1
+				: input instanceof ImageBitmap
+					? input.height || 1
+					: input instanceof ImageData
+						? input.height || 1
+						: 1;
+
+	const canvas = createCanvas(width, height);
+	const context = canvas.getContext("2d");
+	if (!context) {
+		throw new Error("No se pudo preparar un contexto de dibujo para la imagen.");
+	}
+
+	if (input instanceof ImageData) {
+		context.putImageData(input, 0, 0);
+	} else {
+		context.drawImage(input as CanvasImageSource, 0, 0, canvas.width, canvas.height);
+	}
+
+	return { canvas, mimeType: targetMime };
 }
 
-export type EmbeddableInput = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | ImageBitmap | ImageData
+async function encodeInputToBase64(input: EmbeddableInput): Promise<{ base64: string; mimeType: string }> {
+	const { canvas, mimeType } = drawInputToCanvas(input);
+	const quality = 0.92;
+	let dataUrl: string;
 
-export async function generateEmbedding(input: EmbeddableInput): Promise<Float32Array> {
-  const tf = await loadTfModule()
-  await ensureBackend(tf)
-  const model = await loadModelInstance()
+	try {
+		dataUrl = canvas.toDataURL(mimeType, quality);
+	} catch (error) {
+		console.error("No se pudo serializar la imagen a base64", error);
+		throw new Error("No fue posible preparar la imagen para el reconocimiento.");
+	}
 
-  const data = tf.tidy(() => {
-    const pixels = tf.browser.fromPixels(input as any)
-    const resized = tf.image.resizeBilinear(pixels, [224, 224], true)
-    const batched = resized.expandDims(0).toFloat().div(255)
-    const prediction = model.predict(batched)
-    const tensor = Array.isArray(prediction) ? prediction[0].squeeze() : prediction.squeeze()
-    // Extract data synchronously before tensors are disposed
-    return tensor.dataSync() as Float32Array
-  })
-  
-  // Normalize after tidy to avoid issues with disposed tensors
-  const normalized = normalizeL2(data)
-  return normalized
+	const base64 = extractBase64(dataUrl);
+	if (!base64) {
+		throw new Error("No se pudo preparar la imagen para el reconocimiento.");
+	}
+
+	return { base64, mimeType };
 }
 
 export async function preloadEmbeddingModel(): Promise<void> {
-  await loadModelInstance()
+	if (typeof window === "undefined") {
+		return;
+	}
+
+	try {
+		await fetch(EMBEDDING_ENDPOINT, { method: "HEAD" });
+	} catch (_error) {
+		// Ignoramos fallos silenciosos; la llamada real se encargará de reportar errores.
+	}
+}
+
+export async function generateEmbedding(input: EmbeddableInput): Promise<Float32Array> {
+	if (typeof window === "undefined") {
+		throw new Error("El reconocimiento visual solo está disponible en el navegador.");
+	}
+
+	const { base64, mimeType } = await encodeInputToBase64(input);
+
+	const response = await fetch(EMBEDDING_ENDPOINT, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({ imageBase64: base64, mimeType }),
+	});
+
+	const responseText = await response.text();
+	let parsed: { embedding?: number[]; message?: string } | null = null;
+	if (responseText) {
+		try {
+			parsed = JSON.parse(responseText) as { embedding?: number[]; message?: string };
+		} catch (_error) {
+			parsed = null;
+		}
+	}
+
+	if (!response.ok || !parsed?.embedding || !Array.isArray(parsed.embedding)) {
+		const reason = parsed?.message || `El servicio remoto devolvió ${response.status}.`;
+		throw new Error(reason);
+	}
+
+	const vector = Float32Array.from(parsed.embedding);
+	return normalizeL2(vector);
 }
