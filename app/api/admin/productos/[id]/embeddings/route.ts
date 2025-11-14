@@ -1,7 +1,6 @@
 import { Readable } from 'node:stream'
 import { NextResponse } from 'next/server'
 
-import { ensureEmbeddingModelLoaded, generateEmbeddingFromBuffer } from '@/lib/server/embeddings'
 import { isRemoteEmbeddingEnabled, requestRemoteEmbedding } from '@/lib/server/external-embedding-client'
 import { PRODUCT_IMAGE_BUCKET } from '@/lib/services/product-image-path'
 import { supabaseAdmin } from '@/lib/supabase/admin'
@@ -78,8 +77,10 @@ export async function POST(_request: Request, context: RouteParams) {
     }
 
     const useRemoteEmbedding = isRemoteEmbeddingEnabled()
+    let localEmbeddingsModule: typeof import('@/lib/server/embeddings') | null = null
     if (!useRemoteEmbedding) {
-      await ensureEmbeddingModelLoaded()
+      localEmbeddingsModule = await import('@/lib/server/embeddings')
+      await localEmbeddingsModule.ensureEmbeddingModelLoaded()
     }
 
     let processed = 0
@@ -120,7 +121,7 @@ export async function POST(_request: Request, context: RouteParams) {
               productId,
               referenceImageId: reference.id,
             })
-          : await generateEmbeddingFromBuffer(buffer)
+          : await localEmbeddingsModule!.generateEmbeddingFromBuffer(buffer)
 
         if (process.env.NODE_ENV !== 'production') {
           console.debug('[api] regenerate embedding generated', {

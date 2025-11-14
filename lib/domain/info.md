@@ -1,1 +1,0 @@
-Aquí va la data de lógica, CRUD y etc

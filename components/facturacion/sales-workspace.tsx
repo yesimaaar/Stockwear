@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import * as LucideIcons from "lucide-react"
@@ -20,11 +20,16 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
 import { type VentaConDetalles, VentaService } from "@/lib/services/venta-service"
+import { AuthService } from "@/lib/services/auth-service"
+import type { Usuario } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
-interface LineaVentaForm {
+export interface LineaVentaForm {
   stockId: number
   productoId: number
   nombre: string
@@ -53,15 +58,29 @@ interface HighlightSummary {
   ingresos?: number
 }
 
-interface SalesWorkspaceHighlights {
+export interface SalesWorkspaceHighlights {
   top: HighlightSummary[]
   recent: HighlightSummary[]
+}
+
+export interface SalesWorkspacePreviewState {
+  searchTerm?: string
+  productos?: ProductoConStock[]
+  lineas?: LineaVentaForm[]
+  empleados?: Usuario[]
 }
 
 interface SalesWorkspaceProps {
   variant?: SalesWorkspaceVariant
   onSaleRegistered?: (venta: VentaConDetalles) => void
   highlights?: SalesWorkspaceHighlights
+  disableInitialFetch?: boolean
+  initialPreviewState?: SalesWorkspacePreviewState
+  hideCartTrigger?: boolean
+  title?: string
+  description?: string
+  searchPlaceholder?: string
+  className?: string
 }
 
 const priceFormatter = new Intl.NumberFormat("es-CO", {
@@ -70,19 +89,82 @@ const priceFormatter = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 })
 
-export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highlights }: SalesWorkspaceProps) {
+export function SalesWorkspace({
+  variant = "dashboard",
+  onSaleRegistered,
+  highlights,
+  disableInitialFetch = false,
+  initialPreviewState,
+  hideCartTrigger = false,
+  title,
+  description,
+  searchPlaceholder,
+  className,
+}: SalesWorkspaceProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const [busqueda, setBusqueda] = useState("")
+  const [busqueda, setBusqueda] = useState(initialPreviewState?.searchTerm ?? "")
   const [buscando, setBuscando] = useState(false)
-  const [productosEncontrados, setProductosEncontrados] = useState<ProductoConStock[]>([])
-  const [lineas, setLineas] = useState<LineaVentaForm[]>([])
+  const [productosEncontrados, setProductosEncontrados] = useState<ProductoConStock[]>(initialPreviewState?.productos ?? [])
+  const [lineas, setLineas] = useState<LineaVentaForm[]>(initialPreviewState?.lineas ?? [])
   const [registrando, setRegistrando] = useState(false)
   const [cartOpen, setCartOpen] = useState(variant === "page")
+  const initialEmpleados = initialPreviewState?.empleados ?? []
+  const [empleados, setEmpleados] = useState<Usuario[]>(initialEmpleados)
+  const [empleadosLoading, setEmpleadosLoading] = useState(initialEmpleados.length === 0)
+  const [empleadosError, setEmpleadosError] = useState<string | null>(null)
+  const [selectedEmpleadoId, setSelectedEmpleadoId] = useState<string | null>(initialEmpleados[0]?.id ?? null)
   const clearBusqueda = () => {
     setBusqueda("")
     setProductosEncontrados([])
   }
+
+  useEffect(() => {
+    if (disableInitialFetch || initialEmpleados.length > 0) {
+      setEmpleadosLoading(false)
+      return
+    }
+    let active = true
+
+    const loadEmpleados = async () => {
+      setEmpleadosLoading(true)
+      setEmpleadosError(null)
+      try {
+        const lista = await AuthService.getAll()
+        if (!active) {
+          return
+        }
+        const activos = lista.filter((usuario) => usuario.rol === "empleado" && usuario.estado !== "inactivo")
+        setEmpleados(activos)
+        setSelectedEmpleadoId((prev) => {
+          if (prev && activos.some((empleado) => empleado.id === prev)) {
+            return prev
+          }
+          return null
+        })
+      } catch (error) {
+        console.error("Error al cargar empleados", error)
+        if (active) {
+          setEmpleadosError("No pudimos cargar la lista de empleados.")
+        }
+      } finally {
+        if (active) {
+          setEmpleadosLoading(false)
+        }
+      }
+    }
+
+    void loadEmpleados()
+
+    return () => {
+      active = false
+    }
+  }, [disableInitialFetch, initialEmpleados.length])
+
+  const selectedEmpleado = useMemo(
+    () => empleados.find((empleado) => empleado.id === selectedEmpleadoId) ?? null,
+    [empleados, selectedEmpleadoId],
+  )
 
   const realizarBusqueda = async (override?: string) => {
     const terminoInput = override ?? busqueda
@@ -205,6 +287,47 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
     return lineas.reduce((sum, linea) => sum + linea.cantidad, 0)
   }, [lineas])
 
+  const registerDisabled = registrando || lineas.length === 0 || !selectedEmpleadoId
+
+  const renderEmpleadoSelector = (id: string) => (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-sm font-medium text-foreground">
+        Venta registrada por
+      </Label>
+      <Select
+        value={selectedEmpleadoId ?? ""}
+        onValueChange={(value) => setSelectedEmpleadoId(value)}
+        disabled={empleadosLoading || empleados.length === 0}
+      >
+        <SelectTrigger id={id} aria-label="Seleccionar empleado para la venta">
+          <SelectValue
+            placeholder={empleadosLoading ? "Cargando empleados..." : "Selecciona un empleado"}
+          />
+        </SelectTrigger>
+        <SelectContent>
+          {empleados.map((empleado) => (
+            <SelectItem key={empleado.id} value={empleado.id}>
+              {empleado.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {empleadosError ? (
+        <p className="text-xs text-destructive">{empleadosError}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {selectedEmpleado
+            ? `Asignada a ${selectedEmpleado.nombre}.`
+            : empleadosLoading
+              ? "Cargando personal disponible..."
+              : empleados.length
+                ? "Elige quién atendió la venta."
+                : "No hay empleados activos disponibles."}
+        </p>
+      )}
+    </div>
+  )
+
   const registrarVenta = async () => {
     if (!lineas.length) {
       toast({
@@ -215,10 +338,19 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
       return
     }
 
+    if (!selectedEmpleadoId) {
+      toast({
+        title: "Asigna un empleado",
+        description: "Selecciona quién realizó la venta antes de registrarla.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setRegistrando(true)
     try {
       const venta = await VentaService.create({
-        usuarioId: null,
+        usuarioId: selectedEmpleadoId,
         items: lineas.map((linea) => ({
           stockId: linea.stockId,
           cantidad: linea.cantidad,
@@ -420,17 +552,20 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
     )
   }
 
+  const dashboardTitle = title ?? "Facturación rápida"
+  const dashboardDescription =
+    description ?? "Busca productos y añade líneas de venta sin salir del panel principal."
+  const inputPlaceholder = searchPlaceholder ?? "Código o nombre del producto"
+
   if (variant === "dashboard") {
     return (
-      <div className="space-y-4">
+      <div className={cn("space-y-4", className)}>
         <div className="rounded-3xl border border-border/60 bg-background/60 p-6 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-1 flex-col gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-foreground">Facturación rápida</h2>
-                <p className="text-sm text-muted-foreground">
-                  Busca productos y añade líneas de venta sin salir del panel principal.
-                </p>
+                <h2 className="text-xl font-semibold text-foreground">{dashboardTitle}</h2>
+                <p className="text-sm text-muted-foreground">{dashboardDescription}</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative w-full sm:flex-1">
@@ -443,7 +578,7 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
                         void realizarBusqueda()
                       }
                     }}
-                    placeholder="Código o nombre del producto"
+                    placeholder={inputPlaceholder}
                     className="pr-10"
                   />
                   {busqueda ? (
@@ -463,56 +598,61 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
               </div>
             </div>
 
-            <Sheet open={cartOpen} onOpenChange={setCartOpen}>
-              <SheetTrigger asChild>
-                <Button variant="secondary" className="flex items-center gap-2">
-                  <ShoppingCart className="h-4 w-4" />
-                  <span>Carrito</span>
-                  <Badge variant="outline" className="ml-1">
-                    {lineas.length}
-                  </Badge>
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="sm:max-w-xl">
-                <SheetHeader>
-                  <SheetTitle className="flex items-center gap-2 text-lg">
-                    <Package className="h-4 w-4" /> Carrito de venta
-                  </SheetTitle>
-                  <SheetDescription>
-                    Revisa los productos y confirma la venta cuando estés listo.
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="flex h-full flex-1 flex-col gap-4 px-4 pb-4">
-                  {lineas.length ? (
-                    <ScrollArea className="-mx-1 max-h-[60vh] px-1">
-                      {renderCartContent({
+            {hideCartTrigger ? null : (
+              <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="secondary" className="flex items-center gap-2">
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>Carrito</span>
+                    <Badge variant="outline" className="ml-1">
+                      {lineas.length}
+                    </Badge>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="sm:max-w-xl">
+                  <SheetHeader>
+                    <SheetTitle className="flex items-center gap-2 text-lg">
+                      <Package className="h-4 w-4" /> Carrito de venta
+                    </SheetTitle>
+                    <SheetDescription>
+                      Revisa los productos y confirma la venta cuando estés listo.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="flex h-full flex-1 flex-col gap-4 px-4 pb-4">
+                    {lineas.length ? (
+                      <ScrollArea className="-mx-1 max-h-[60vh] px-1">
+                        {renderCartContent({
+                          emptyMessageClass:
+                            "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
+                          showTotals: false,
+                        })}
+                      </ScrollArea>
+                    ) : (
+                      renderCartContent({
                         emptyMessageClass:
                           "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
                         showTotals: false,
-                      })}
-                    </ScrollArea>
-                  ) : (
-                    renderCartContent({
-                      emptyMessageClass:
-                        "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
-                      showTotals: false,
-                    })
-                  )}
-                </div>
-                <SheetFooter>
-                  <div className="flex flex-col gap-3 text-right">
-                    <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
-                    <p className="text-lg font-semibold text-foreground">
-                      Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
-                    </p>
-                    <Button onClick={registrarVenta} disabled={registrando || lineas.length === 0}>
-                      <Receipt className="mr-2 h-4 w-4" />
-                      {registrando ? "Registrando..." : "Registrar venta"}
-                    </Button>
+                      })
+                    )}
                   </div>
-                </SheetFooter>
-              </SheetContent>
-            </Sheet>
+                  <SheetFooter>
+                    <div className="flex w-full flex-col gap-4">
+                      {renderEmpleadoSelector("venta-empleado-sheet")}
+                      <div className="text-right space-y-1">
+                        <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
+                        <p className="text-lg font-semibold text-foreground">
+                          Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
+                        </p>
+                      </div>
+                      <Button onClick={registrarVenta} disabled={registerDisabled} className="self-end">
+                        <Receipt className="mr-2 h-4 w-4" />
+                        {registrando ? "Registrando..." : "Registrar venta"}
+                      </Button>
+                    </div>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
+            )}
           </div>
 
           {productosEncontrados.length === 0 ? (
@@ -575,14 +715,18 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
     )
   }
 
+  const defaultTitle = title ?? "Facturación y Ventas"
+  const defaultDescription =
+    description ?? "Registra ventas y actualiza el inventario en tiempo real"
+
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", className)}>
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Facturación y Ventas</h1>
-          <p className="text-sm text-muted-foreground">Registra ventas y actualiza el inventario en tiempo real</p>
+          <h1 className="text-2xl font-bold text-foreground">{defaultTitle}</h1>
+          <p className="text-sm text-muted-foreground">{defaultDescription}</p>
         </div>
-        <Button onClick={registrarVenta} disabled={registrando || lineas.length === 0}>
+        <Button onClick={registrarVenta} disabled={registerDisabled}>
           <Receipt className="mr-2 h-4 w-4" />
           {registrando ? "Registrando..." : "Registrar venta"}
         </Button>
@@ -606,7 +750,7 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
                     void realizarBusqueda()
                   }
                 }}
-                placeholder="Código o nombre del producto"
+                placeholder={inputPlaceholder}
                 className="pr-10"
               />
               {busqueda ? (
@@ -635,7 +779,10 @@ export function SalesWorkspace({ variant = "dashboard", onSaleRegistered, highli
             <Package className="h-4 w-4" /> Carrito de venta
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">{renderCartContent()}</CardContent>
+        <CardContent className="space-y-4">
+          {renderCartContent()}
+          {renderEmpleadoSelector("venta-empleado-card")}
+        </CardContent>
       </Card>
     </div>
   )

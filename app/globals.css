@@ -74,6 +74,42 @@
   --sidebar-ring: #6366f1;
 }
 
+.force-light {
+  color-scheme: light;
+  --background: #f5f5f7;
+  --foreground: #111114;
+  --card: #ffffff;
+  --card-foreground: #111114;
+  --popover: #ffffff;
+  --popover-foreground: #111114;
+  --primary: #111114;
+  --primary-foreground: #f9f9fb;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #18181b;
+  --muted: #eff0f3;
+  --muted-foreground: #63636f;
+  --accent: #e4e4e7;
+  --accent-foreground: #111114;
+  --destructive: #ef4444;
+  --destructive-foreground: #fef2f2;
+  --border: #e4e4e7;
+  --input: #e0e0e7;
+  --ring: #111114;
+  --chart-1: #6366f1;
+  --chart-2: #22d3ee;
+  --chart-3: #f97316;
+  --chart-4: #a855f7;
+  --chart-5: #facc15;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111114;
+  --sidebar-primary: #111114;
+  --sidebar-primary-foreground: #f9f9fb;
+  --sidebar-accent: #f3f4f6;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #111114;
+}
+
 @theme inline {
   /* Updated Tailwind theme colors */
   --color-background: var(--background);

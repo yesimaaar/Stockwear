@@ -12,7 +12,6 @@ const {
   TrendingUp,
   TrendingDown,
   Target,
-  AlertTriangle,
   MonitorSmartphone,
   X,
   Eye,
@@ -588,15 +587,6 @@ export default function ReportesPage() {
             <span className="sr-only">Ocultar aviso</span>
             <X className="h-4 w-4" />
           </button>
-        </div>
-      )}
-
-      {lowStockCount > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <AlertTriangle className="h-5 w-5" />
-          {lowStockCount === 1
-            ? "Hay 1 producto con inventario por debajo del mínimo."
-            : `Hay ${lowStockCount} productos con inventario por debajo del mínimo.`}
         </div>
       )}
 

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 
 import { Buffer } from 'node:buffer'
 
-import { generateEmbeddingFromBuffer } from '@/lib/server/embeddings'
 import { isRemoteEmbeddingEnabled, requestRemoteEmbedding } from '@/lib/server/external-embedding-client'
 import { PRODUCT_IMAGE_BUCKET, resolveReferenceStoragePath } from '@/lib/services/product-image-path'
 import { supabaseAdmin } from '@/lib/supabase/admin'
@@ -76,6 +75,11 @@ export async function POST(request: Request) {
     }
 
     const useRemoteEmbedding = isRemoteEmbeddingEnabled()
+    let localEmbeddingsModule: typeof import('@/lib/server/embeddings') | null = null
+    if (!useRemoteEmbedding) {
+      localEmbeddingsModule = await import('@/lib/server/embeddings')
+      await localEmbeddingsModule.ensureEmbeddingModelLoaded()
+    }
     let embeddingVector: Float32Array | null = null
     try {
       if (useRemoteEmbedding) {
@@ -93,7 +97,7 @@ export async function POST(request: Request) {
           })
         }
       } else {
-        embeddingVector = await generateEmbeddingFromBuffer(buffer)
+        embeddingVector = await localEmbeddingsModule!.generateEmbeddingFromBuffer(buffer)
         if (process.env.NODE_ENV !== 'production') {
           console.debug('[api] reference embedding generated', {
             referenceId: referenceRecord.id,
