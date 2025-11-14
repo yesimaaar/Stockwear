@@ -9,10 +9,12 @@ export const metadata: Metadata = {
   description: "Sistema de gestión de inventario y ventas para calzado y ropa deportiva con reconocimiento visual",
   generator: "Next.js",
   icons: {
-    // ruta relativa a la carpeta `public/`
-    icon: '/favicon.svg',
-    // Puedes añadir más variantes si las tienes, por ejemplo:
-    // apple: '/apple-touch-icon.png'
+    icon: [
+      { url: "/stockwear-icon.png", type: "image/png" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/stockwear-icon.png",
+    apple: "/stockwear-icon.png",
   },
 }
 
