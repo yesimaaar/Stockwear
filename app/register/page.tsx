@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { GoogleIcon } from "@/components/icons/google-icon"
 import { AuthService } from "@/lib/services/auth-service"
 
 const phonePrefixes = [
@@ -39,6 +40,7 @@ export default function RegisterPage() {
   const [prefijo, setPrefijo] = useState("+52")
   const [rol, setRol] = useState<"admin" | "empleado">("empleado")
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
@@ -77,6 +79,18 @@ export default function RegisterPage() {
     setTimeout(() => {
       router.push("/login")
     }, 1500)
+  }
+
+  const handleGoogleSignup = async () => {
+    if (googleLoading) return
+    setError("")
+    setSuccess("")
+    setGoogleLoading(true)
+    const result = await AuthService.signInWithGoogle()
+    if (!result.success) {
+      setError(result.message || "No se pudo continuar con Google")
+      setGoogleLoading(false)
+    }
   }
 
   return (
@@ -275,13 +289,25 @@ export default function RegisterPage() {
               <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</p>
             ) : null}
 
-            <Button
-              type="submit"
-              className="h-12 w-full rounded-full bg-slate-900 text-base font-semibold text-white shadow-[0_18px_35px_rgba(15,18,30,0.25)]"
-              disabled={loading}
-            >
-              {loading ? "Registrando..." : "Crear cuenta"}
-            </Button>
+            <div className="space-y-3">
+              <Button
+                type="submit"
+                className="h-12 w-full rounded-full bg-slate-900 text-base font-semibold text-white shadow-[0_18px_35px_rgba(15,18,30,0.25)]"
+                disabled={loading || googleLoading}
+              >
+                {loading ? "Registrando..." : "Crear cuenta"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleGoogleSignup}
+                disabled={loading || googleLoading}
+                className="h-12 w-full rounded-full border-slate-200 bg-white/80 text-base font-semibold text-slate-700 hover:bg-white"
+              >
+                <GoogleIcon className="mr-2 h-5 w-5" />
+                {googleLoading ? "Conectando con Google..." : "Registrarse con Google"}
+              </Button>
+            </div>
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">

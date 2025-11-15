@@ -138,6 +138,31 @@ export class AuthService {
     return { success: true, user: mapUsuario(profile as UsuarioRow) }
   }
 
+  static async signInWithGoogle(redirectPath?: string): Promise<AuthResponse> {
+    try {
+      const redirectTo =
+        typeof window === 'undefined'
+          ? undefined
+          : `${window.location.origin}${redirectPath && redirectPath.startsWith('/') ? redirectPath : ''}`
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+        },
+      })
+
+      if (error) {
+        return { success: false, message: error.message }
+      }
+
+      return { success: true, message: data?.url }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.'
+      return { success: false, message }
+    }
+  }
+
   static async logout(): Promise<void> {
     await supabase.auth.signOut()
   }
