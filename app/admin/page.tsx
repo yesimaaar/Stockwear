@@ -505,6 +505,7 @@ export default function AdminHomePage() {
         variant="dashboard"
         highlights={{ top: topProducts, recent: newProducts }}
         onSaleRegistered={handleSaleRegistered}
+        hideCartTrigger
       />
     </div>
   )

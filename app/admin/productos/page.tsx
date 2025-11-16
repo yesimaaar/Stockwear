@@ -8,12 +8,10 @@ import * as LucideIcons from "lucide-react"
 const {
   Package,
   Plus,
-  Search,
   ArrowLeft,
   TriangleAlert,
   ChevronDown,
   ChevronUp,
-  SlidersHorizontal,
   Edit,
   Trash2,
   X,
@@ -46,15 +44,6 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
 import {
   Dialog,
   DialogContent,
@@ -138,14 +127,11 @@ export default function ProductosPage() {
   const searchParams = useSearchParams()
   const [productos, setProductos] = useState<ProductoConStock[]>([])
   const [filteredProductos, setFilteredProductos] = useState<ProductoConStock[]>([])
-  const [searchInput, setSearchInput] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState(() => (searchParams.get("q") ?? "").trim())
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [filters, setFilters] = useState<Filtros>(getDefaultFiltros)
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
-  const [draftFilters, setDraftFilters] = useState<Filtros>(getDefaultFiltros)
+  const [filters] = useState<Filtros>(getDefaultFiltros)
   const [formOpen, setFormOpen] = useState(false)
   const [savingProducto, setSavingProducto] = useState(false)
   const [categorias, setCategorias] = useState<Categoria[]>([])
@@ -173,6 +159,7 @@ export default function ProductosPage() {
   const [editStockEntries, setEditStockEntries] = useState<StockFormEntry[]>([])
   const [removingReferenceId, setRemovingReferenceId] = useState<number | null>(null)
   const [regeneratingEmbeddings, setRegeneratingEmbeddings] = useState(false)
+  const [lowStockDismissed, setLowStockDismissed] = useState(false)
   const pageSize = 10
 
   const cargarProductos = useCallback(async () => {
@@ -741,20 +728,10 @@ export default function ProductosPage() {
     }
   }, [toast])
 
-  const ejecutarBusqueda = useCallback(() => {
-    setSearchQuery(searchInput.trim())
-  }, [searchInput])
-
-  const clearSearchInput = () => {
-    setSearchInput("")
-    setSearchQuery("")
-  }
-
   useEffect(() => {
-    if (!filterSheetOpen) {
-      setDraftFilters({ ...filters })
-    }
-  }, [filterSheetOpen, filters])
+    const nextQuery = (searchParams.get("q") ?? "").trim()
+    setSearchQuery((current) => (current === nextQuery ? current : nextQuery))
+  }, [searchParams])
 
   useEffect(() => {
     const normalized = searchQuery.toLowerCase()
@@ -811,22 +788,11 @@ export default function ProductosPage() {
     [productosConInfo],
   )
 
-  const availableCategories = useMemo(() => {
-    const unique = new Set<string>()
-    productos.forEach((producto) => {
-      if (producto.categoria) {
-        unique.add(producto.categoria)
-      }
-    })
-    return Array.from(unique).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }))
-  }, [productos])
-
-  const activeFiltersCount = useMemo(() => {
-    let count = 0
-    if (filters.estado !== "todos") count += 1
-    if (filters.categoria !== "todas") count += 1
-    return count
-  }, [filters])
+  useEffect(() => {
+    if (totalStockBajo > 0) {
+      setLowStockDismissed(false)
+    }
+  }, [totalStockBajo])
 
   const pageCount = useMemo(() => {
     return Math.max(1, Math.ceil(productosConInfo.length / pageSize))
@@ -1256,153 +1222,30 @@ export default function ProductosPage() {
               Nuevo producto
             </Button>
           </div>
-
-          <div className="border-t border-border/80 px-4 py-2 sm:px-5 sm:py-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-1 gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={searchInput}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      setSearchInput(value)
-                      if (value.trim().length === 0) {
-                        setSearchQuery("")
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault()
-                        ejecutarBusqueda()
-                      }
-                    }}
-                    placeholder="Buscar por nombre, código o almacén..."
-                    className="h-11 rounded-xl border-border bg-background/70 pl-10 pr-11"
-                  />
-                  {searchInput ? (
-                    <button
-                      type="button"
-                      onClick={clearSearchInput}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                      aria-label="Limpiar búsqueda"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => ejecutarBusqueda()}
-                  type="button"
-                  className="h-11 rounded-xl border-border px-4"
-                >
-                  <Search className="mr-2 h-4 w-4" />
-                  Buscar
-                </Button>
-                <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-                  <SheetTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={cn(
-                        "h-11 min-w-[120px] rounded-xl border-border px-4 font-medium gap-2",
-                        activeFiltersCount > 0 && "border-primary text-primary",
-                      )}
-                    >
-                      <SlidersHorizontal className="h-4 w-4" />
-                      Filtros
-                      {activeFiltersCount > 0 && (
-                        <Badge variant="secondary" className="ml-1 rounded-full px-2 text-xs">
-                          {activeFiltersCount}
-                        </Badge>
-                      )}
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="gap-0">
-                    <SheetHeader>
-                      <SheetTitle>Filtros</SheetTitle>
-                      <SheetDescription>Refina la lista de productos según tu necesidad.</SheetDescription>
-                    </SheetHeader>
-                    <div className="flex-1 space-y-6 overflow-y-auto px-4 pb-6">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Estado</Label>
-                        <Select
-                          value={draftFilters.estado}
-                          onValueChange={(value: EstadoFiltro) =>
-                            setDraftFilters((prev) => ({ ...prev, estado: value }))
-                          }
-                        >
-                          <SelectTrigger className="rounded-xl border-border bg-background/70">
-                            <SelectValue placeholder="Selecciona un estado" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos</SelectItem>
-                            <SelectItem value="activo">Solo activos</SelectItem>
-                            <SelectItem value="inactivo">Solo inactivos</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Categoría</Label>
-                        <Select
-                          value={draftFilters.categoria}
-                          onValueChange={(value: CategoriaFiltro) =>
-                            setDraftFilters((prev) => ({ ...prev, categoria: value }))
-                          }
-                        >
-                          <SelectTrigger className="rounded-xl border-border bg-background/70">
-                            <SelectValue placeholder="Todas" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todas">Todas</SelectItem>
-                            {availableCategories.map((categoria) => (
-                              <SelectItem key={categoria} value={categoria}>
-                                {categoria}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {availableCategories.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No hay categorías registradas aún.</p>
-                        )}
-                      </div>
-                    </div>
-                    <SheetFooter className="flex flex-col gap-2 border-t border-border/80 bg-card/70 p-4">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setDraftFilters(getDefaultFiltros())
-                          setFilters(getDefaultFiltros())
-                        }}
-                        disabled={activeFiltersCount === 0}
-                      >
-                        Limpiar filtros
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setFilters({ ...draftFilters })
-                          setFilterSheetOpen(false)
-                        }}
-                      >
-                        Aplicar filtros
-                      </Button>
-                    </SheetFooter>
-                  </SheetContent>
-                </Sheet>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {totalStockBajo > 0 && (
-          <div className="mb-6 rounded-lg bg-yellow-50 p-4">
-            <div className="flex items-center gap-2">
-              <TriangleAlert className="h-5 w-5 text-yellow-600" />
-              <p className="font-semibold text-yellow-900">
-                {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
-              </p>
+        {totalStockBajo > 0 && !lowStockDismissed && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <TriangleAlert className="h-4 w-4" />
+              </span>
+              <div className="flex-1 space-y-1">
+                <p className="font-semibold">
+                  {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
+                </p>
+                <p className="text-xs text-amber-800/80">
+                  Revisa el stock de los productos en alerta para reabastecerlos cuanto antes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLowStockDismissed(true)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-amber-700 transition hover:bg-amber-100"
+                aria-label="Cerrar alerta de stock"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         )}

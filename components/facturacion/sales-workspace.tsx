@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import * as LucideIcons from "lucide-react"
-const { ShoppingCart, Search, Trash2, Receipt, Package, X } = LucideIcons
+const { ShoppingCart, Search, Trash2, Receipt, Package, X, ChevronDown, Plus } = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -28,6 +28,7 @@ import { type VentaConDetalles, VentaService } from "@/lib/services/venta-servic
 import { AuthService } from "@/lib/services/auth-service"
 import type { Usuario } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { OPEN_QUICK_CART_EVENT } from "@/lib/events"
 
 export interface LineaVentaForm {
   stockId: number
@@ -160,6 +161,17 @@ export function SalesWorkspace({
       active = false
     }
   }, [disableInitialFetch, initialEmpleados.length])
+
+  useEffect(() => {
+    const handleOpenCart = () => {
+      setCartOpen(true)
+    }
+
+    window.addEventListener(OPEN_QUICK_CART_EVENT, handleOpenCart)
+    return () => {
+      window.removeEventListener(OPEN_QUICK_CART_EVENT, handleOpenCart)
+    }
+  }, [])
 
   const selectedEmpleado = useMemo(
     () => empleados.find((empleado) => empleado.id === selectedEmpleadoId) ?? null,
@@ -554,7 +566,7 @@ export function SalesWorkspace({
 
   const dashboardTitle = title ?? "Facturación rápida"
   const dashboardDescription =
-    description ?? "Busca productos y añade líneas de venta sin salir del panel principal."
+    description ?? "Añade productos destacados rápidamente a tu carrito de facturación."
   const inputPlaceholder = searchPlaceholder ?? "Código o nombre del producto"
 
   if (variant === "dashboard") {
@@ -567,39 +579,13 @@ export function SalesWorkspace({
                 <h2 className="text-xl font-semibold text-foreground">{dashboardTitle}</h2>
                 <p className="text-sm text-muted-foreground">{dashboardDescription}</p>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <div className="relative w-full sm:flex-1">
-                  <Input
-                    value={busqueda}
-                    onChange={(event) => setBusqueda(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault()
-                        void realizarBusqueda()
-                      }
-                    }}
-                    placeholder={inputPlaceholder}
-                    className="pr-10"
-                  />
-                  {busqueda ? (
-                    <button
-                      type="button"
-                      onClick={clearBusqueda}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                      aria-label="Limpiar búsqueda"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                </div>
-                <Button onClick={() => void realizarBusqueda()} disabled={buscando} className="sm:w-32">
-                  {buscando ? "Buscando..." : "Buscar"}
-                </Button>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Gestiona tus ventas destacadas sin necesidad de buscar manualmente.
+              </p>
             </div>
 
-            {hideCartTrigger ? null : (
-              <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+            <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+              {hideCartTrigger ? null : (
                 <SheetTrigger asChild>
                   <Button variant="secondary" className="flex items-center gap-2">
                     <ShoppingCart className="h-4 w-4" />
@@ -609,7 +595,8 @@ export function SalesWorkspace({
                     </Badge>
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="right" className="sm:max-w-xl">
+              )}
+              <SheetContent side="right" className="sm:max-w-xl">
                   <SheetHeader>
                     <SheetTitle className="flex items-center gap-2 text-lg">
                       <Package className="h-4 w-4" /> Carrito de venta
@@ -650,67 +637,60 @@ export function SalesWorkspace({
                       </Button>
                     </div>
                   </SheetFooter>
-                </SheetContent>
-              </Sheet>
-            )}
+              </SheetContent>
+            </Sheet>
           </div>
-
-          {productosEncontrados.length === 0 ? (
-            highlights && (highlights.top.length > 0 || highlights.recent.length > 0) ? (
-              <div className="mt-4 space-y-6">
-                <section className="space-y-3">
-                  <header className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold text-foreground">Más vendidos</h3>
-                      <p className="text-xs text-muted-foreground">Acceso rápido a los productos con mayor rotación</p>
-                    </div>
-                  </header>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {highlights.top.length ? (
-                      highlights.top.map((producto) => (
-                        <HighlightProductCard
-                          key={`top-${producto.id}`}
-                          producto={producto}
-                          onExplore={() => void realizarBusqueda(producto.codigo ?? producto.nombre)}
-                        />
-                      ))
-                    ) : (
-                      <EmptyHighlightCard mensaje="Registra ventas para ver recomendaciones." />
-                    )}
-                  </div>
-                </section>
-
-                <section className="space-y-3">
-                  <header className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold text-foreground">Novedades</h3>
-                      <p className="text-xs text-muted-foreground">Productos recién agregados a tu catálogo</p>
-                    </div>
-                  </header>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {highlights.recent.length ? (
-                      highlights.recent.map((producto) => (
-                        <HighlightProductCard
-                          key={`recent-${producto.id}`}
-                          producto={producto}
-                          onExplore={() => void realizarBusqueda(producto.codigo ?? producto.nombre)}
-                        />
-                      ))
-                    ) : (
-                      <EmptyHighlightCard mensaje="Agrega nuevos productos para empezar a vender." />
-                    )}
-                  </div>
-                </section>
-              </div>
-            ) : (
-              <p className="mt-4 text-xs text-muted-foreground">
-                Introduce un término de búsqueda para cargar productos disponibles.
-              </p>
-            )
-          ) : null}
         </div>
 
-        {renderResultados()}
+        {highlights && (highlights.top.length > 0 || highlights.recent.length > 0) ? (
+          <div className="space-y-6">
+            <section className="space-y-3">
+              <header className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Más vendidos</h3>
+                  <p className="text-xs text-muted-foreground">Acceso rápido a los productos con mayor rotación</p>
+                </div>
+              </header>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {highlights.top.length ? (
+                  highlights.top.map((producto) => (
+                    <HighlightProductCard
+                      key={`top-${producto.id}`}
+                      producto={producto}
+                      onQuickAdd={(detalle, stock) => agregarLinea(detalle, stock)}
+                    />
+                  ))
+                ) : (
+                  <EmptyHighlightCard mensaje="Registra ventas para ver recomendaciones." />
+                )}
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <header className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Novedades</h3>
+                  <p className="text-xs text-muted-foreground">Productos recién agregados a tu catálogo</p>
+                </div>
+              </header>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {highlights.recent.length ? (
+                  highlights.recent.map((producto) => (
+                    <HighlightProductCard
+                      key={`recent-${producto.id}`}
+                      producto={producto}
+                      onQuickAdd={(detalle, stock) => agregarLinea(detalle, stock)}
+                    />
+                  ))
+                ) : (
+                  <EmptyHighlightCard mensaje="Agrega nuevos productos para empezar a vender." />
+                )}
+              </div>
+            </section>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Aún no hay recomendaciones para mostrar.</p>
+        )}
       </div>
     )
   }
@@ -788,22 +768,110 @@ export function SalesWorkspace({
   )
 }
 
-interface HighlightProductCardProps {
-  producto: HighlightSummary
-  onExplore: () => void
+type TallaGroup = {
+  talla: string
+  total: number
+  opciones: ProductoConStock["stockPorTalla"]
 }
 
-function HighlightProductCard({ producto, onExplore }: HighlightProductCardProps) {
+interface HighlightProductCardProps {
+  producto: HighlightSummary
+  onQuickAdd: (producto: ProductoConStock, stock: ProductoConStock["stockPorTalla"][number]) => void
+}
+
+function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProps) {
   const hasImage = Boolean(producto.imagen)
+  const [expanded, setExpanded] = useState(false)
+  const [loadingSizes, setLoadingSizes] = useState(false)
+  const [productoDetalle, setProductoDetalle] = useState<ProductoConStock | null>(null)
+  const [selectedStockId, setSelectedStockId] = useState<number | null>(null)
+  const [stockError, setStockError] = useState<string | null>(null)
+
+  const availableStock = productoDetalle?.stockPorTalla ?? []
+  const tallaGroups = useMemo<TallaGroup[]>(() => {
+    if (!productoDetalle) {
+      return []
+    }
+    const map = new Map<string, TallaGroup>()
+    for (const stock of productoDetalle.stockPorTalla) {
+      const key = stock.talla || "Única"
+      const entry = map.get(key)
+      if (entry) {
+        entry.total += stock.cantidad
+        entry.opciones.push(stock)
+      } else {
+        map.set(key, {
+          talla: key,
+          total: stock.cantidad,
+          opciones: [stock],
+        })
+      }
+    }
+    return Array.from(map.values()).map((group) => ({
+      ...group,
+      opciones: group.opciones.sort((a, b) => (b.cantidad ?? 0) - (a.cantidad ?? 0)),
+    }))
+  }, [productoDetalle])
+
+  const selectedStock = availableStock.find((stock) => stock.stockId === selectedStockId) ?? null
+  const hasAvailableStock = tallaGroups.some((group) => group.total > 0)
+  const quickAddDisabled = !selectedStock || selectedStock.cantidad <= 0 || loadingSizes
+
+  const ensureStockLoaded = useCallback(async () => {
+    if (productoDetalle || loadingSizes) {
+      return
+    }
+    setLoadingSizes(true)
+    setStockError(null)
+    try {
+      const detalle = await ProductoService.getById(producto.id)
+      if (!detalle) {
+        setStockError("No se pudo cargar el inventario")
+        return
+      }
+      setProductoDetalle(detalle)
+      const firstAvailable =
+        detalle.stockPorTalla.find((item) => item.cantidad > 0) ?? detalle.stockPorTalla[0] ?? null
+      setSelectedStockId(firstAvailable?.stockId ?? null)
+    } catch (error) {
+      console.error("Error cargando tallas para destacado", error)
+      setStockError("No pudimos cargar las tallas")
+    } finally {
+      setLoadingSizes(false)
+    }
+  }, [producto.id, productoDetalle, loadingSizes])
+
+  const handleToggle = () => {
+    if (!expanded) {
+      void ensureStockLoaded()
+    }
+    setExpanded((value) => !value)
+  }
+
+  const handleAddToCart = () => {
+    if (!productoDetalle || !selectedStock || selectedStock.cantidad <= 0) {
+      return
+    }
+    onQuickAdd(productoDetalle, selectedStock)
+  }
+
+  const handleSelectGroup = (group: TallaGroup) => {
+    const preferred = group.opciones.find((stock) => stock.cantidad > 0) ?? group.opciones[0] ?? null
+    setSelectedStockId(preferred?.stockId ?? null)
+  }
+
+  const isGroupSelected = (group: TallaGroup) =>
+    group.opciones.some((stock) => stock.stockId === selectedStockId)
+
   return (
     <div className="group flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm">
-      <div className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-xl border border-border/50 bg-secondary/20">
+      <div className="relative h-40 w-full overflow-hidden rounded-xl border border-border/50 bg-secondary/20">
         {hasImage ? (
           <Image
             src={producto.imagen as string}
             alt={producto.nombre}
             fill
-            className="object-contain p-3 transition-transform duration-300 group-hover:scale-105"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(min-width: 1280px) 240px, (min-width: 768px) 200px, 160px"
           />
         ) : (
@@ -839,13 +907,76 @@ function HighlightProductCard({ producto, onExplore }: HighlightProductCardProps
             </div>
           ) : null}
         </div>
-        <div className="flex items-center justify-between">
-          <p className="text-base font-semibold text-foreground">
-            {producto.precio != null ? priceFormatter.format(producto.precio) : "--"}
-          </p>
-          <Button size="sm" variant="outline" onClick={onExplore}>
-            Ver stock
-          </Button>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-base font-semibold text-foreground">
+              {producto.precio != null ? priceFormatter.format(producto.precio) : "--"}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
+                onClick={handleToggle}
+                aria-label={expanded ? "Ocultar tallas" : "Mostrar tallas disponibles"}
+              >
+                <ChevronDown className={cn("h-4 w-4 transition-transform", expanded ? "rotate-180" : undefined)} />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="inline-flex h-9 items-center justify-center gap-1 rounded-full px-3"
+                disabled={quickAddDisabled}
+                onClick={handleAddToCart}
+                aria-label="Añadir talla seleccionada al carrito"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+          {expanded ? (
+            <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 p-3 text-xs">
+              {loadingSizes ? (
+                <p className="text-muted-foreground">Cargando tallas...</p>
+              ) : stockError ? (
+                <p className="text-destructive">{stockError}</p>
+              ) : tallaGroups.length ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Tallas</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {tallaGroups.map((group) => {
+                      const almacenesTooltip = group.opciones
+                        .map((option) => `${option.almacen || "Sin almacén"}: ${option.cantidad} ud`)
+                        .join("\n")
+                      return (
+                      <button
+                          key={group.talla}
+                          type="button"
+                          onClick={() => handleSelectGroup(group)}
+                          className={cn(
+                            "flex items-center justify-between rounded-xl border px-3 py-2 text-[0.72rem] font-medium transition",
+                            isGroupSelected(group)
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border/60 text-foreground hover:border-primary/40"
+                          )}
+                          title={almacenesTooltip}
+                      >
+                          <span>{group.talla}</span>
+                          <span className="text-muted-foreground">{group.total} ud</span>
+                      </button>
+                      )
+                    })}
+                  </div>
+                  {!hasAvailableStock ? (
+                    <p className="text-[0.7rem] text-destructive">Sin stock disponible.</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No hay tallas registradas.</p>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

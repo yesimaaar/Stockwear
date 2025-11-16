@@ -70,6 +70,8 @@ export interface Almacen {
   direccion: string | null
   tipo: 'principal' | 'sucursal'
   estado: EstadoRegistro
+  latitud?: number | null
+  longitud?: number | null
 }
 
 export interface Stock {

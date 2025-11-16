@@ -18,7 +18,8 @@ const {
   Boxes,
 } = LucideIcons
 import { supabase } from "@/lib/supabase"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -147,24 +148,22 @@ interface DashboardCache {
   lowStockCount: number
 }
 
-const SalesChart = dynamic(() => import("@/components/dashboard/sales-chart"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-      Cargando tendencias de ventas...
-    </div>
-  ),
-})
+const SalesPerformanceChart = dynamic(
+  () => import("@/components/dashboard/sales-performance-chart").then((mod) => mod.SalesPerformanceChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[300px] items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
+        Cargando tendencias de ventas...
+      </div>
+    ),
+  },
+)
 
 const currencyFormatter = new Intl.NumberFormat("es-CO", {
   style: "currency",
   currency: "COP",
   maximumFractionDigits: 0,
-})
-
-const shortDateFormatter = new Intl.DateTimeFormat("es-CO", {
-  day: "2-digit",
-  month: "short",
 })
 
 function computeTrend(current: number, previous: number): { change: string; trend: Trend } {
@@ -420,10 +419,10 @@ export default function ReportesPage() {
         })
 
         const series = lastSevenDays.map((date) => {
-          const key = date.toISOString().slice(0, 10)
-          const value = salesMap.get(key) || 0
+          const isoKey = date.toISOString().slice(0, 10)
+          const value = salesMap.get(isoKey) || 0
           return {
-            date: shortDateFormatter.format(date),
+            date: isoKey,
             value,
           }
         })
@@ -555,6 +554,36 @@ export default function ReportesPage() {
     [topConsulted],
   )
 
+  const salesTargetSparkline = useMemo(() => {
+    if (salesSeries.length === 0) {
+      return [0.3, 0.5, 0.4, 0.65, 0.45, 0.7]
+    }
+    const lastPoints = salesSeries.slice(-6)
+    const maxValue = Math.max(...lastPoints.map((item) => item.value), 1)
+    if (maxValue === 0) {
+      return lastPoints.map(() => 0)
+    }
+    return lastPoints.map((item) => item.value / maxValue)
+  }, [salesSeries])
+
+  const monthlyCompletion = useMemo(() => {
+    if (monthlyTarget === 0) return 0
+    return (monthlyProgress / monthlyTarget) * 100
+  }, [monthlyProgress, monthlyTarget])
+
+  const monthlyCompletionLabel = useMemo(() => {
+    const normalized = Number.isFinite(monthlyCompletion) ? monthlyCompletion : 0
+    const clamped = Math.max(Math.min(normalized, 999), -999)
+    const formatted = clamped.toFixed(1)
+    return `${clamped >= 0 ? "+" : ""}${formatted}%`
+  }, [monthlyCompletion])
+
+  const monthlyStatusText = useMemo(() => {
+    if (monthlyCompletion >= 100) return "Meta alcanzada"
+    if (monthlyCompletion === 0) return "Aún sin progreso"
+    return "Meta en progreso"
+  }, [monthlyCompletion])
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -590,144 +619,124 @@ export default function ReportesPage() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4">
         {metrics.map((metric) => {
           const TrendIcon = metric.trend === "up" ? TrendingUp : metric.trend === "down" ? TrendingDown : null
-          const changeColor =
+          const trendLabel =
             metric.trend === "up"
-              ? "text-green-600"
+              ? "Tendencia al alza"
               : metric.trend === "down"
-                ? "text-red-600"
-                : "text-muted-foreground"
+                ? "Tendencia a la baja"
+                : "Actividad estable"
 
           return (
-            <Card key={metric.title} className="border-none shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div>
-                  <CardDescription className="text-xs text-muted-foreground">Últimos 30 días</CardDescription>
-                  <CardTitle className="mt-1 text-sm font-medium text-muted-foreground">{metric.title}</CardTitle>
-                </div>
-                <div className={`rounded-full p-2 ${metric.bgColor}`}>
-                  <metric.icon className={`h-5 w-5 ${metric.iconColor}`} />
+            <Card key={metric.title} className="@container/card border-none" data-slot="card">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <CardDescription className="text-xs text-muted-foreground">Últimos 30 días</CardDescription>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-sm font-medium text-foreground">{metric.title}</CardTitle>
+                      <span className={`rounded-full p-1.5 ${metric.bgColor}`}>
+                        <metric.icon className={`h-4 w-4 ${metric.iconColor}`} />
+                      </span>
+                    </div>
+                    <div className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{metric.value}</div>
+                  </div>
+                  <CardAction>
+                    <Badge variant="outline" className="flex items-center gap-1 text-xs font-semibold">
+                      {TrendIcon ? <TrendIcon className="h-3.5 w-3.5" /> : null}
+                      {metric.change}
+                    </Badge>
+                  </CardAction>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-bold">{metric.value}</div>
-                    <p className="mt-1 text-xs text-muted-foreground">{metric.description}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {TrendIcon ? <TrendIcon className={`h-4 w-4 ${changeColor}`} /> : null}
-                    <span className={`text-sm font-medium ${changeColor}`}>{metric.change}</span>
-                  </div>
+              <CardFooter className="flex-col items-start gap-1.5 text-sm">
+                <div className="line-clamp-1 flex gap-2 font-medium">
+                  {trendLabel}
+                  {TrendIcon ? <TrendIcon className="size-4" /> : null}
                 </div>
-              </CardContent>
+                <div className="text-muted-foreground">{metric.description}</div>
+              </CardFooter>
             </Card>
           )
         })}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="border-none shadow-sm lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-xl font-semibold">Ventas de los últimos 7 días</CardTitle>
+        <SalesPerformanceChart
+          className="border-none shadow-sm lg:col-span-2"
+          data={salesSeries}
+          formatter={(value) => currencyFormatter.format(value)}
+          title="Ventas recientes"
+          description="Filtra la tendencia y compara el ingreso acumulado por rango de fecha"
+        />
+
+        <Card className="border-none bg-gradient-to-b from-card via-muted/40 to-muted text-foreground shadow-sm dark:from-[#161616] dark:via-[#111] dark:to-[#0e0e0e] dark:text-white">
+          <CardHeader className="space-y-1">
+            <CardDescription className="text-sm text-muted-foreground">Objetivo de ventas</CardDescription>
+            <CardTitle className="text-2xl font-semibold text-foreground dark:text-white">Seguimiento mensual</CardTitle>
+            <p className="text-sm text-muted-foreground">Comparativa frente a la meta definida</p>
           </CardHeader>
-          <CardContent>
-            <SalesChart data={salesSeries} formatter={(value) => currencyFormatter.format(value)} />
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl font-semibold">Objetivo de Ventas</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center space-y-6">
-            <div className="relative h-56 w-56">
-              <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 200 200">
-                <circle cx="100" cy="100" r="85" stroke="hsl(var(--muted))" strokeWidth="20" fill="none" opacity="0.3" />
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="85"
-                  stroke="hsl(0, 0%, 60%)"
-                  strokeWidth="20"
-                  fill="none"
-                  strokeDasharray={`${(yearlyPercentage / 100) * 534} 534`}
-                  strokeLinecap="round"
-                />
-
-                <circle cx="100" cy="100" r="60" stroke="hsl(var(--muted))" strokeWidth="18" fill="none" opacity="0.3" />
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="60"
-                  stroke="hsl(0, 0%, 40%)"
-                  strokeWidth="18"
-                  fill="none"
-                  strokeDasharray={`${(monthlyPercentage / 100) * 377} 377`}
-                  strokeLinecap="round"
-                />
-
-                <circle cx="100" cy="100" r="37" stroke="hsl(var(--muted))" strokeWidth="16" fill="none" opacity="0.3" />
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="37"
-                  stroke="hsl(0, 0%, 20%)"
-                  strokeWidth="16"
-                  fill="none"
-                  strokeDasharray={`${(dailyPercentage / 100) * 232} 232`}
-                  strokeLinecap="round"
-                />
-              </svg>
-
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-3xl font-bold">{Math.round((dailyPercentage + monthlyPercentage + yearlyPercentage) / 3)}%</div>
-                  <div className="text-xs text-muted-foreground">Promedio</div>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Últimos 6 registros</span>
+              <span>{monthlyStatusText}</span>
+            </div>
+            <div className="flex h-24 items-end gap-2 rounded-2xl bg-[hsl(var(--foreground)/0.08)] p-4 dark:bg-white/5">
+              {salesTargetSparkline.map((value, index) => (
+                <div
+                  key={`spark-${index}`}
+                  className="flex-1 h-full overflow-hidden rounded-full bg-[hsl(var(--foreground)/0.12)] dark:bg-white/10"
+                >
+                  <div
+                    className="w-full rounded-full bg-emerald-600/80 dark:bg-emerald-300/90"
+                    style={{ height: `${Math.max(value * 100, 8)}%` }}
+                  />
                 </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-4 text-foreground sm:flex-row sm:items-end sm:justify-between dark:text-white">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Progreso actual</p>
+                <p className="text-3xl font-semibold text-foreground dark:text-white">
+                  {currencyFormatter.format(monthlyProgress)}
+                </p>
+                <p className="text-xs text-muted-foreground">Meta mensual: {currencyFormatter.format(monthlyTarget)}</p>
+              </div>
+              <div className="text-left sm:text-right">
+                <p
+                  className={`text-2xl font-semibold ${monthlyCompletion >= 100 ? "text-emerald-600 dark:text-emerald-300" : "text-emerald-500 dark:text-emerald-400"}`}
+                >
+                  {monthlyCompletionLabel}
+                </p>
+                <p className="text-xs text-muted-foreground">avance frente al objetivo</p>
               </div>
             </div>
-
-            <div className="w-full space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-gray-800" />
-                  <span className="text-sm text-muted-foreground">Objetivo Diario</span>
+            <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-3">
+              <div className="rounded-2xl border border-border bg-card p-3 dark:border-white/10 dark:bg-white/5">
+                <div className="mb-1 flex items-center gap-2">
+                  <Target className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="uppercase tracking-wide">Diario</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Target className="h-4 w-4 text-gray-800" />
-                  <span className="text-base font-bold">
-                    {currencyFormatter.format(dailyProgress)}/{currencyFormatter.format(dailyTarget)}
-                  </span>
-                </div>
+                <p className="text-lg font-semibold text-foreground dark:text-white">{Math.round(dailyPercentage)}%</p>
+                <p className="text-sm text-muted-foreground">{currencyFormatter.format(dailyProgress)}</p>
               </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-gray-600" />
-                  <span className="text-sm text-muted-foreground">Objetivo Mensual</span>
+              <div className="rounded-2xl border border-border bg-card p-3 dark:border-white/10 dark:bg-white/5">
+                <div className="mb-1 flex items-center gap-2">
+                  <Target className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="uppercase tracking-wide">Mensual</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Target className="h-4 w-4 text-gray-600" />
-                  <span className="text-base font-bold">
-                    {currencyFormatter.format(monthlyProgress)}/{currencyFormatter.format(monthlyTarget)}
-                  </span>
-                </div>
+                <p className="text-lg font-semibold text-foreground dark:text-white">{Math.round(monthlyPercentage)}%</p>
+                <p className="text-sm text-muted-foreground">{currencyFormatter.format(monthlyProgress)}</p>
               </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-gray-400" />
-                  <span className="text-sm text-muted-foreground">Objetivo Anual</span>
+              <div className="rounded-2xl border border-border bg-card p-3 dark:border-white/10 dark:bg-white/5">
+                <div className="mb-1 flex items-center gap-2">
+                  <Target className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="uppercase tracking-wide">Anual</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Target className="h-4 w-4 text-gray-400" />
-                  <span className="text-base font-bold">
-                    {currencyFormatter.format(yearlyProgress)}/{currencyFormatter.format(yearlyTarget)}
-                  </span>
-                </div>
+                <p className="text-lg font-semibold text-foreground dark:text-white">{Math.round(yearlyPercentage)}%</p>
+                <p className="text-sm text-muted-foreground">{currencyFormatter.format(yearlyProgress)}</p>
               </div>
             </div>
           </CardContent>
@@ -742,103 +751,125 @@ export default function ReportesPage() {
           </div>
           <CardDescription>Define y actualiza tus objetivos de ventas</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-3">
-            <div className="space-y-4 rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-gray-800" />
-                <h3 className="font-semibold">Objetivo Diario</h3>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-4 rounded-2xl border border-border/50 bg-background/40 p-5 shadow-sm ring-1 ring-white/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                  <h3 className="font-semibold">Objetivo Diario</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">Actualiza metas</span>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="daily-target">Meta (COP)</Label>
-                <Input
-                  id="daily-target"
-                  type="number"
-                  value={dailyTarget}
-                  onChange={(e) => setDailyTarget(Number(e.target.value) || 0)}
-                  placeholder="Ej: 650000"
-                />
+              <div className="grid gap-4 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="daily-target">Meta (COP)</Label>
+                  <Input
+                    id="daily-target"
+                    type="number"
+                    value={dailyTarget}
+                    onChange={(e) => setDailyTarget(Number(e.target.value) || 0)}
+                    placeholder="Ej: 650000"
+                    className="bg-background/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="daily-progress">Progreso</Label>
+                  <Input
+                    id="daily-progress"
+                    type="number"
+                    value={dailyProgress}
+                    onChange={(e) => setDailyProgress(Number(e.target.value) || 0)}
+                    placeholder="Ej: 450000"
+                    className="bg-background/60"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="daily-progress">Progreso</Label>
-                <Input
-                  id="daily-progress"
-                  type="number"
-                  value={dailyProgress}
-                  onChange={(e) => setDailyProgress(Number(e.target.value) || 0)}
-                  placeholder="Ej: 450000"
-                />
-              </div>
-              <div className="pt-2">
-                <div className="text-sm text-muted-foreground">Porcentaje</div>
-                <div className="text-2xl font-bold">{Math.round(dailyPercentage)}%</div>
-              </div>
-            </div>
-
-            <div className="space-y-4 rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-gray-600" />
-                <h3 className="font-semibold">Objetivo Mensual</h3>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="monthly-target">Meta (COP)</Label>
-                <Input
-                  id="monthly-target"
-                  type="number"
-                  value={monthlyTarget}
-                  onChange={(e) => setMonthlyTarget(Number(e.target.value) || 0)}
-                  placeholder="Ej: 14500000"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="monthly-progress">Progreso</Label>
-                <Input
-                  id="monthly-progress"
-                  type="number"
-                  value={monthlyProgress}
-                  onChange={(e) => setMonthlyProgress(Number(e.target.value) || 0)}
-                  placeholder="Ej: 11200000"
-                />
-              </div>
-              <div className="pt-2">
-                <div className="text-sm text-muted-foreground">Porcentaje</div>
-                <div className="text-2xl font-bold">{Math.round(monthlyPercentage)}%</div>
+              <div className="rounded-xl bg-primary/5 px-4 py-3 text-center">
+                <p className="text-xs text-muted-foreground">Porcentaje</p>
+                <p className="text-2xl font-semibold text-primary">{Math.round(dailyPercentage)}%</p>
               </div>
             </div>
 
-            <div className="space-y-4 rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-gray-400" />
-                <h3 className="font-semibold">Objetivo Anual</h3>
+            <div className="space-y-4 rounded-2xl border border-border/50 bg-background/40 p-5 shadow-sm ring-1 ring-white/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                  <h3 className="font-semibold">Objetivo Mensual</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">Meta principal</span>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="yearly-target">Meta (COP)</Label>
-                <Input
-                  id="yearly-target"
-                  type="number"
-                  value={yearlyTarget}
-                  onChange={(e) => setYearlyTarget(Number(e.target.value) || 0)}
-                  placeholder="Ej: 175000000"
-                />
+              <div className="grid gap-4 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="monthly-target">Meta (COP)</Label>
+                  <Input
+                    id="monthly-target"
+                    type="number"
+                    value={monthlyTarget}
+                    onChange={(e) => setMonthlyTarget(Number(e.target.value) || 0)}
+                    placeholder="Ej: 14500000"
+                    className="bg-background/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="monthly-progress">Progreso</Label>
+                  <Input
+                    id="monthly-progress"
+                    type="number"
+                    value={monthlyProgress}
+                    onChange={(e) => setMonthlyProgress(Number(e.target.value) || 0)}
+                    placeholder="Ej: 11200000"
+                    className="bg-background/60"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="yearly-progress">Progreso</Label>
-                <Input
-                  id="yearly-progress"
-                  type="number"
-                  value={yearlyProgress}
-                  onChange={(e) => setYearlyProgress(Number(e.target.value) || 0)}
-                  placeholder="Ej: 125000000"
-                />
+              <div className="rounded-xl bg-primary/5 px-4 py-3 text-center">
+                <p className="text-xs text-muted-foreground">Porcentaje</p>
+                <p className="text-2xl font-semibold text-primary">{Math.round(monthlyPercentage)}%</p>
               </div>
-              <div className="pt-2">
-                <div className="text-sm text-muted-foreground">Porcentaje</div>
-                <div className="text-2xl font-bold">{Math.round(yearlyPercentage)}%</div>
+            </div>
+
+            <div className="space-y-4 rounded-2xl border border-border/50 bg-background/40 p-5 shadow-sm ring-1 ring-white/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-violet-400" />
+                  <h3 className="font-semibold">Objetivo Anual</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">Visión a largo plazo</span>
+              </div>
+              <div className="grid gap-4 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="yearly-target">Meta (COP)</Label>
+                  <Input
+                    id="yearly-target"
+                    type="number"
+                    value={yearlyTarget}
+                    onChange={(e) => setYearlyTarget(Number(e.target.value) || 0)}
+                    placeholder="Ej: 175000000"
+                    className="bg-background/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="yearly-progress">Progreso</Label>
+                  <Input
+                    id="yearly-progress"
+                    type="number"
+                    value={yearlyProgress}
+                    onChange={(e) => setYearlyProgress(Number(e.target.value) || 0)}
+                    placeholder="Ej: 125000000"
+                    className="bg-background/60"
+                  />
+                </div>
+              </div>
+              <div className="rounded-xl bg-primary/5 px-4 py-3 text-center">
+                <p className="text-xs text-muted-foreground">Porcentaje</p>
+                <p className="text-2xl font-semibold text-primary">{Math.round(yearlyPercentage)}%</p>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/5 p-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <p>Los cambios se guardan de inmediato y afectan el seguimiento del dashboard.</p>
             <Button className="px-6" type="button">
               Guardar cambios
             </Button>

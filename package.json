@@ -39,6 +39,7 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@react-google-maps/api": "^2.20.7",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.34.0",
     "@tensorflow-models/mobilenet": "^2.1.1",
@@ -75,6 +76,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
+    "@types/googlemaps": "^3.43.3",
     "@types/node": "^22.19.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",

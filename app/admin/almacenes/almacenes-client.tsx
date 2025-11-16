@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import dynamic from "next/dynamic"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -60,6 +61,17 @@ import {
 	type AlmacenResumen
 } from "@/lib/services/inventario-service"
 import type { EstadoRegistro } from "@/lib/types"
+import { getWarehouseCoordinate } from "@/lib/config/warehouse-locations"
+import type { WarehouseMapProps } from "./warehouse-map"
+
+const WarehouseMap = dynamic<WarehouseMapProps>(() => import("./warehouse-map").then((mod) => mod.WarehouseMap), {
+	ssr: false,
+	loading: () => (
+		<div className="flex h-[420px] items-center justify-center rounded-3xl border border-border bg-card text-sm text-muted-foreground">
+			Cargando mapa…
+		</div>
+	)
+})
 
 const { Boxes, Edit, MapPin, Plus, Trash2, Warehouse } = LucideIcons
 
@@ -184,6 +196,10 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 		const inactivos = almacenes.filter((item) => item.estado !== "activo").length
 		const stockTotal = almacenes.reduce((acc, item) => acc + item.stockTotal, 0)
 		return { activos, inactivos, stockTotal }
+	}, [almacenes])
+
+	const almacenesConCoordenadas = useMemo(() => {
+		return almacenes.filter((almacen) => Boolean(getWarehouseCoordinate(almacen))).length
 	}, [almacenes])
 
 	const handleCreateClick = () => {
@@ -350,25 +366,41 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 					</div>
 				}
 			>
-				{loading ? (
-					<div className="grid gap-4 md:grid-cols-2">
-						{Array.from({ length: 4 }).map((_, index) => (
-							<Card key={index} className="animate-pulse">
-								<CardContent className="p-6">
-									<div className="h-6 w-40 rounded bg-muted" />
-								</CardContent>
-							</Card>
-						))}
-					</div>
-				) : almacenes.length === 0 ? (
-					<div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
-						No hay almacenes registrados.
-					</div>
-				) : (
-					<div className="grid gap-4 md:grid-cols-2">
-						{almacenes.map((almacen) => (
-							<Card key={almacen.id} className="transition-all hover:shadow-lg">
-								<CardContent className="p-6">
+				<div className="space-y-6">
+					<section className="space-y-3">
+						<div className="flex items-center justify-between gap-4">
+							<div>
+								<h3 className="text-lg font-semibold text-foreground">Mapa de almacenes</h3>
+								<p className="text-sm text-muted-foreground">Visualiza la red y detecta huecos logísticos con un vistazo.</p>
+							</div>
+							<div className="text-right text-sm text-muted-foreground">
+								<p>
+									Coordenadas registradas: <span className="font-semibold text-foreground">{almacenesConCoordenadas}</span>
+								</p>
+							</div>
+						</div>
+						<WarehouseMap almacenes={almacenes} />
+					</section>
+				</div>
+					{loading ? (
+						<div className="grid gap-4 md:grid-cols-2">
+							{Array.from({ length: 4 }).map((_, index) => (
+								<Card key={index} className="animate-pulse">
+									<CardContent className="p-6">
+										<div className="h-6 w-40 rounded bg-muted" />
+									</CardContent>
+								</Card>
+							))}
+						</div>
+					) : almacenes.length === 0 ? (
+						<div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+							No hay almacenes registrados.
+						</div>
+					) : (
+						<div className="grid gap-4 md:grid-cols-2">
+							{almacenes.map((almacen) => (
+								<Card key={almacen.id} className="transition-all hover:shadow-lg">
+									<CardContent className="p-6">
 									<div className="mb-4 flex items-start justify-between">
 										<div className="flex gap-3">
 											<div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-primary">
