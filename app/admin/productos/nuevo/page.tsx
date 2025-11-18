@@ -6,7 +6,8 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
+import * as LucideIcons from "lucide-react"
+const { ArrowLeft } = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,10 +17,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { ProductoService } from "@/lib/services/producto-service"
 import type { Categoria } from "@/lib/types"
+import { uploadProductImage } from "@/lib/services/product-image-service"
+import { uploadReferenceImage } from "@/lib/services/product-reference-service"
 
 export default function NuevoProductoPage() {
   const router = useRouter()
   const { toast } = useToast()
+  type ReferenceDraft = { file: File; preview: string }
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [cargandoCategorias, setCargandoCategorias] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -34,6 +38,9 @@ export default function NuevoProductoPage() {
     descripcion: "",
     imagen: "",
   })
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [referenceDrafts, setReferenceDrafts] = useState<ReferenceDraft[]>([])
+  const [uploadingReferences, setUploadingReferences] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -62,6 +69,12 @@ export default function NuevoProductoPage() {
       activo = false
     }
   }, [toast])
+
+  useEffect(() => {
+    return () => {
+      referenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+    }
+  }, [referenceDrafts])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -125,10 +138,59 @@ export default function NuevoProductoPage() {
         return
       }
 
+      let referenceSuccess = 0
+      const referenceErrors: Array<{ name: string; message: string }> = []
+      if (referenceDrafts.length > 0) {
+        setUploadingReferences(true)
+        try {
+          for (const draft of referenceDrafts) {
+            try {
+              await uploadReferenceImage(nuevoProducto.id, draft.file, {
+                productCode: formData.codigo,
+              })
+              referenceSuccess += 1
+            } catch (uploadError) {
+              console.error("Error subiendo imagen de referencia", uploadError)
+              referenceErrors.push({
+                name: draft.file.name,
+                message:
+                  uploadError instanceof Error ? uploadError.message : "No se pudo procesar la imagen de referencia",
+              })
+            } finally {
+              URL.revokeObjectURL(draft.preview)
+            }
+          }
+        } finally {
+          setReferenceDrafts([])
+          setUploadingReferences(false)
+        }
+      }
+
       toast({
         title: "Producto registrado",
         description: `${nuevoProducto.nombre} se añadió al inventario`,
       })
+
+      if (referenceSuccess > 0) {
+        toast({
+          title: referenceSuccess === 1 ? "Imagen de referencia registrada" : "Imágenes de referencia registradas",
+          description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${
+            referenceSuccess > 1 ? "s" : ""
+          } correctamente`,
+        })
+      }
+
+      if (referenceErrors.length > 0) {
+        toast({
+          title: "Algunas referencias no se procesaron",
+          description: referenceErrors
+            .map((item) => `${item.name}: ${item.message}`)
+            .slice(0, 3)
+            .join(" | "),
+          variant: "destructive",
+        })
+      }
+
       router.push("/admin/productos")
     } catch (error) {
       console.error("Error creando producto", error)
@@ -140,6 +202,32 @@ export default function NuevoProductoPage() {
     } finally {
       setGuardando(false)
     }
+  }
+
+  const handleReferenceFilesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
+      return
+    }
+
+    const drafts = files.map<ReferenceDraft>((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }))
+
+    setReferenceDrafts((prev) => [...prev, ...drafts])
+    event.target.value = ""
+  }
+
+  const handleRemoveReferenceDraft = (index: number) => {
+    setReferenceDrafts((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(index, 1)
+      if (removed) {
+        URL.revokeObjectURL(removed.preview)
+      }
+      return next
+    })
   }
 
   return (
@@ -295,49 +383,144 @@ export default function NuevoProductoPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Imagen del Producto</CardTitle>
+                <CardTitle>Imagen principal del producto</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <Label htmlFor="imagen">URL de imagen (opcional)</Label>
-                  <div className="flex items-center gap-2">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="imagen-file">Subir imagen</Label>
                     <Input
-                      id="imagen"
-                      placeholder="https://..."
-                      value={formData.imagen}
-                      onChange={(event) => setFormData({ ...formData, imagen: event.target.value })}
+                      id="imagen-file"
+                      type="file"
+                      accept="image/*"
+                      disabled={uploadingImage}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0]
+                        if (!file) return
+                        setUploadingImage(true)
+                        try {
+                          const { url } = await uploadProductImage(file, {
+                            productCode: formData.codigo,
+                          })
+                          setFormData((prev) => ({ ...prev, imagen: url }))
+                          toast({ title: "Imagen subida", description: "La imagen se almacenó correctamente." })
+                        } catch (error) {
+                          console.error("Error subiendo imagen", error)
+                          toast({
+                            title: "No se pudo subir la imagen",
+                            description: error instanceof Error ? error.message : "Intenta con otro archivo",
+                            variant: "destructive",
+                          })
+                        } finally {
+                          setUploadingImage(false)
+                          event.target.value = ""
+                        }
+                      }}
                     />
-                    {formData.imagen && (
-                      <div className="relative h-16 w-16 overflow-hidden rounded border">
-                        <Image
-                          src={formData.imagen}
-                          alt="Previsualización"
-                          fill
-                          sizes="64px"
-                          loading="lazy"
-                          className="object-cover"
-                        />
-                      </div>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Selecciona una imagen desde tu dispositivo. Se cargará automáticamente a Supabase Storage.
+                    </p>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="imagen">URL de imagen (opcional)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="imagen"
+                        placeholder="https://..."
+                        value={formData.imagen}
+                        onChange={(event) => setFormData({ ...formData, imagen: event.target.value })}
+                      />
+                      {formData.imagen && (
+                        <div className="relative h-16 w-16 overflow-hidden rounded border">
+                          <Image
+                            src={formData.imagen}
+                            alt="Previsualización"
+                            fill
+                            sizes="64px"
+                            loading="lazy"
+                            className="object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Puedes pegar una URL manualmente o utilizar la opción de subir imagen.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Imágenes de referencia para reconocimiento</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reference-files">Subir imágenes de referencia</Label>
+                  <Input
+                    id="reference-files"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={guardando || uploadingImage || uploadingReferences}
+                    onChange={handleReferenceFilesChange}
+                  />
                   <p className="text-xs text-muted-foreground">
-                    Sube la imagen a tu almacenamiento preferido y pega aquí la URL pública.
+                    Estas imágenes se utilizan exclusivamente para el reconocimiento visual. Puedes añadir varias vistas del
+                    producto (perfil, suela, detalles, etc.).
                   </p>
                 </div>
+
+                {referenceDrafts.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Imágenes listas para procesar</Label>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      {referenceDrafts.map((draft, index) => (
+                        <div key={`${draft.preview}-${index}`} className="flex flex-col gap-2">
+                          <div className="relative h-24 w-full overflow-hidden rounded border">
+                            <Image
+                              src={draft.preview}
+                              alt={`Referencia ${index + 1}`}
+                              fill
+                              sizes="96px"
+                              className="object-cover"
+                              unoptimized
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleRemoveReferenceDraft(index)}
+                            disabled={guardando || uploadingReferences}
+                          >
+                            Quitar
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <div className="flex justify-end gap-4">
               <Link href="/admin/productos">
-                <Button variant="outline" type="button" disabled={guardando}>
+                <Button variant="outline" type="button" disabled={guardando || uploadingReferences}>
                   Cancelar
                 </Button>
               </Link>
               <Button
                 type="submit"
-                disabled={guardando || (!cargandoCategorias && categorias.length === 0)}
+                disabled={
+                  guardando ||
+                  uploadingImage ||
+                  uploadingReferences ||
+                  (!cargandoCategorias && categorias.length === 0)
+                }
               >
-                {guardando ? "Guardando..." : "Guardar Producto"}
+                {guardando || uploadingReferences ? "Procesando..." : "Guardar Producto"}
               </Button>
             </div>
           </div>

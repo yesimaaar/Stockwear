@@ -2,17 +2,20 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { Fragment, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
-import {
+import { useRouter, useSearchParams } from "next/navigation"
+import { Fragment, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import * as LucideIcons from "lucide-react"
+const {
   Package,
   Plus,
-  Search,
   ArrowLeft,
-  AlertTriangle,
+  TriangleAlert,
   ChevronDown,
   ChevronUp,
-  SlidersHorizontal,
-} from "lucide-react"
+  Edit,
+  Trash2,
+  X,
+} = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -42,15 +45,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetTrigger,
-} from "@/components/ui/sheet"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -60,8 +54,29 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
-import type { Categoria } from "@/lib/types"
+import { InventarioService } from "@/lib/services/inventario-service"
+import { uploadProductImage } from "@/lib/services/product-image-service"
+import {
+  deleteReferenceImage,
+  regenerateProductEmbeddings,
+  uploadReferenceImage,
+} from "@/lib/services/product-reference-service"
+import type { Almacen, Categoria, ProductoReferenceImage, Talla } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group"
 
 type EstadoFiltro = "todos" | "activo" | "inactivo"
 type CategoriaFiltro = "todas" | string
@@ -87,24 +102,64 @@ const getDefaultNuevoProducto = () => ({
 
 type NuevoProductoForm = ReturnType<typeof getDefaultNuevoProducto>
 
+type ReferenceDraft = { file: File; preview: string }
+
+type DeleteMode = "inactive" | "hard"
+
+const STOCK_ALMACEN_NONE_VALUE = "none" as const
+const STOCK_TALLA_NONE_VALUE = "none" as const
+
+type StockFormEntry = {
+  almacenId: string
+  tallaId: string
+  cantidad: string
+}
+
+const createEmptyStockEntry = (): StockFormEntry => ({
+  almacenId: "",
+  tallaId: STOCK_TALLA_NONE_VALUE,
+  cantidad: "",
+})
+
 export default function ProductosPage() {
   const { toast } = useToast()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [productos, setProductos] = useState<ProductoConStock[]>([])
   const [filteredProductos, setFilteredProductos] = useState<ProductoConStock[]>([])
-  const [searchInput, setSearchInput] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState(() => (searchParams.get("q") ?? "").trim())
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [filters, setFilters] = useState<Filtros>(getDefaultFiltros)
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
-  const [draftFilters, setDraftFilters] = useState<Filtros>(getDefaultFiltros)
+  const [filters] = useState<Filtros>(getDefaultFiltros)
   const [formOpen, setFormOpen] = useState(false)
   const [savingProducto, setSavingProducto] = useState(false)
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [loadingCategorias, setLoadingCategorias] = useState(true)
+  const [almacenesActivos, setAlmacenesActivos] = useState<Almacen[]>([])
+  const [tallasActivas, setTallasActivas] = useState<Talla[]>([])
+  const [loadingStockCatalogos, setLoadingStockCatalogos] = useState(true)
   const [nuevoProducto, setNuevoProducto] = useState<NuevoProductoForm>(getDefaultNuevoProducto)
-
+  const [nuevoStockEntries, setNuevoStockEntries] = useState<StockFormEntry[]>([])
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ProductoConStock | null>(null)
+  const [deleteMode, setDeleteMode] = useState<DeleteMode>("inactive")
+  const [deletingProducto, setDeletingProducto] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editForm, setEditForm] = useState<NuevoProductoForm | null>(null)
+  const [editTarget, setEditTarget] = useState<ProductoConStock | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [uploadingEditImage, setUploadingEditImage] = useState(false)
+  const [uploadingNewImage, setUploadingNewImage] = useState(false)
+  const [newReferenceDrafts, setNewReferenceDrafts] = useState<ReferenceDraft[]>([])
+  const [uploadingNewReferences, setUploadingNewReferences] = useState(false)
+  const [editReferenceDrafts, setEditReferenceDrafts] = useState<ReferenceDraft[]>([])
+  const [uploadingEditReferences, setUploadingEditReferences] = useState(false)
+  const [editReferenceImages, setEditReferenceImages] = useState<ProductoReferenceImage[]>([])
+  const [editStockEntries, setEditStockEntries] = useState<StockFormEntry[]>([])
+  const [removingReferenceId, setRemovingReferenceId] = useState<number | null>(null)
+  const [regeneratingEmbeddings, setRegeneratingEmbeddings] = useState(false)
+  const [lowStockDismissed, setLowStockDismissed] = useState(false)
   const pageSize = 10
 
   const cargarProductos = useCallback(async () => {
@@ -118,9 +173,491 @@ export default function ProductosPage() {
     }
   }, [])
 
+  const handleDeleteDialogChange = (open: boolean) => {
+    setDeleteConfirmOpen(open)
+    if (!open) {
+      setDeleteTarget(null)
+      setDeletingProducto(false)
+      setDeleteMode("inactive")
+    }
+  }
+
+  const abrirConfirmacionEliminar = (producto: ProductoConStock) => {
+    setDeleteTarget(producto)
+    setDeleteMode("inactive")
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmarEliminarProducto = async () => {
+    if (!deleteTarget) return
+    const producto = deleteTarget
+    setDeletingProducto(true)
+    const exito = await ProductoService.delete(producto.id, {
+      mode: deleteMode,
+    })
+    setDeletingProducto(false)
+    if (!exito) {
+      toast({
+        title: "No se pudo eliminar",
+        description:
+          deleteMode === "hard"
+            ? "No fue posible eliminar el producto de forma definitiva."
+            : "Ocurrió un error al actualizar el estado del producto.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    toast({
+      title: deleteMode === "hard" ? "Producto eliminado" : "Producto actualizado",
+      description:
+        deleteMode === "hard"
+          ? `${producto.nombre} se eliminó definitivamente del inventario.`
+          : `${producto.nombre} fue marcado como inactivo`,
+    })
+
+    handleDeleteDialogChange(false)
+    await cargarProductos()
+  }
+
+  const handleEditDialogChange = (open: boolean) => {
+    setEditDialogOpen(open)
+    if (!open) {
+      setEditForm(null)
+      setEditTarget(null)
+      setSavingEdit(false)
+      editReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+      setEditReferenceDrafts([])
+      setEditReferenceImages([])
+      setUploadingEditReferences(false)
+      setRemovingReferenceId(null)
+      setRegeneratingEmbeddings(false)
+      setEditStockEntries([])
+    }
+  }
+
+  const mapProductoToForm = useCallback((producto: ProductoConStock): NuevoProductoForm => ({
+    codigo: producto.codigo,
+    nombre: producto.nombre,
+    categoriaId: String(producto.categoriaId),
+    precio: String(producto.precio),
+    descuento: String(producto.descuento ?? 0),
+    proveedor: producto.proveedor ?? "",
+    stockMinimo: String(producto.stockMinimo),
+    descripcion: producto.descripcion ?? "",
+    imagen: producto.imagen ?? "",
+  }), [])
+
+  const mapReferenceRecord = (record: any): ProductoReferenceImage | null => {
+    const rawId = record?.id
+    const parsedId =
+      typeof rawId === "number"
+        ? rawId
+        : typeof rawId === "string"
+          ? Number(rawId)
+          : Number.NaN
+
+    if (!Number.isFinite(parsedId) || parsedId <= 0) {
+      console.warn("Referencia recibida sin identificador válido", record)
+      return null
+    }
+
+    const productIdCandidate =
+      typeof record?.productoId === "number"
+        ? record.productoId
+        : typeof record?.productoId === "string"
+          ? Number(record.productoId)
+          : undefined
+
+    return {
+      id: parsedId,
+      productoId: productIdCandidate && Number.isFinite(productIdCandidate) ? productIdCandidate : editTarget?.id ?? 0,
+      url: record?.url ?? "",
+      path: record?.path ?? "",
+      bucket: record?.bucket ?? null,
+      filename: record?.filename ?? null,
+      mimeType: record?.mimeType ?? null,
+      size:
+        typeof record?.size === "number"
+          ? record.size
+          : record?.size != null
+            ? Number(record.size)
+            : null,
+      createdAt: record?.createdAt ?? new Date().toISOString(),
+      updatedAt: record?.updatedAt ?? new Date().toISOString(),
+    }
+  }
+
+  const buildPayloadFromForm = (form: NuevoProductoForm) => {
+    if (!form.categoriaId) {
+      toast({
+        title: "Selecciona una categoría",
+        description: "Todos los productos deben pertenecer a una categoría.",
+        variant: "destructive",
+      })
+      return null
+    }
+
+    const precio = Number(form.precio)
+    const descuento = form.descuento ? Number(form.descuento) : 0
+    const stockMinimo = Number(form.stockMinimo)
+    const categoriaId = Number(form.categoriaId)
+
+    if (Number.isNaN(precio) || precio <= 0) {
+      toast({
+        title: "Precio inválido",
+        description: "Ingresa un precio mayor a cero.",
+        variant: "destructive",
+      })
+      return null
+    }
+
+    if (Number.isNaN(stockMinimo) || stockMinimo < 0) {
+      toast({
+        title: "Stock mínimo inválido",
+        description: "El stock mínimo no puede ser negativo.",
+        variant: "destructive",
+      })
+      return null
+    }
+
+    return {
+      codigo: form.codigo.trim(),
+      nombre: form.nombre.trim(),
+      categoriaId,
+      descripcion: form.descripcion.trim() || null,
+      precio,
+      descuento: Number.isNaN(descuento) ? 0 : descuento,
+      proveedor: form.proveedor.trim() || null,
+      imagen: form.imagen.trim() || null,
+      stockMinimo,
+    }
+  }
+
+    const getAlmacenNombre = (almacenId: number | null) => {
+      if (almacenId == null) return "Sin almacén específico"
+      return (
+        almacenesActivos.find((almacen) => almacen.id === almacenId)?.nombre ??
+        `Almacén #${almacenId}`
+      )
+    }
+
+    const getTallaNombre = (tallaId: number | null) => {
+      if (tallaId == null) return "Sin talla asignada"
+      return tallasActivas.find((talla) => talla.id === tallaId)?.nombre ?? `Talla #${tallaId}`
+    }
+
+    const describeStockDestino = (almacenId: number | null, tallaId: number | null) => {
+      const almacen = getAlmacenNombre(almacenId)
+      const talla = getTallaNombre(tallaId)
+      return tallaId == null ? almacen : `${almacen} · ${talla}`
+    }
+
+    const normalizeStockEntries = (
+      entries: StockFormEntry[],
+      options: { allowZero: boolean },
+    ): Array<{ almacenId: number | null; tallaId: number | null; cantidad: number }> | null => {
+      const aggregated = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
+
+      for (const entry of entries) {
+        const rawCantidad = entry.cantidad.trim()
+        const hasCantidad = rawCantidad.length > 0
+        const hasAlmacen = entry.almacenId.trim().length > 0
+        const tallaSeleccionada = entry.tallaId && entry.tallaId !== STOCK_TALLA_NONE_VALUE
+
+        if (!hasCantidad && !hasAlmacen && !tallaSeleccionada) {
+          continue
+        }
+
+        if (!hasAlmacen) {
+          toast({
+            title: "Selecciona un almacén",
+            description: "Elige dónde se ubicará este stock.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        if (!hasCantidad) {
+          toast({
+            title: "Cantidad requerida",
+            description: "Escribe cuántas unidades registrarás para el producto.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        const cantidad = Number(rawCantidad)
+        if (!Number.isFinite(cantidad) || cantidad < 0) {
+          toast({
+            title: "Cantidad inválida",
+            description: "Las unidades deben ser un número mayor o igual a cero.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        if (!Number.isInteger(cantidad)) {
+          toast({
+            title: "Cantidad inválida",
+            description: "Las unidades deben ser un número entero.",
+            variant: "destructive",
+          })
+          return null
+        }
+
+        if (!options.allowZero && cantidad === 0) {
+          continue
+        }
+
+        let almacenId: number | null
+        if (entry.almacenId === STOCK_ALMACEN_NONE_VALUE) {
+          almacenId = null
+        } else {
+          const parsedAlmacen = Number(entry.almacenId)
+          if (!Number.isFinite(parsedAlmacen) || parsedAlmacen <= 0) {
+            toast({
+              title: "Almacén inválido",
+              description: "Selecciona un almacén válido para registrar el stock.",
+              variant: "destructive",
+            })
+            return null
+          }
+          almacenId = parsedAlmacen
+        }
+
+        let tallaId: number | null
+        if (!entry.tallaId || entry.tallaId === STOCK_TALLA_NONE_VALUE) {
+          tallaId = null
+        } else {
+          const parsedTalla = Number(entry.tallaId)
+          if (!Number.isFinite(parsedTalla) || parsedTalla <= 0) {
+            toast({
+              title: "Talla inválida",
+              description: "Selecciona una talla válida o deja la opción sin talla.",
+              variant: "destructive",
+            })
+            return null
+          }
+          tallaId = parsedTalla
+        }
+
+        const key = `${almacenId ?? "none"}-${tallaId ?? "none"}`
+        const current = aggregated.get(key)
+        if (current) {
+          aggregated.set(key, {
+            almacenId,
+            tallaId,
+            cantidad: current.cantidad + cantidad,
+          })
+        } else {
+          aggregated.set(key, { almacenId, tallaId, cantidad })
+        }
+      }
+
+      return Array.from(aggregated.values())
+    }
+
+    const addNuevoStockEntry = () => {
+      setNuevoStockEntries((prev) => [...prev, createEmptyStockEntry()])
+    }
+
+    const updateNuevoStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
+      setNuevoStockEntries((prev) =>
+        prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
+      )
+    }
+
+    const removeNuevoStockEntry = (index: number) => {
+      setNuevoStockEntries((prev) => prev.filter((_, idx) => idx !== index))
+    }
+
+    const addEditStockEntry = () => {
+      setEditStockEntries((prev) => [...prev, createEmptyStockEntry()])
+    }
+
+    const updateEditStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
+      setEditStockEntries((prev) =>
+        prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
+      )
+    }
+
+    const removeEditStockEntry = (index: number) => {
+      setEditStockEntries((prev) => prev.filter((_, idx) => idx !== index))
+    }
+
+  const handleNewReferenceFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
+      return
+    }
+
+    const drafts = files.map<ReferenceDraft>((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }))
+
+    setNewReferenceDrafts((prev) => [...prev, ...drafts])
+    event.target.value = ""
+  }
+
+  const handleRemoveNewReferenceDraft = (index: number) => {
+    setNewReferenceDrafts((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(index, 1)
+      if (removed) {
+        URL.revokeObjectURL(removed.preview)
+      }
+      return next
+    })
+  }
+
+  const handleEditReferenceFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
+      return
+    }
+
+    const drafts = files.map<ReferenceDraft>((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }))
+
+    setEditReferenceDrafts((prev) => [...prev, ...drafts])
+    event.target.value = ""
+  }
+
+  const handleRemoveEditReferenceDraft = (index: number) => {
+    setEditReferenceDrafts((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(index, 1)
+      if (removed) {
+        URL.revokeObjectURL(removed.preview)
+      }
+      return next
+    })
+  }
+
+  const handleDeleteReference = async (referenceId: number) => {
+    try {
+      const safeId = Number(referenceId)
+      if (!Number.isFinite(safeId) || safeId <= 0) {
+        toast({
+          title: "No se pudo eliminar la referencia",
+          description: "El identificador de la imagen no es válido.",
+          variant: "destructive",
+        })
+        return
+      }
+      setRemovingReferenceId(safeId)
+      await deleteReferenceImage(safeId)
+      setEditReferenceImages((prev) => prev.filter((item) => item.id !== safeId))
+      setEditTarget((prev) =>
+        prev
+          ? {
+              ...prev,
+              referenceImages: prev.referenceImages?.filter((item) => item.id !== safeId),
+            }
+          : prev,
+      )
+      toast({
+        title: "Referencia eliminada",
+        description: "La imagen de referencia se eliminó correctamente.",
+      })
+    } catch (error) {
+      console.error("Error eliminando imagen de referencia", error)
+      toast({
+        title: "No se pudo eliminar la referencia",
+        description: error instanceof Error ? error.message : "Intenta nuevamente",
+        variant: "destructive",
+      })
+    } finally {
+      setRemovingReferenceId(null)
+    }
+  }
+
+  const handleRegenerateEmbeddings = async () => {
+    if (!editTarget) return
+    try {
+      setRegeneratingEmbeddings(true)
+      const result = await regenerateProductEmbeddings(editTarget.id)
+      toast({
+        title: "Embeddings regenerados",
+        description:
+          result.processed === 0
+            ? "No se generaron embeddings porque no hay referencias."
+            : `${result.processed} referencia${result.processed === 1 ? "" : "s"} procesada${
+                result.processed === 1 ? "" : "s"
+              } correctamente`,
+      })
+      if (Array.isArray((result as any)?.failures) && (result as any).failures.length > 0) {
+        const failures = (result as any).failures as Array<{ id: number; reason: string }>
+        toast({
+          title: "Algunas referencias no generaron embeddings",
+          description: failures
+            .slice(0, 3)
+            .map((failure) => `Referencia ${failure.id}: ${failure.reason}`)
+            .join(" | "),
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error regenerando embeddings", error)
+      toast({
+        title: "No se pudieron regenerar los embeddings",
+        description: error instanceof Error ? error.message : "Intenta nuevamente",
+        variant: "destructive",
+      })
+    } finally {
+      setRegeneratingEmbeddings(false)
+    }
+  }
+
+  const abrirEdicionProducto = useCallback((producto: ProductoConStock) => {
+    setEditTarget(producto)
+    setEditForm(mapProductoToForm(producto))
+    setEditReferenceImages(producto.referenceImages ?? [])
+    setEditReferenceDrafts((prev) => {
+      prev.forEach((draft) => URL.revokeObjectURL(draft.preview))
+      return []
+    })
+    setEditStockEntries(
+      (producto.stockPorTalla ?? []).map((detalle) => ({
+        almacenId:
+          detalle.almacenId == null
+            ? STOCK_ALMACEN_NONE_VALUE
+            : String(detalle.almacenId),
+        tallaId:
+          detalle.tallaId == null
+            ? STOCK_TALLA_NONE_VALUE
+            : String(detalle.tallaId),
+        cantidad: String(detalle.cantidad ?? 0),
+      }))
+    )
+    setRemovingReferenceId(null)
+    setRegeneratingEmbeddings(false)
+    setEditDialogOpen(true)
+  }, [mapProductoToForm])
+
+  const updateEditFormField = <K extends keyof NuevoProductoForm>(field: K, value: NuevoProductoForm[K]) => {
+    setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev))
+  }
+
   useEffect(() => {
     void cargarProductos()
   }, [cargarProductos])
+
+  useEffect(() => {
+    return () => {
+      newReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+    }
+  }, [newReferenceDrafts])
+
+  useEffect(() => {
+    return () => {
+      editReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+    }
+  }, [editReferenceDrafts])
 
   useEffect(() => {
     let active = true
@@ -155,15 +692,46 @@ export default function ProductosPage() {
     }
   }, [toast])
 
-  const ejecutarBusqueda = useCallback(() => {
-    setSearchQuery(searchInput.trim())
-  }, [searchInput])
+  useEffect(() => {
+    let active = true
+
+    const loadStockCatalogos = async () => {
+      setLoadingStockCatalogos(true)
+      try {
+        const [tallas, almacenes] = await Promise.all([
+          InventarioService.getTallasActivas(),
+          InventarioService.getAlmacenesActivos(),
+        ])
+        if (!active) return
+        setTallasActivas(tallas)
+        setAlmacenesActivos(almacenes)
+      } catch (error) {
+        if (active) {
+          console.error("Error cargando catálogos de inventario", error)
+          toast({
+            title: "No se cargaron los catálogos",
+            description: "Actualiza la página e inténtalo nuevamente.",
+            variant: "destructive",
+          })
+        }
+      } finally {
+        if (active) {
+          setLoadingStockCatalogos(false)
+        }
+      }
+    }
+
+    void loadStockCatalogos()
+
+    return () => {
+      active = false
+    }
+  }, [toast])
 
   useEffect(() => {
-    if (!filterSheetOpen) {
-      setDraftFilters({ ...filters })
-    }
-  }, [filterSheetOpen, filters])
+    const nextQuery = (searchParams.get("q") ?? "").trim()
+    setSearchQuery((current) => (current === nextQuery ? current : nextQuery))
+  }, [searchParams])
 
   useEffect(() => {
     const normalized = searchQuery.toLowerCase()
@@ -220,22 +788,11 @@ export default function ProductosPage() {
     [productosConInfo],
   )
 
-  const availableCategories = useMemo(() => {
-    const unique = new Set<string>()
-    productos.forEach((producto) => {
-      if (producto.categoria) {
-        unique.add(producto.categoria)
-      }
-    })
-    return Array.from(unique).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }))
-  }, [productos])
-
-  const activeFiltersCount = useMemo(() => {
-    let count = 0
-    if (filters.estado !== "todos") count += 1
-    if (filters.categoria !== "todas") count += 1
-    return count
-  }, [filters])
+  useEffect(() => {
+    if (totalStockBajo > 0) {
+      setLowStockDismissed(false)
+    }
+  }, [totalStockBajo])
 
   const pageCount = useMemo(() => {
     return Math.max(1, Math.ceil(productosConInfo.length / pageSize))
@@ -269,60 +826,27 @@ export default function ProductosPage() {
     if (!open) {
       setSavingProducto(false)
       setNuevoProducto(getDefaultNuevoProducto())
+      newReferenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview))
+      setNewReferenceDrafts([])
+      setUploadingNewReferences(false)
+      setNuevoStockEntries([])
     }
   }
 
   const onSubmitNuevoProducto = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!nuevoProducto.categoriaId) {
-      toast({
-        title: "Selecciona una categoría",
-        description: "Todos los productos deben pertenecer a una categoría.",
-        variant: "destructive",
-      })
-      return
-    }
+    const payload = buildPayloadFromForm(nuevoProducto)
+    if (!payload) return
 
-    const precio = Number(nuevoProducto.precio)
-    const descuento = nuevoProducto.descuento ? Number(nuevoProducto.descuento) : 0
-    const stockMinimo = Number(nuevoProducto.stockMinimo)
-    const categoriaId = Number(nuevoProducto.categoriaId)
-
-    if (Number.isNaN(precio) || precio <= 0) {
-      toast({
-        title: "Precio inválido",
-        description: "Ingresa un precio mayor a cero.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (Number.isNaN(stockMinimo) || stockMinimo < 0) {
-      toast({
-        title: "Stock mínimo inválido",
-        description: "El stock mínimo no puede ser negativo.",
-        variant: "destructive",
-      })
+    const normalizedNewStock = normalizeStockEntries(nuevoStockEntries, { allowZero: false })
+    if (normalizedNewStock === null) {
       return
     }
 
     setSavingProducto(true)
     try {
-      const payload = {
-        codigo: nuevoProducto.codigo.trim(),
-        nombre: nuevoProducto.nombre.trim(),
-        categoriaId,
-        descripcion: nuevoProducto.descripcion.trim() || null,
-        precio,
-        descuento: Number.isNaN(descuento) ? 0 : descuento,
-        proveedor: nuevoProducto.proveedor.trim() || null,
-        imagen: nuevoProducto.imagen.trim() || null,
-        stockMinimo,
-        estado: "activo" as const,
-      }
-
-      const creado = await ProductoService.create(payload)
+      const creado = await ProductoService.create({ ...payload, estado: "activo" as const })
 
       if (!creado) {
         toast({
@@ -334,10 +858,106 @@ export default function ProductosPage() {
         return
       }
 
+      let referenceSuccess = 0
+      const referenceErrors: Array<{ name: string; message: string }> = []
+      let stockSuccess = 0
+      const stockErrors: string[] = []
+      if (newReferenceDrafts.length > 0) {
+        setUploadingNewReferences(true)
+        try {
+          for (const draft of newReferenceDrafts) {
+            try {
+              const response = await uploadReferenceImage(creado.id, draft.file, {
+                productCode: nuevoProducto.codigo,
+              })
+              if (!response?.embedding) {
+                referenceErrors.push({
+                  name: draft.file.name,
+                  message:
+                    response?.embeddingError ??
+                    response?.message ??
+                    "La imagen se guardó, pero no se pudo generar el embedding automáticamente.",
+                })
+              }
+              referenceSuccess += 1
+            } catch (uploadError) {
+              console.error("Error subiendo imagen de referencia", uploadError)
+              referenceErrors.push({
+                name: draft.file.name,
+                message:
+                  uploadError instanceof Error ? uploadError.message : "No se pudo procesar la imagen de referencia",
+              })
+            } finally {
+              URL.revokeObjectURL(draft.preview)
+            }
+          }
+        } finally {
+          setNewReferenceDrafts([])
+          setUploadingNewReferences(false)
+        }
+      }
+
       toast({
         title: "Producto registrado",
         description: `${creado.nombre} se añadió al inventario`,
       })
+
+      if (normalizedNewStock.length > 0) {
+        for (const entry of normalizedNewStock) {
+          try {
+            await InventarioService.registrarEntrada({
+              productoId: creado.id,
+              tallaId: entry.tallaId,
+              almacenId: entry.almacenId,
+              cantidad: entry.cantidad,
+              motivo: "Registro inicial desde producto",
+            })
+            stockSuccess += 1
+          } catch (stockError) {
+            console.error("Error registrando stock inicial", stockError)
+            stockErrors.push(
+              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${
+                stockError instanceof Error ? stockError.message : "No se pudo guardar el stock inicial"
+              }`,
+            )
+          }
+        }
+      }
+
+      if (referenceSuccess > 0) {
+        toast({
+          title: referenceSuccess === 1 ? "Imagen de referencia registrada" : "Imágenes de referencia registradas",
+          description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${
+            referenceSuccess > 1 ? "s" : ""
+          } correctamente`,
+        })
+      }
+
+      if (stockSuccess > 0) {
+        toast({
+          title: stockSuccess === 1 ? "Stock inicial registrado" : "Stock inicial registrado",
+          description: `${stockSuccess} asignación${stockSuccess === 1 ? "" : "es"} de inventario aplicada correctamente`,
+        })
+      }
+
+      if (referenceErrors.length > 0) {
+        toast({
+          title: "Algunas referencias no se procesaron",
+          description: referenceErrors
+            .map((item) => `${item.name}: ${item.message}`)
+            .slice(0, 3)
+            .join(" | "),
+          variant: "destructive",
+        })
+      }
+
+      if (stockErrors.length > 0) {
+        toast({
+          title: "No se registró parte del stock",
+          description: stockErrors.slice(0, 3).join(" | "),
+          variant: "destructive",
+        })
+      }
 
       handleDialogOpenChange(false)
       await cargarProductos()
@@ -353,11 +973,226 @@ export default function ProductosPage() {
     }
   }
 
+  const onSubmitEditarProducto = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editForm || !editTarget) return
+
+    const payload = buildPayloadFromForm(editForm)
+    if (!payload) return
+    const normalizedEditStock = normalizeStockEntries(editStockEntries, { allowZero: true })
+    if (normalizedEditStock === null) {
+      return
+    }
+
+    setSavingEdit(true)
+    try {
+      const actualizado = await ProductoService.update(editTarget.id, payload)
+      if (!actualizado) {
+        toast({
+          title: "No se pudo actualizar",
+          description: "Supabase devolvió un error al guardar los cambios.",
+          variant: "destructive",
+        })
+        setSavingEdit(false)
+        return
+      }
+
+      let referenceSuccess = 0
+      const referenceErrors: Array<{ name: string; message: string }> = []
+      const newReferenceRecords: ProductoReferenceImage[] = []
+      let stockAdjustSuccess = 0
+      const stockAdjustErrors: string[] = []
+
+      if (editReferenceDrafts.length > 0) {
+        setUploadingEditReferences(true)
+        try {
+          for (const draft of editReferenceDrafts) {
+            try {
+              const response = await uploadReferenceImage(editTarget.id, draft.file, {
+                productCode: editForm.codigo,
+              })
+              if (response?.referenceImage) {
+                const mapped = mapReferenceRecord(response.referenceImage)
+                if (mapped) {
+                  newReferenceRecords.push(mapped)
+                } else {
+                  referenceErrors.push({
+                    name: draft.file.name,
+                    message: "La referencia se registró pero no devolvió un identificador válido.",
+                  })
+                }
+              }
+              if (!response?.embedding) {
+                referenceErrors.push({
+                  name: draft.file.name,
+                  message:
+                    response?.embeddingError ??
+                    response?.message ??
+                    "La imagen se guardó, pero no se pudo generar el embedding automáticamente.",
+                })
+              }
+              referenceSuccess += 1
+            } catch (uploadError) {
+              console.error("Error subiendo imagen de referencia", uploadError)
+              referenceErrors.push({
+                name: draft.file.name,
+                message:
+                  uploadError instanceof Error ? uploadError.message : "No se pudo procesar la imagen de referencia",
+              })
+            } finally {
+              URL.revokeObjectURL(draft.preview)
+            }
+          }
+        } finally {
+          setEditReferenceDrafts([])
+          setUploadingEditReferences(false)
+        }
+      }
+
+      if (newReferenceRecords.length > 0) {
+        setEditReferenceImages((prev) => [...prev, ...newReferenceRecords])
+        setEditTarget((prev) =>
+          prev
+            ? {
+                ...prev,
+                referenceImages: [...(prev.referenceImages ?? []), ...newReferenceRecords],
+              }
+            : prev,
+        )
+      }
+
+      toast({
+        title: "Producto actualizado",
+        description: `${payload.nombre} se guardó correctamente`,
+      })
+
+      if (referenceSuccess > 0) {
+        toast({
+          title: referenceSuccess === 1 ? "Referencia registrada" : "Referencias registradas",
+          description: `${referenceSuccess} referencia${referenceSuccess === 1 ? "" : "s"} procesada${
+            referenceSuccess === 1 ? "" : "s"
+          } correctamente`,
+        })
+      }
+
+      if (referenceErrors.length > 0) {
+        toast({
+          title: "Algunas referencias no se procesaron",
+          description: referenceErrors
+            .map((item) => `${item.name}: ${item.message}`)
+            .slice(0, 3)
+            .join(" | "),
+          variant: "destructive",
+        })
+      }
+
+      if (normalizedEditStock.length > 0 || (editTarget.stockPorTalla?.length ?? 0) > 0) {
+        const existingMap = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
+        for (const detalle of editTarget.stockPorTalla ?? []) {
+          const key = `${detalle.almacenId ?? "none"}-${detalle.tallaId ?? "none"}`
+          existingMap.set(key, {
+            almacenId: detalle.almacenId ?? null,
+            tallaId: detalle.tallaId ?? null,
+            cantidad: detalle.cantidad ?? 0,
+          })
+        }
+
+        const desiredMap = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
+        for (const entry of normalizedEditStock) {
+          const key = `${entry.almacenId ?? "none"}-${entry.tallaId ?? "none"}`
+          desiredMap.set(key, entry)
+        }
+
+        for (const [key, existing] of existingMap.entries()) {
+          const desired = desiredMap.get(key)
+          const desiredCantidad = desired?.cantidad ?? 0
+          const diff = desiredCantidad - existing.cantidad
+          if (diff === 0) {
+            desiredMap.delete(key)
+            continue
+          }
+          try {
+            await InventarioService.registrarAjuste({
+              tipo: diff > 0 ? "entrada" : "salida",
+              productoId: editTarget.id,
+              tallaId: existing.tallaId,
+              almacenId: existing.almacenId,
+              cantidad: Math.abs(diff),
+              motivo: "Ajuste desde formulario de producto",
+            })
+            stockAdjustSuccess += 1
+          } catch (stockError) {
+            console.error("Error ajustando stock del producto", stockError)
+            stockAdjustErrors.push(
+              `${describeStockDestino(existing.almacenId, existing.tallaId)}: ${
+                stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
+              }`,
+            )
+          }
+          desiredMap.delete(key)
+        }
+
+        for (const entry of desiredMap.values()) {
+          if (entry.cantidad === 0) {
+            continue
+          }
+          try {
+            await InventarioService.registrarAjuste({
+              tipo: "entrada",
+              productoId: editTarget.id,
+              tallaId: entry.tallaId,
+              almacenId: entry.almacenId,
+              cantidad: entry.cantidad,
+              motivo: "Ajuste desde formulario de producto",
+            })
+            stockAdjustSuccess += 1
+          } catch (stockError) {
+            console.error("Error registrando nuevo stock", stockError)
+            stockAdjustErrors.push(
+              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${
+                stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
+              }`,
+            )
+          }
+        }
+      }
+
+      if (stockAdjustSuccess > 0) {
+        toast({
+          title: stockAdjustSuccess === 1 ? "Stock actualizado" : "Stock actualizado",
+          description: `${stockAdjustSuccess} ajuste${stockAdjustSuccess === 1 ? "" : "s"} de inventario aplicado${
+            stockAdjustSuccess === 1 ? "" : "s"
+          } correctamente`,
+        })
+      }
+
+      if (stockAdjustErrors.length > 0) {
+        toast({
+          title: "No se actualizaron todos los ajustes",
+          description: stockAdjustErrors.slice(0, 3).join(" | "),
+          variant: "destructive",
+        })
+      }
+
+      handleEditDialogChange(false)
+      await cargarProductos()
+    } catch (error) {
+      console.error("Error actualizando producto", error)
+      toast({
+        title: "Error inesperado",
+        description: "Revisa la consola para más detalles.",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
-  <main className="mx-auto w-full max-w-[88rem] px-3 py-5 space-y-4 sm:px-4 sm:py-6 sm:space-y-5">
+  <main className="mx-auto w-full max-w-[88rem] px-3 py-3 space-y-4 sm:px-4 sm:py-4 sm:space-y-5">
         <div className="rounded-2xl border border-border bg-card/70 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-5 sm:py-3">
             <div className="flex items-center gap-3">
               <Link href="/admin">
                 <Button
@@ -387,143 +1222,30 @@ export default function ProductosPage() {
               Nuevo producto
             </Button>
           </div>
-
-          <div className="border-t border-border/80 px-4 py-3 sm:px-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-1 gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={searchInput}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      setSearchInput(value)
-                      if (value.trim().length === 0) {
-                        setSearchQuery("")
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault()
-                        ejecutarBusqueda()
-                      }
-                    }}
-                    placeholder="Buscar por nombre, código o almacén..."
-                    className="h-11 rounded-xl border-border bg-background/70 pl-10"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => ejecutarBusqueda()}
-                  type="button"
-                  className="h-11 rounded-xl border-border px-4"
-                >
-                  <Search className="mr-2 h-4 w-4" />
-                  Buscar
-                </Button>
-                <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-                  <SheetTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={cn(
-                        "h-11 min-w-[120px] rounded-xl border-border px-4 font-medium gap-2",
-                        activeFiltersCount > 0 && "border-primary text-primary",
-                      )}
-                    >
-                      <SlidersHorizontal className="h-4 w-4" />
-                      Filtros
-                      {activeFiltersCount > 0 && (
-                        <Badge variant="secondary" className="ml-1 rounded-full px-2 text-xs">
-                          {activeFiltersCount}
-                        </Badge>
-                      )}
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="gap-0">
-                    <SheetHeader>
-                      <SheetTitle>Filtros</SheetTitle>
-                      <SheetDescription>Refina la lista de productos según tu necesidad.</SheetDescription>
-                    </SheetHeader>
-                    <div className="flex-1 space-y-6 overflow-y-auto px-4 pb-6">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Estado</Label>
-                        <Select
-                          value={draftFilters.estado}
-                          onValueChange={(value: EstadoFiltro) =>
-                            setDraftFilters((prev) => ({ ...prev, estado: value }))
-                          }
-                        >
-                          <SelectTrigger className="rounded-xl border-border bg-background/70">
-                            <SelectValue placeholder="Selecciona un estado" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos</SelectItem>
-                            <SelectItem value="activo">Solo activos</SelectItem>
-                            <SelectItem value="inactivo">Solo inactivos</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Categoría</Label>
-                        <Select
-                          value={draftFilters.categoria}
-                          onValueChange={(value: CategoriaFiltro) =>
-                            setDraftFilters((prev) => ({ ...prev, categoria: value }))
-                          }
-                        >
-                          <SelectTrigger className="rounded-xl border-border bg-background/70">
-                            <SelectValue placeholder="Todas" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todas">Todas</SelectItem>
-                            {availableCategories.map((categoria) => (
-                              <SelectItem key={categoria} value={categoria}>
-                                {categoria}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {availableCategories.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No hay categorías registradas aún.</p>
-                        )}
-                      </div>
-                    </div>
-                    <SheetFooter className="flex flex-col gap-2 border-t border-border/80 bg-card/70 p-4">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setDraftFilters(getDefaultFiltros())
-                          setFilters(getDefaultFiltros())
-                        }}
-                        disabled={activeFiltersCount === 0}
-                      >
-                        Limpiar filtros
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setFilters({ ...draftFilters })
-                          setFilterSheetOpen(false)
-                        }}
-                      >
-                        Aplicar filtros
-                      </Button>
-                    </SheetFooter>
-                  </SheetContent>
-                </Sheet>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {totalStockBajo > 0 && (
-          <div className="mb-6 rounded-lg bg-yellow-50 p-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
-              <p className="font-semibold text-yellow-900">
-                {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
-              </p>
+        {totalStockBajo > 0 && !lowStockDismissed && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <TriangleAlert className="h-4 w-4" />
+              </span>
+              <div className="flex-1 space-y-1">
+                <p className="font-semibold">
+                  {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
+                </p>
+                <p className="text-xs text-amber-800/80">
+                  Revisa el stock de los productos en alerta para reabastecerlos cuanto antes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLowStockDismissed(true)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-amber-700 transition hover:bg-amber-100"
+                aria-label="Cerrar alerta de stock"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         )}
@@ -582,14 +1304,15 @@ export default function ProductosPage() {
                           </TableCell>
                           <TableCell className="py-3">
                             <div className="flex items-center gap-3">
-                              <Image
-                                src={producto.imagen || "/placeholder.svg"}
-                                alt={producto.nombre}
-                                width={48}
-                                height={48}
-                                loading="lazy"
-                                className="h-12 w-12 shrink-0 rounded-md object-cover"
-                              />
+                              <div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                                <Image
+                                  src={producto.imagen || "/placeholder.svg"}
+                                  alt={producto.nombre}
+                                  fill
+                                  sizes="48px"
+                                  className="object-cover transition-transform duration-200 group-hover:scale-110"
+                                />
+                              </div>
                               <div>
                                 <p className="font-medium text-foreground">{producto.nombre}</p>
                                 <p className="text-xs text-muted-foreground">Código: {producto.codigo}</p>
@@ -621,17 +1344,31 @@ export default function ProductosPage() {
                           </TableCell>
                           <TableCell className="py-3 text-right">
                             <div className="flex justify-end gap-2">
-                              <Link href={`/admin/productos/${producto.id}`}>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                  }}
-                                >
-                                  Ver detalle
-                                </Button>
-                              </Link>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  abrirEdicionProducto(producto)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                                <span className="sr-only">Editar</span>
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  abrirConfirmacionEliminar(producto)
+                                }}
+                                disabled={deletingProducto && deleteTarget?.id === producto.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Eliminar</span>
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -643,6 +1380,55 @@ export default function ProductosPage() {
                                 <p className="text-xs text-muted-foreground">
                                   Stock mínimo configurado: {producto.stockMinimo} unidades
                                 </p>
+                              </div>
+                              <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+                                <div className="flex flex-col gap-3 rounded-lg border border-border/70 bg-card/70 p-4 sm:flex-row">
+                                  <div className="relative h-28 w-full overflow-hidden rounded-md bg-muted sm:h-32 sm:w-40">
+                                    <Image
+                                      src={producto.imagen || "/placeholder.svg"}
+                                      alt={producto.nombre}
+                                      fill
+                                      sizes="(min-width: 640px) 160px, 100vw"
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                  <div className="space-y-2 text-sm text-muted-foreground">
+                                    <p>
+                                      <span className="font-semibold text-foreground">Descripción: </span>
+                                      {producto.descripcion ? producto.descripcion : "Sin descripción"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold text-foreground">Proveedor: </span>
+                                      {producto.proveedor ? producto.proveedor : "No especificado"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold text-foreground">Creado: </span>
+                                      {new Date(producto.createdAt).toLocaleDateString("es-CO")}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="grid gap-2 rounded-lg border border-border/70 bg-card/70 p-4 text-sm">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Precio base</span>
+                                    <span className="font-semibold text-foreground">
+                                      ${producto.precio.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Descuento</span>
+                                    <span className="font-semibold text-foreground">{producto.descuento}%</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Estado</span>
+                                    <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
+                                      {producto.estado.toUpperCase()}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Stock total</span>
+                                    <span className="font-semibold text-foreground">{producto.stockTotal} u.</span>
+                                  </div>
+                                </div>
                               </div>
                               <div className="mt-3 grid gap-2 md:grid-cols-2">
                                 {producto.stockPorTalla.map((detalle, index) => {
@@ -733,6 +1519,584 @@ export default function ProductosPage() {
           </div>
         )}
       </main>
+      <Dialog open={editDialogOpen} onOpenChange={handleEditDialogChange}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar producto</DialogTitle>
+            <DialogDescription>Realiza cambios sin salir del listado.</DialogDescription>
+          </DialogHeader>
+          {editForm ? (
+            <form onSubmit={onSubmitEditarProducto} className="space-y-5">
+              <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Información básica</p>
+                    <p className="text-xs text-muted-foreground">Actualiza los datos principales del producto.</p>
+                  </header>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-codigo">Código</Label>
+                      <Input
+                        id="editar-codigo"
+                        value={editForm.codigo}
+                        onChange={(event) => updateEditFormField("codigo", event.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-nombre">Nombre</Label>
+                      <Input
+                        id="editar-nombre"
+                        value={editForm.nombre}
+                        onChange={(event) => updateEditFormField("nombre", event.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editar-descripcion">Descripción</Label>
+                    <Textarea
+                      id="editar-descripcion"
+                      value={editForm.descripcion}
+                      onChange={(event) => updateEditFormField("descripcion", event.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                </section>
+
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Categorización</p>
+                    <p className="text-xs text-muted-foreground">Gestiona la categoría y proveedor.</p>
+                  </header>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Categoría</Label>
+                      <Select
+                        value={editForm.categoriaId}
+                        onValueChange={(value) => updateEditFormField("categoriaId", value)}
+                        disabled={loadingCategorias}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              loadingCategorias
+                                ? "Cargando categorías..."
+                                : categorias.length > 0
+                                  ? "Selecciona una categoría"
+                                  : "No hay categorías activas"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categorias.map((categoria) => (
+                            <SelectItem key={categoria.id} value={String(categoria.id)}>
+                              {categoria.nombre}
+                            </SelectItem>
+                          ))}
+                          {!loadingCategorias && categorias.length === 0 && (
+                            <SelectItem value="" disabled>
+                              No hay categorías activas disponibles
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-proveedor">Proveedor</Label>
+                      <Input
+                        id="editar-proveedor"
+                        value={editForm.proveedor}
+                        onChange={(event) => updateEditFormField("proveedor", event.target.value)}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Precios y stock</p>
+                    <p className="text-xs text-muted-foreground">Ajusta los valores comerciales.</p>
+                  </header>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-precio">Precio (COP)</Label>
+                      <Input
+                        id="editar-precio"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.precio}
+                        onChange={(event) => updateEditFormField("precio", event.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-descuento">Descuento (%)</Label>
+                      <Input
+                        id="editar-descuento"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.descuento}
+                        onChange={(event) => updateEditFormField("descuento", event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-stock-minimo">Stock mínimo</Label>
+                      <Input
+                        id="editar-stock-minimo"
+                        type="number"
+                        min="0"
+                        value={editForm.stockMinimo}
+                        onChange={(event) => updateEditFormField("stockMinimo", event.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Inventario por almacén</p>
+                    <p className="text-xs text-muted-foreground">
+                      Actualiza las unidades disponibles por almacén y talla desde este formulario.
+                    </p>
+                  </header>
+                  {almacenesActivos.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-4 text-xs text-muted-foreground">
+                      No hay almacenes activos. Regístralos en la sección de Almacenes para gestionar el stock desde aquí.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {editStockEntries.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border/60 bg-background/30 p-4 text-xs text-muted-foreground">
+                          Este producto no tiene unidades asignadas desde el formulario. Puedes agregarlas o gestionarlas más tarde en
+                          Movimientos.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {editStockEntries.map((entry, index) => (
+                            <div
+                              key={`edit-stock-${index}`}
+                              className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_auto]"
+                            >
+                              <div className="space-y-2">
+                                <Label>Almacén</Label>
+                                <Select
+                                  value={entry.almacenId || undefined}
+                                  onValueChange={(value) => updateEditStockEntry(index, "almacenId", value)}
+                                  disabled={
+                                    savingEdit ||
+                                    uploadingEditImage ||
+                                    uploadingEditReferences ||
+                                    regeneratingEmbeddings ||
+                                    loadingStockCatalogos
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecciona un almacén" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={STOCK_ALMACEN_NONE_VALUE}>Sin almacén específico</SelectItem>
+                                    {almacenesActivos.map((almacen) => (
+                                      <SelectItem key={almacen.id} value={String(almacen.id)}>
+                                        {almacen.nombre}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Talla</Label>
+                                <Select
+                                  value={entry.tallaId || STOCK_TALLA_NONE_VALUE}
+                                  onValueChange={(value) => updateEditStockEntry(index, "tallaId", value)}
+                                  disabled={
+                                    savingEdit ||
+                                    uploadingEditImage ||
+                                    uploadingEditReferences ||
+                                    regeneratingEmbeddings ||
+                                    loadingStockCatalogos
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Sin talla específica" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={STOCK_TALLA_NONE_VALUE}>Sin talla específica</SelectItem>
+                                    {tallasActivas.map((talla) => (
+                                      <SelectItem key={talla.id} value={String(talla.id)}>
+                                        {talla.nombre}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`editar-stock-cantidad-${index}`}>Cantidad</Label>
+                                <Input
+                                  id={`editar-stock-cantidad-${index}`}
+                                  type="number"
+                                  min="0"
+                                  value={entry.cantidad}
+                                  onChange={(event) => updateEditStockEntry(index, "cantidad", event.target.value)}
+                                  disabled={
+                                    savingEdit ||
+                                    uploadingEditImage ||
+                                    uploadingEditReferences ||
+                                    regeneratingEmbeddings
+                                  }
+                                  required
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeEditStockEntry(index)}
+                                disabled={
+                                  savingEdit ||
+                                  uploadingEditImage ||
+                                  uploadingEditReferences ||
+                                  regeneratingEmbeddings
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Eliminar fila de stock</span>
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={addEditStockEntry}
+                          disabled={
+                            savingEdit ||
+                            uploadingEditImage ||
+                            uploadingEditReferences ||
+                            regeneratingEmbeddings ||
+                            loadingStockCatalogos ||
+                            almacenesActivos.length === 0
+                          }
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Agregar fila de stock
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          {loadingStockCatalogos
+                            ? "Cargando catálogos de almacenes y tallas..."
+                            : "Si dejas este apartado sin cambios, se mantendrán las unidades actuales."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Imagen</p>
+                    <p className="text-xs text-muted-foreground">Sube o actualiza la vista previa del producto.</p>
+                  </header>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-imagen-file">Subir imagen</Label>
+                      <Input
+                        id="editar-imagen-file"
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingEditImage}
+                        onChange={async (event) => {
+                          const file = event.target.files?.[0]
+                          if (!file || !editForm) return
+                          setUploadingEditImage(true)
+                          try {
+                            const { url } = await uploadProductImage(file, {
+                              productId: editTarget?.id,
+                              productCode: editForm.codigo,
+                            })
+                            setEditForm((prev) => (prev ? { ...prev, imagen: url } : prev))
+                            toast({
+                              title: "Imagen actualizada",
+                              description: "La imagen se almacenó correctamente.",
+                            })
+                          } catch (error) {
+                            console.error("Error subiendo imagen", error)
+                            toast({
+                              title: "No se pudo subir la imagen",
+                              description: error instanceof Error ? error.message : "Intenta nuevamente con otro archivo",
+                              variant: "destructive",
+                            })
+                          } finally {
+                            setUploadingEditImage(false)
+                            event.target.value = ""
+                          }
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Selecciona un archivo desde tu dispositivo. Se cargará automáticamente a Supabase Storage.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-imagen">URL de imagen</Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="editar-imagen"
+                          value={editForm.imagen}
+                          onChange={(event) => updateEditFormField("imagen", event.target.value)}
+                        />
+                        {editForm.imagen && (
+                          <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
+                            <Image
+                              src={editForm.imagen}
+                              alt="Vista previa"
+                              fill
+                              sizes="64px"
+                              loading="lazy"
+                              className="object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                  <header>
+                    <p className="text-sm font-semibold text-foreground">Imágenes de referencia</p>
+                    <p className="text-xs text-muted-foreground">
+                      Estas imágenes se usan para el reconocimiento visual del producto.
+                    </p>
+                  </header>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Imágenes registradas</Label>
+                      {editReferenceImages.length > 0 ? (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {editReferenceImages.map((reference) => {
+                            const previewSrc = reference.url && reference.url.length > 0 ? reference.url : undefined
+                            return (
+                              <div key={reference.id} className="flex flex-col gap-2">
+                                <div className="relative h-24 w-full overflow-hidden rounded-md border border-border">
+                                  {previewSrc ? (
+                                    <Image
+                                      src={previewSrc}
+                                      alt={reference.filename ?? `Referencia ${reference.id}`}
+                                      fill
+                                      sizes="120px"
+                                      loading="lazy"
+                                      className="object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">
+                                      Sin vista previa
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex-1 truncate text-xs text-muted-foreground">
+                                    {reference.filename ?? reference.path}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => handleDeleteReference(reference.id)}
+                                    disabled={
+                                      removingReferenceId === reference.id ||
+                                      uploadingEditReferences ||
+                                      savingEdit
+                                    }
+                                  >
+                                    {removingReferenceId === reference.id ? "Eliminando…" : "Eliminar"}
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Aún no hay imágenes de referencia registradas para este producto.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-referencias">Añadir nuevas imágenes</Label>
+                      <Input
+                        id="editar-referencias"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={savingEdit || uploadingEditImage || uploadingEditReferences}
+                        onChange={handleEditReferenceFilesChange}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Agrega diferentes vistas del producto para mejorar los resultados del sistema de coincidencia.
+                      </p>
+                    </div>
+
+                    {editReferenceDrafts.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Imágenes pendientes de registro</Label>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {editReferenceDrafts.map((draft, index) => (
+                            <div key={`${draft.preview}-${index}`} className="flex flex-col gap-2">
+                              <div className="relative h-24 w-full overflow-hidden rounded-md border border-border">
+                                <Image
+                                  src={draft.preview}
+                                  alt={`Referencia pendiente ${index + 1}`}
+                                  fill
+                                  sizes="120px"
+                                  className="object-cover"
+                                  unoptimized
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleRemoveEditReferenceDraft(index)}
+                                disabled={savingEdit || uploadingEditReferences}
+                              >
+                                Quitar
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleRegenerateEmbeddings}
+                        disabled={
+                          regeneratingEmbeddings ||
+                          uploadingEditReferences ||
+                          editReferenceImages.length === 0 ||
+                          savingEdit
+                        }
+                      >
+                        {regeneratingEmbeddings ? "Regenerando…" : "Regenerar embeddings"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Úsalo cuando reemplaces o elimines referencias existentes.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleEditDialogChange(false)}
+                  disabled={
+                    savingEdit ||
+                    uploadingEditReferences ||
+                    regeneratingEmbeddings ||
+                    removingReferenceId !== null
+                  }
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    savingEdit ||
+                    uploadingEditImage ||
+                    uploadingEditReferences ||
+                    regeneratingEmbeddings ||
+                    (!loadingCategorias && categorias.length === 0)
+                  }
+                >
+                  {savingEdit || uploadingEditReferences ? "Procesando..." : "Guardar cambios"}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={handleDeleteDialogChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este producto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Selecciona cómo deseas proceder. Puedes marcarlo como inactivo para conservar su historial o eliminarlo
+              definitivamente junto con su stock, imágenes de referencia y embeddings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <RadioGroup
+            value={deleteMode}
+            onValueChange={(value) =>
+              setDeleteMode(value === "hard" ? "hard" : "inactive")
+            }
+            className="space-y-2"
+          >
+            <label
+              htmlFor="delete-mode-inactive"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 text-left transition hover:bg-muted/50",
+                deleteMode === "inactive" ? "ring-2 ring-primary" : undefined,
+              )}
+            >
+              <RadioGroupItem id="delete-mode-inactive" value="inactive" className="mt-1" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Marcar como inactivo</p>
+                <p className="text-xs text-muted-foreground">
+                  Oculta el producto del catálogo activo pero conserva su información y referencias para reactivarlo
+                  más adelante.
+                </p>
+              </div>
+            </label>
+            <label
+              htmlFor="delete-mode-hard"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-left transition hover:bg-destructive/20",
+                deleteMode === "hard" ? "ring-2 ring-destructive" : undefined,
+              )}
+            >
+              <RadioGroupItem id="delete-mode-hard" value="hard" className="mt-1" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-destructive">Eliminar definitivamente</p>
+                <p className="text-xs text-muted-foreground">
+                  Borra el producto, su stock y sus imágenes de referencia. Esta acción no se puede deshacer.
+                </p>
+              </div>
+            </label>
+          </RadioGroup>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingProducto}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className={cn(
+                deleteMode === "hard"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90",
+              )}
+              disabled={deletingProducto}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmarEliminarProducto()
+              }}
+            >
+              {deletingProducto
+                ? "Procesando…"
+                : deleteMode === "hard"
+                  ? "Eliminar definitivamente"
+                  : "Marcar como inactivo"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={formOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -881,36 +2245,253 @@ export default function ProductosPage() {
                 </div>
               </section>
 
+              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                <header>
+                  <p className="text-sm font-semibold text-foreground">Inventario inicial</p>
+                  <p className="text-xs text-muted-foreground">
+                    Registra las unidades disponibles por almacén y talla para iniciar el seguimiento de stock.
+                  </p>
+                </header>
+                {almacenesActivos.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-4 text-xs text-muted-foreground">
+                    No hay almacenes activos. Configúralos primero en la sección de Almacenes para asignar stock inicial.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {nuevoStockEntries.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-border/60 bg-background/30 p-4 text-xs text-muted-foreground">
+                        Puedes dejar este apartado vacío y registrar el stock más adelante desde Movimientos.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {nuevoStockEntries.map((entry, index) => (
+                          <div
+                            key={`nuevo-stock-${index}`}
+                            className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_auto]"
+                          >
+                            <div className="space-y-2">
+                              <Label>Almacén</Label>
+                              <Select
+                                value={entry.almacenId || undefined}
+                                onValueChange={(value) => updateNuevoStockEntry(index, "almacenId", value)}
+                                disabled={
+                                  savingProducto ||
+                                  uploadingNewImage ||
+                                  uploadingNewReferences ||
+                                  loadingStockCatalogos
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecciona un almacén" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={STOCK_ALMACEN_NONE_VALUE}>Sin almacén específico</SelectItem>
+                                  {almacenesActivos.map((almacen) => (
+                                    <SelectItem key={almacen.id} value={String(almacen.id)}>
+                                      {almacen.nombre}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Talla</Label>
+                              <Select
+                                value={entry.tallaId || STOCK_TALLA_NONE_VALUE}
+                                onValueChange={(value) => updateNuevoStockEntry(index, "tallaId", value)}
+                                disabled={
+                                  savingProducto ||
+                                  uploadingNewImage ||
+                                  uploadingNewReferences ||
+                                  loadingStockCatalogos
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Sin talla específica" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={STOCK_TALLA_NONE_VALUE}>Sin talla específica</SelectItem>
+                                  {tallasActivas.map((talla) => (
+                                    <SelectItem key={talla.id} value={String(talla.id)}>
+                                      {talla.nombre}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`nuevo-stock-cantidad-${index}`}>Cantidad</Label>
+                              <Input
+                                id={`nuevo-stock-cantidad-${index}`}
+                                type="number"
+                                min="0"
+                                value={entry.cantidad}
+                                onChange={(event) => updateNuevoStockEntry(index, "cantidad", event.target.value)}
+                                required
+                                disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeNuevoStockEntry(index)}
+                              disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Eliminar fila de stock</span>
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addNuevoStockEntry}
+                        disabled={
+                          savingProducto ||
+                          uploadingNewImage ||
+                          uploadingNewReferences ||
+                          loadingStockCatalogos ||
+                          almacenesActivos.length === 0
+                        }
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Agregar fila de stock
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        {loadingStockCatalogos
+                          ? "Cargando catálogos de almacenes y tallas..."
+                          : "Puedes registrar múltiples combinaciones de almacén y talla."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </section>
+
               <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Imagen opcional</p>
-                  <p className="text-xs text-muted-foreground">Utiliza una URL pública para mostrar una vista previa.</p>
-                </header>
-                <div className="space-y-2">
-                  <Label htmlFor="nuevo-imagen">URL de imagen</Label>
-                  <div className="flex items-center gap-3">
-                    <Input
-                      id="nuevo-imagen"
-                      placeholder="https://..."
-                      value={nuevoProducto.imagen}
-                      onChange={(event) => setNuevoProducto((prev) => ({ ...prev, imagen: event.target.value }))}
-                    />
-                    {nuevoProducto.imagen && (
-                      <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
-                        <Image
-                          src={nuevoProducto.imagen}
-                          alt="Vista previa"
-                          fill
-                          sizes="64px"
-                          loading="lazy"
-                          className="object-cover"
-                        />
-                      </div>
-                    )}
-                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Sube la imagen a tu almacenamiento preferido y pega aquí la URL pública.
+                    Sube un archivo o pega una URL pública para mostrar la vista previa del producto.
                   </p>
+                </header>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-imagen-file">Subir imagen</Label>
+                    <Input
+                      id="nuevo-imagen-file"
+                      type="file"
+                      accept="image/*"
+                      disabled={uploadingNewImage}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0]
+                        if (!file) return
+                        setUploadingNewImage(true)
+                        try {
+                          const { url } = await uploadProductImage(file, {
+                            productCode: nuevoProducto.codigo,
+                          })
+                          setNuevoProducto((prev) => ({ ...prev, imagen: url }))
+                          toast({ title: "Imagen subida", description: "La imagen se almacenó correctamente." })
+                        } catch (error) {
+                          console.error("Error subiendo imagen", error)
+                          toast({
+                            title: "No se pudo subir la imagen",
+                            description: error instanceof Error ? error.message : "Intenta con otro archivo",
+                            variant: "destructive",
+                          })
+                        } finally {
+                          setUploadingNewImage(false)
+                          event.target.value = ""
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      La imagen se almacena en Supabase Storage y se asocia automáticamente al producto.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-imagen">URL de imagen</Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="nuevo-imagen"
+                        placeholder="https://..."
+                        value={nuevoProducto.imagen}
+                        onChange={(event) => setNuevoProducto((prev) => ({ ...prev, imagen: event.target.value }))}
+                      />
+                      {nuevoProducto.imagen && (
+                        <div className="relative h-16 w-16 overflow-hidden rounded-md border border-border">
+                          <Image
+                            src={nuevoProducto.imagen}
+                            alt="Vista previa"
+                            fill
+                            sizes="64px"
+                            loading="lazy"
+                            className="object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                <header>
+                  <p className="text-sm font-semibold text-foreground">Imágenes de referencia</p>
+                  <p className="text-xs text-muted-foreground">
+                    Añade fotos adicionales que se usarán para el reconocimiento visual (perfil, suela, detalles, etc.).
+                  </p>
+                </header>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-referencias">Subir imágenes de referencia</Label>
+                    <Input
+                      id="nuevo-referencias"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
+                      onChange={handleNewReferenceFilesChange}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Se almacenarán en Supabase y servirán como muestras para el sistema de coincidencia.
+                    </p>
+                  </div>
+
+                  {newReferenceDrafts.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Imágenes listas para registrar</Label>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        {newReferenceDrafts.map((draft, index) => (
+                          <div key={`${draft.preview}-${index}`} className="flex flex-col gap-2">
+                            <div className="relative h-24 w-full overflow-hidden rounded-md border border-border">
+                              <Image
+                                src={draft.preview}
+                                alt={`Referencia ${index + 1}`}
+                                fill
+                                sizes="96px"
+                                className="object-cover"
+                                unoptimized
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleRemoveNewReferenceDraft(index)}
+                              disabled={savingProducto || uploadingNewReferences}
+                            >
+                              Quitar
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -919,7 +2500,7 @@ export default function ProductosPage() {
                 type="button"
                 variant="outline"
                 onClick={() => handleDialogOpenChange(false)}
-                disabled={savingProducto}
+                disabled={savingProducto || uploadingNewImage || uploadingNewReferences}
               >
                 Cancelar
               </Button>
@@ -927,6 +2508,8 @@ export default function ProductosPage() {
                 type="submit"
                 disabled={
                   savingProducto ||
+                  uploadingNewImage ||
+                  uploadingNewReferences ||
                   (!loadingCategorias && categorias.length === 0)
                 }
               >

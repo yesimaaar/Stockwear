@@ -7,6 +7,10 @@ ALTER TABLE productos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "historialStock" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE consultas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ventas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ventasDetalle" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE producto_reference_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE producto_embeddings ENABLE ROW LEVEL SECURITY;
 
 -- Eliminar políticas existentes para usuarios
 DROP POLICY IF EXISTS "usuarios_select_authenticated" ON usuarios;
@@ -32,6 +36,18 @@ DROP POLICY IF EXISTS "historial_select_authenticated" ON "historialStock";
 DROP POLICY IF EXISTS "historial_insert_authenticated" ON "historialStock";
 DROP POLICY IF EXISTS "consultas_select_authenticated" ON consultas;
 DROP POLICY IF EXISTS "consultas_insert_authenticated" ON consultas;
+DROP POLICY IF EXISTS "ventas_select_authenticated" ON ventas;
+DROP POLICY IF EXISTS "ventas_write_authenticated" ON ventas;
+DROP POLICY IF EXISTS "ventas_detalle_select_authenticated" ON "ventasDetalle";
+DROP POLICY IF EXISTS "ventas_detalle_write_authenticated" ON "ventasDetalle";
+DROP POLICY IF EXISTS "producto_reference_images_select_authenticated" ON producto_reference_images;
+DROP POLICY IF EXISTS "producto_reference_images_insert_admin" ON producto_reference_images;
+DROP POLICY IF EXISTS "producto_reference_images_update_admin" ON producto_reference_images;
+DROP POLICY IF EXISTS "producto_reference_images_delete_admin" ON producto_reference_images;
+DROP POLICY IF EXISTS "producto_embeddings_select_authenticated" ON producto_embeddings;
+DROP POLICY IF EXISTS "producto_embeddings_insert_admin" ON producto_embeddings;
+DROP POLICY IF EXISTS "producto_embeddings_update_admin" ON producto_embeddings;
+DROP POLICY IF EXISTS "producto_embeddings_delete_admin" ON producto_embeddings;
 
 -- Crear nuevas políticas para usuarios
 CREATE POLICY "usuarios_select_authenticated" ON usuarios
@@ -82,3 +98,111 @@ CREATE POLICY "historial_insert_authenticated" ON "historialStock" FOR INSERT WI
 
 CREATE POLICY "consultas_select_authenticated" ON consultas FOR SELECT USING (auth.uid() IS NOT NULL);
 CREATE POLICY "consultas_insert_authenticated" ON consultas FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "ventas_select_authenticated" ON ventas
+	FOR SELECT
+	USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "ventas_write_authenticated" ON ventas
+	FOR ALL
+	USING (auth.uid() IS NOT NULL)
+	WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "ventas_detalle_select_authenticated" ON "ventasDetalle"
+	FOR SELECT
+	USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "ventas_detalle_write_authenticated" ON "ventasDetalle"
+	FOR ALL
+	USING (auth.uid() IS NOT NULL)
+	WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "producto_reference_images_select_authenticated" ON producto_reference_images
+	FOR SELECT
+	USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "producto_reference_images_insert_admin" ON producto_reference_images
+	FOR INSERT
+	WITH CHECK (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	);
+
+CREATE POLICY "producto_reference_images_update_admin" ON producto_reference_images
+	FOR UPDATE
+	USING (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	)
+	WITH CHECK (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	);
+
+CREATE POLICY "producto_reference_images_delete_admin" ON producto_reference_images
+	FOR DELETE
+	USING (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	);
+
+CREATE POLICY "producto_embeddings_select_authenticated" ON producto_embeddings
+	FOR SELECT
+	USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "producto_embeddings_insert_admin" ON producto_embeddings
+	FOR INSERT
+	WITH CHECK (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	);
+
+CREATE POLICY "producto_embeddings_update_admin" ON producto_embeddings
+	FOR UPDATE
+	USING (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	)
+	WITH CHECK (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	);
+
+CREATE POLICY "producto_embeddings_delete_admin" ON producto_embeddings
+	FOR DELETE
+	USING (
+		exists (
+			SELECT 1
+			FROM usuarios u
+			WHERE u.id = auth.uid()
+				AND u.rol = 'admin'
+		)
+	);

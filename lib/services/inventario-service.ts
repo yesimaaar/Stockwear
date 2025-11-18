@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { GeocodingService } from '@/lib/services/geocoding-service'
 import type {
   Almacen,
   Categoria,
@@ -6,6 +7,8 @@ import type {
   HistorialStock,
   Talla,
 } from '@/lib/types'
+
+type SupabaseError = { message?: string } | null
 
 export interface CategoriaResumen extends Categoria {
   productosActivos: number
@@ -86,6 +89,50 @@ export interface MovimientoDetallado {
 }
 
 export class InventarioService {
+  private static readonly ALMACEN_BASE_FIELDS = 'id,nombre,direccion,tipo,estado'
+  private static readonly ALMACEN_FIELDS_WITH_COORDS = `${InventarioService.ALMACEN_BASE_FIELDS},latitud,longitud`
+  private static almacenesCoordsAvailable: boolean | null = null
+  private static warnedMissingAlmacenCoords = false
+
+  private static shouldRequestAlmacenCoords(): boolean {
+    return this.almacenesCoordsAvailable !== false
+  }
+
+  private static isCoordinateColumnError(error: SupabaseError): boolean {
+    if (!error?.message) {
+      return false
+    }
+    const normalized = error.message.toLowerCase()
+    return normalized.includes('latitud') || normalized.includes('longitud')
+  }
+
+  private static handleCoordinateColumnError(error: SupabaseError): boolean {
+    if (!this.isCoordinateColumnError(error)) {
+      return false
+    }
+    this.almacenesCoordsAvailable = false
+    if (!this.warnedMissingAlmacenCoords) {
+      console.warn('Columnas latitud/longitud no existen en la tabla "almacenes". Operando en modo legacy.')
+      this.warnedMissingAlmacenCoords = true
+    }
+    return true
+  }
+
+  private static async executeAlmacenesFetch<T>(
+    fetcher: (fields: string) => Promise<{ data: T; error: SupabaseError }>,
+  ): Promise<{ data: T; error: SupabaseError }> {
+    const includeCoords = this.shouldRequestAlmacenCoords()
+    let response = await fetcher(includeCoords ? this.ALMACEN_FIELDS_WITH_COORDS : this.ALMACEN_BASE_FIELDS)
+
+    if (includeCoords && response.error && this.handleCoordinateColumnError(response.error)) {
+      response = await fetcher(this.ALMACEN_BASE_FIELDS)
+    } else if (includeCoords && !response.error) {
+      this.almacenesCoordsAvailable = true
+    }
+
+    return response
+  }
+
   private static buildStockQuery(productoId: number, tallaId: number | null, almacenId: number | null) {
     let query = supabase
       .from('stock')
@@ -111,6 +158,20 @@ export class InventarioService {
     }
 
     return (data as { id: number; cantidad: number | null } | null) ?? null
+  }
+
+  private static normalizeDireccion(direccion?: string | null): string | null {
+    const trimmed = direccion?.trim() ?? ''
+    return trimmed.length > 0 ? trimmed : null
+  }
+
+  private static async geocodeDireccion(direccion?: string | null) {
+    const direccionNormalizada = this.normalizeDireccion(direccion)
+    if (!direccionNormalizada) {
+      return null
+    }
+
+    return GeocodingService.geocode(direccionNormalizada)
   }
 
   private static async guardarStock(
@@ -265,11 +326,13 @@ export class InventarioService {
   }
 
   static async getAlmacenesActivos(): Promise<Almacen[]> {
-    const { data, error } = await supabase
-      .from('almacenes')
-      .select('id,nombre,tipo,estado')
-      .eq('estado', 'activo')
-      .order('nombre', { ascending: true })
+    const { data, error } = await this.executeAlmacenesFetch<Almacen[] | null>((fields) =>
+      supabase
+        .from('almacenes')
+        .select(fields)
+        .eq('estado', 'activo')
+        .order('nombre', { ascending: true }),
+    )
 
     if (error) {
       console.error('Error al cargar almacenes activos', error)
@@ -469,7 +532,9 @@ export class InventarioService {
 
   static async getAlmacenesResumen(): Promise<AlmacenResumen[]> {
     const [almacenesResp, stockResp] = await Promise.all([
-      supabase.from('almacenes').select('id,nombre,direccion,tipo,estado').order('nombre', { ascending: true }),
+      this.executeAlmacenesFetch<Almacen[] | null>((fields) =>
+        supabase.from('almacenes').select(fields).order('nombre', { ascending: true }),
+      ),
       supabase.from('stock').select('productoId,"almacenId",cantidad'),
     ])
 
@@ -607,16 +672,36 @@ export class InventarioService {
   }
 
   static async createAlmacen(payload: AlmacenUpsertPayload): Promise<Almacen> {
-    const { data, error } = await supabase
-      .from('almacenes')
-      .insert({
+    const direccion = this.normalizeDireccion(payload.direccion)
+    const geocodeResult = await this.geocodeDireccion(direccion)
+
+    const attempt = (includeCoords: boolean) => {
+      const insertPayload: Record<string, unknown> = {
         nombre: payload.nombre,
-        direccion: payload.direccion,
+        direccion,
         tipo: payload.tipo,
         estado: payload.estado,
-      })
-      .select('id,nombre,direccion,tipo,estado')
-      .single()
+      }
+
+      if (includeCoords) {
+        insertPayload.latitud = geocodeResult?.lat ?? null
+        insertPayload.longitud = geocodeResult?.lng ?? null
+      }
+
+      const fields = includeCoords ? this.ALMACEN_FIELDS_WITH_COORDS : this.ALMACEN_BASE_FIELDS
+
+      return supabase.from('almacenes').insert(insertPayload).select(fields).single()
+    }
+
+    let includeCoords = this.shouldRequestAlmacenCoords()
+    let { data, error } = await attempt(includeCoords)
+
+    if (error && includeCoords && this.handleCoordinateColumnError(error)) {
+      includeCoords = false
+      ;({ data, error } = await attempt(includeCoords))
+    } else if (includeCoords && !error) {
+      this.almacenesCoordsAvailable = true
+    }
 
     if (error) {
       throw new Error(error.message || 'No se pudo crear el almacén')
@@ -626,17 +711,41 @@ export class InventarioService {
   }
 
   static async updateAlmacen(id: number, payload: AlmacenUpsertPayload): Promise<Almacen> {
-    const { data, error } = await supabase
-      .from('almacenes')
-      .update({
+    const direccion = this.normalizeDireccion(payload.direccion)
+    const geocodeResult = await this.geocodeDireccion(direccion)
+
+    const attempt = (includeCoords: boolean) => {
+      const updateData: Record<string, unknown> = {
         nombre: payload.nombre,
-        direccion: payload.direccion,
+        direccion,
         tipo: payload.tipo,
         estado: payload.estado,
-      })
-      .eq('id', id)
-      .select('id,nombre,direccion,tipo,estado')
-      .single()
+      }
+
+      if (includeCoords) {
+        if (!direccion) {
+          updateData.latitud = null
+          updateData.longitud = null
+        } else if (geocodeResult) {
+          updateData.latitud = geocodeResult.lat
+          updateData.longitud = geocodeResult.lng
+        }
+      }
+
+      const fields = includeCoords ? this.ALMACEN_FIELDS_WITH_COORDS : this.ALMACEN_BASE_FIELDS
+
+      return supabase.from('almacenes').update(updateData).eq('id', id).select(fields).single()
+    }
+
+    let includeCoords = this.shouldRequestAlmacenCoords()
+    let { data, error } = await attempt(includeCoords)
+
+    if (error && includeCoords && this.handleCoordinateColumnError(error)) {
+      includeCoords = false
+      ;({ data, error } = await attempt(includeCoords))
+    } else if (includeCoords && !error) {
+      this.almacenesCoordsAvailable = true
+    }
 
     if (error) {
       throw new Error(error.message || 'No se pudo actualizar el almacén')

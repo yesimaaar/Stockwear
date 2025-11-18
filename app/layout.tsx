@@ -1,35 +1,27 @@
 import type React from "react"
-import type { Metadata } from "next"
-import { Inter, Geist_Mono } from "next/font/google"
+import type { Metadata, Viewport } from "next"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  preload: true,
-  variable: "--font-sans",
-})
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  display: "swap",
-  preload: true,
-  variable: "--font-mono",
-})
 
 export const metadata: Metadata = {
   title: "StockWear - Sistema de Gestión de Inventario",
   description: "Sistema de gestión de inventario y ventas para calzado y ropa deportiva con reconocimiento visual",
   generator: "Next.js",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
   icons: {
-    // ruta relativa a la carpeta `public/`
-    icon: '/favicon.svg',
-    // Puedes añadir más variantes si las tienes, por ejemplo:
-    // apple: '/apple-touch-icon.png'
+    icon: [
+      { url: "/stockwear-icon.png", type: "image/png" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/stockwear-icon.png",
+    apple: "/stockwear-icon.png",
   },
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 }
 
 export default function RootLayout({
@@ -39,7 +31,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-  <body className={`${inter.className} ${inter.variable} ${geistMono.variable} min-h-screen bg-background text-foreground antialiased`}>
+  <body className={`min-h-screen bg-background text-foreground antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           <Analytics />

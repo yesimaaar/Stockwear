@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { Producto, Categoria, Talla, Almacen } from '@/lib/types'
+import type { Producto, Categoria, ProductoEmbedding, ProductoReferenceImage } from '@/lib/types'
 
 export interface ProductoConStock extends Producto {
   categoria: string
@@ -12,90 +12,325 @@ export interface ProductoConStock extends Producto {
     almacen: string
     cantidad: number
   }>
+  embeddings?: ProductoEmbedding[]
+  referenceImages?: ProductoReferenceImage[]
+}
+
+type CategoriaRelacion = {
+  id?: number | null
+  nombre?: string | null
+}
+
+type TallaRelacion = {
+  id?: number | null
+  nombre?: string | null
+}
+
+type AlmacenRelacion = {
+  id?: number | null
+  nombre?: string | null
+}
+
+type ProductoRow = Producto & {
+  categoria?: CategoriaRelacion | CategoriaRelacion[] | null
+  stock?: Array<{
+    id: number | null
+    tallaId: number | null
+    almacenId: number | null
+    cantidad: number | null
+    talla?: TallaRelacion | null
+    almacen?: AlmacenRelacion | null
+  }> | null
+  embeddings?: Array<{
+    id: number | null
+    productoId: number | null
+    embedding: number[] | null
+    fuente?: string | null
+    referenceImageId?: number | null
+    createdAt?: string | null
+    updatedAt?: string | null
+  }> | null
+  referenceImages?: Array<{
+    id: number | null
+    productoId: number | null
+    url: string | null
+    path: string | null
+    bucket?: string | null
+    filename?: string | null
+    mimeType?: string | null
+    size?: number | null
+    createdAt?: string | null
+    updatedAt?: string | null
+  }> | null
+}
+
+const PRODUCTO_SELECT = `
+  id,
+  codigo,
+  nombre,
+  descripcion,
+  categoriaId,
+  precio,
+  descuento,
+  proveedor,
+  imagen,
+  stockMinimo,
+  estado,
+  createdAt,
+  categoria:categorias!productos_categoriaId_fkey (
+    id,
+    nombre
+  ),
+  stock:stock!stock_productoId_fkey (
+    id,
+    tallaId,
+    almacenId,
+    cantidad,
+    talla:tallas!stock_tallaId_fkey (
+      id,
+      nombre
+    ),
+    almacen:almacenes!stock_almacenId_fkey (
+      id,
+      nombre
+    )
+  ),
+  embeddings:producto_embeddings(
+    id,
+    "productoId",
+    embedding,
+    fuente,
+    "referenceImageId",
+    "createdAt",
+    "updatedAt"
+  ),
+  referenceImages:producto_reference_images(
+    id,
+    "productoId",
+    url,
+    path,
+    bucket,
+    filename,
+    "mimeType",
+    size,
+    "createdAt",
+    "updatedAt"
+  )
+`
+
+const PRODUCTO_CACHE_TTL_MS = 2 * 60 * 1000
+const CATEGORIA_CACHE_TTL_MS = 5 * 60 * 1000
+
+let cachedProductos: ProductoConStock[] | null = null
+let cachedProductosExpiresAt = 0
+
+let cachedCategorias: Categoria[] | null = null
+let cachedCategoriasExpiresAt = 0
+
+const now = () => Date.now()
+
+const getCachedProductos = (force?: boolean): ProductoConStock[] | null => {
+  if (!force && cachedProductos && cachedProductosExpiresAt > now()) {
+    return cachedProductos
+  }
+  return null
+}
+
+const setCachedProductos = (data: ProductoConStock[]) => {
+  cachedProductos = data
+  cachedProductosExpiresAt = now() + PRODUCTO_CACHE_TTL_MS
+}
+
+const invalidateProductosCache = () => {
+  cachedProductos = null
+  cachedProductosExpiresAt = 0
+}
+
+const getCachedCategorias = (force?: boolean): Categoria[] | null => {
+  if (!force && cachedCategorias && cachedCategoriasExpiresAt > now()) {
+    return cachedCategorias
+  }
+  return null
+}
+
+const setCachedCategorias = (data: Categoria[]) => {
+  cachedCategorias = data
+  cachedCategoriasExpiresAt = now() + CATEGORIA_CACHE_TTL_MS
+}
+
+const invalidateCategoriasCache = () => {
+  cachedCategorias = null
+  cachedCategoriasExpiresAt = 0
+}
+
+const resolveCategoriaNombre = (categoria: ProductoRow['categoria']): string => {
+  if (!categoria) return ''
+  if (Array.isArray(categoria)) {
+    return categoria[0]?.nombre ?? ''
+  }
+  return categoria.nombre ?? ''
+}
+
+const mapProductoRow = (row: ProductoRow): ProductoConStock => {
+  const { categoria, stock, embeddings, referenceImages, ...productoBase } = row
+  const stockPorTalla = (stock ?? []).map((registro) => ({
+    stockId: registro.id ?? 0,
+    tallaId: registro.tallaId ?? null,
+    almacenId: registro.almacenId ?? null,
+    talla: registro.talla?.nombre ?? '',
+    almacen: registro.almacen?.nombre ?? '',
+    cantidad: typeof registro.cantidad === 'number' ? registro.cantidad : Number(registro.cantidad ?? 0),
+  }))
+
+  const stockTotal = stockPorTalla.reduce((total, detalle) => total + (detalle.cantidad ?? 0), 0)
+
+  const mappedEmbeddings: ProductoEmbedding[] | undefined = embeddings
+    ? embeddings
+        .filter((item): item is NonNullable<typeof item> => Array.isArray(item.embedding) && item.productoId != null)
+        .map((item) => ({
+          id: item.id ?? 0,
+          productoId: item.productoId ?? productoBase.id,
+          embedding: item.embedding ?? [],
+          fuente: item.fuente ?? null,
+          referenceImageId: item.referenceImageId ?? null,
+          createdAt: item.createdAt ?? new Date().toISOString(),
+          updatedAt: item.updatedAt ?? new Date().toISOString(),
+        }))
+    : undefined
+
+  const mappedReferenceImages: ProductoReferenceImage[] | undefined = referenceImages
+    ? referenceImages
+        .filter((item): item is NonNullable<typeof item> => Boolean(item?.id) && Boolean(item?.url))
+        .map((item) => ({
+          id: item.id ?? 0,
+          productoId: item.productoId ?? productoBase.id,
+          url: item.url ?? '',
+          path: item.path ?? '',
+          bucket: item.bucket ?? null,
+          filename: item.filename ?? null,
+          mimeType: item.mimeType ?? null,
+          size:
+            typeof item.size === 'number'
+              ? item.size
+              : item.size != null
+                ? Number(item.size)
+                : null,
+          createdAt: item.createdAt ?? new Date().toISOString(),
+          updatedAt: item.updatedAt ?? new Date().toISOString(),
+        }))
+    : undefined
+
+  return {
+    ...productoBase,
+    categoria: resolveCategoriaNombre(categoria),
+    stockTotal,
+    stockPorTalla,
+    embeddings: mappedEmbeddings,
+    referenceImages: mappedReferenceImages,
+  }
 }
 
 export class ProductoService {
-  static async getAll(): Promise<ProductoConStock[]> {
-    const { data: productos, error } = await supabase.from('productos').select('*')
-    if (error || !productos) return []
-
-    // Map to ProductoConStock by fetching stock per producto
-    const results: ProductoConStock[] = []
-    for (const p of productos as Producto[]) {
-      const detalle = await this.getById((p as any).id as number)
-      if (detalle) results.push(detalle)
+  static async getAll(options?: { force?: boolean }): Promise<ProductoConStock[]> {
+    const cached = getCachedProductos(options?.force)
+    if (cached) {
+      return cached
     }
-    return results
+
+    const lastKnownSnapshot = cachedProductos
+
+    const { data, error } = await supabase.from('productos').select(PRODUCTO_SELECT)
+
+    if (error) {
+      console.error('Error cargando productos', error)
+      return lastKnownSnapshot ?? []
+    }
+
+    if (!data) {
+      return lastKnownSnapshot ?? []
+    }
+
+    const mapped = (data as ProductoRow[]).map(mapProductoRow)
+    setCachedProductos(mapped)
+    return mapped
   }
 
   static async getById(id: number): Promise<ProductoConStock | null> {
-    const { data: producto, error } = await supabase.from('productos').select('*').eq('id', id).single()
-    if (error || !producto) return null
-
-    const { data: categoria } = await supabase.from('categorias').select('*').eq('id', producto.categoriaId).single()
-
-    const { data: stockEntries } = await supabase.from('stock').select('*').eq('productoId', id)
-    const stockProducto = (stockEntries || []) as Array<{
-      id: number
-      tallaId: number | null
-      almacenId: number | null
-      cantidad: number | null
-    }>
-    const stockTotal = stockProducto.reduce((sum, s) => sum + (s.cantidad || 0), 0)
-
-    const stockPorTalla = [] as ProductoConStock['stockPorTalla']
-    for (const s of stockProducto) {
-      const tallaId = s.tallaId ?? null
-      const almacenId = s.almacenId ?? null
-      const { data: talla } = tallaId
-        ? await supabase.from('tallas').select('id,nombre').eq('id', tallaId).single()
-        : { data: null }
-      const { data: almacen } = almacenId
-        ? await supabase.from('almacenes').select('id,nombre').eq('id', almacenId).single()
-        : { data: null }
-      stockPorTalla.push({
-        stockId: s.id,
-        tallaId,
-        almacenId,
-        talla: (talla as Talla)?.nombre || '',
-        almacen: (almacen as Almacen)?.nombre || '',
-        cantidad: s.cantidad || 0,
-      })
+    const cached = cachedProductos?.find((producto) => producto.id === id)
+    if (cached) {
+      return cached
     }
 
-    return {
-      ...(producto as Producto),
-      categoria: (categoria as Categoria)?.nombre || '',
-      stockTotal,
-      stockPorTalla,
+    const { data, error } = await supabase
+      .from('productos')
+      .select(PRODUCTO_SELECT)
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error buscando producto', error)
+      return null
     }
+
+    if (!data) {
+      return null
+    }
+
+    return mapProductoRow(data as ProductoRow)
   }
 
   static async search(query: string): Promise<ProductoConStock[]> {
     const q = query.trim()
     if (!q) return this.getAll()
 
-    const { data, error } = await supabase.from('productos').select('*').or(
-      `nombre.ilike.%${q}%,codigo.ilike.%${q}%`,
-    )
-    if (error || !data) return []
-    const results: ProductoConStock[] = []
-    for (const p of data as Producto[]) {
-      const detalle = await this.getById((p as any).id as number)
-      if (detalle) results.push(detalle)
+    const catalogo = await this.getAll()
+    const normalized = q.toLowerCase()
+
+    const resultados = catalogo.filter((producto) => {
+      const nombre = producto.nombre?.toLowerCase() ?? ''
+      const codigo = producto.codigo?.toLowerCase() ?? ''
+      const categoria = producto.categoria?.toLowerCase() ?? ''
+      return (
+        nombre.includes(normalized) ||
+        codigo.includes(normalized) ||
+        categoria.includes(normalized)
+      )
+    })
+
+    if (resultados.length > 0 || catalogo.length === 0) {
+      return resultados
     }
-    return results
+
+    const { data, error } = await supabase
+      .from('productos')
+      .select(PRODUCTO_SELECT)
+      .or(`nombre.ilike.%${q}%,codigo.ilike.%${q}%`)
+
+    if (error || !data) {
+      return resultados
+    }
+
+    return (data as ProductoRow[]).map(mapProductoRow)
   }
 
   static async getByCategoria(categoriaId: number): Promise<ProductoConStock[]> {
-    const { data, error } = await supabase.from('productos').select('*').eq('categoriaId', categoriaId)
-    if (error || !data) return []
-    const results: ProductoConStock[] = []
-    for (const p of data as Producto[]) {
-      const detalle = await this.getById((p as any).id as number)
-      if (detalle) results.push(detalle)
+    const catalogo = await this.getAll()
+    const filtrados = catalogo.filter((producto) => producto.categoriaId === categoriaId)
+    if (filtrados.length > 0 || catalogo.length === 0) {
+      return filtrados
     }
-    return results
+
+    const { data, error } = await supabase
+      .from('productos')
+      .select(PRODUCTO_SELECT)
+      .eq('categoriaId', categoriaId)
+
+    if (error || !data) {
+      console.error('Error filtrando productos por categoría', error)
+      return filtrados
+    }
+
+    return (data as ProductoRow[]).map(mapProductoRow)
   }
 
   static async getStockBajo(): Promise<ProductoConStock[]> {
@@ -115,10 +350,16 @@ export class ProductoService {
       console.error('Error al crear producto', error)
       return null
     }
+    invalidateProductosCache()
     return data as Producto
   }
 
   static async getCategoriasActivas(): Promise<Categoria[]> {
+    const cached = getCachedCategorias()
+    if (cached) {
+      return cached
+    }
+
     const { data, error } = await supabase
       .from('categorias')
       .select('*')
@@ -126,20 +367,75 @@ export class ProductoService {
       .order('nombre', { ascending: true })
 
     if (error || !data) {
-      return []
+      return cachedCategorias ?? []
     }
 
-    return data as Categoria[]
+    const mapped = data as Categoria[]
+    setCachedCategorias(mapped)
+    return mapped
   }
 
   static async update(id: number, data: Partial<Producto>): Promise<Producto | null> {
     const { data: updated, error } = await supabase.from('productos').update(data).eq('id', id).select().single()
     if (error || !updated) return null
+    invalidateProductosCache()
     return updated as Producto
   }
 
-  static async delete(id: number): Promise<boolean> {
-    const { data, error } = await supabase.from('productos').update({ estado: 'inactivo' }).eq('id', id)
-    return !error
+  static async delete(
+    id: number,
+    options?: {
+      mode?: 'inactive' | 'hard'
+    },
+  ): Promise<boolean> {
+    const mode = options?.mode === 'hard' ? 'hard' : 'soft'
+
+    try {
+      const origin =
+        typeof window === 'undefined'
+          ? process.env.NEXT_PUBLIC_SITE_URL
+            || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined)
+            || 'http://localhost:3000'
+          : window.location.origin
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[ProductoService.delete] request', { id, mode, origin })
+      }
+
+      const response = await fetch(`${origin}/api/admin/productos/${id}?mode=${mode}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => null)
+        console.error('Error eliminando producto', { status: response.status, details })
+        return false
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[ProductoService.delete] success', { id, mode })
+      }
+
+      invalidateProductosCache()
+      return true
+    } catch (error) {
+      console.error('Falló la solicitud para eliminar producto', error)
+      return false
+    }
+  }
+
+  static async warmCache(): Promise<void> {
+    await Promise.allSettled([
+      this.getAll(),
+      this.getCategoriasActivas(),
+    ])
+  }
+
+  static invalidateCache(): void {
+    invalidateProductosCache()
+    invalidateCategoriasCache()
   }
 }

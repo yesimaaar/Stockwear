@@ -4,11 +4,14 @@ import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Edit, Trash2 } from "lucide-react"
+import * as LucideIcons from "lucide-react"
+const { ArrowLeft, Edit, Trash2 } = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
+import { cn } from "@/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,9 +20,11 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
+
+type DeleteMode = "inactive" | "hard"
 
 export default function ProductoDetallePage() {
   const params = useParams<{ id: string }>()
@@ -29,6 +34,7 @@ export default function ProductoDetallePage() {
   const [error, setError] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteMode, setDeleteMode] = useState<DeleteMode>("inactive")
   const { toast } = useToast()
 
   useEffect(() => {
@@ -243,41 +249,102 @@ export default function ProductoDetallePage() {
         </div>
       </main>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open)
+          if (!open) {
+            setDeleting(false)
+            setDeleteMode("inactive")
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este producto?</AlertDialogTitle>
             <AlertDialogDescription>
-              El producto se marcará como inactivo y dejará de aparecer en los listados activos. Puedes reactivarlo más adelante si es necesario.
+              Define si deseas marcarlo como inactivo para conservar su historial o eliminarlo definitivamente junto con
+              su stock y referencias. Esta decisión no se puede deshacer en el modo definitivo.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <RadioGroup
+            value={deleteMode}
+            onValueChange={(value) => setDeleteMode(value === "hard" ? "hard" : "inactive")}
+            className="space-y-2"
+          >
+            <label
+              htmlFor="detail-delete-inactive"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 text-left transition hover:bg-muted/50",
+                deleteMode === "inactive" ? "ring-2 ring-primary" : undefined,
+              )}
+            >
+              <RadioGroupItem id="detail-delete-inactive" value="inactive" className="mt-1" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Marcar como inactivo</p>
+                <p className="text-xs text-muted-foreground">
+                  El producto dejará de mostrarse en listados activos, pero podrás reactivarlo cuando lo necesites.
+                </p>
+              </div>
+            </label>
+            <label
+              htmlFor="detail-delete-hard"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-left transition hover:bg-destructive/20",
+                deleteMode === "hard" ? "ring-2 ring-destructive" : undefined,
+              )}
+            >
+              <RadioGroupItem id="detail-delete-hard" value="hard" className="mt-1" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-destructive">Eliminar definitivamente</p>
+                <p className="text-xs text-muted-foreground">
+                  Se eliminará el producto, su stock y las imágenes de referencia asociadas. No podrás revertir esta
+                  acción.
+                </p>
+              </div>
+            </label>
+          </RadioGroup>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive"
+              className={cn(
+                deleteMode === "hard"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90",
+              )}
               disabled={deleting}
               onClick={async () => {
                 if (!producto) return
                 setDeleting(true)
-                const exito = await ProductoService.delete(producto.id)
+                const exito = await ProductoService.delete(producto.id, { mode: deleteMode })
                 setDeleting(false)
                 if (!exito) {
                   toast({
                     title: "No se pudo eliminar",
-                    description: "Ocurrió un error al intentar actualizar el estado del producto",
-                    variant: "destructive"
+                    description:
+                      deleteMode === "hard"
+                        ? "No fue posible eliminar el producto de manera definitiva."
+                        : "Ocurrió un error al intentar actualizar el estado del producto",
+                    variant: "destructive",
                   })
                   return
                 }
                 toast({
-                  title: "Producto actualizado",
-                  description: `${producto.nombre} fue marcado como inactivo`
+                  title: deleteMode === "hard" ? "Producto eliminado" : "Producto actualizado",
+                  description:
+                    deleteMode === "hard"
+                      ? `${producto.nombre} se eliminó definitivamente del inventario.`
+                      : `${producto.nombre} fue marcado como inactivo`,
                 })
                 setConfirmOpen(false)
                 router.push("/admin/productos")
               }}
             >
-              Confirmar
+              {deleting
+                ? "Procesando…"
+                : deleteMode === "hard"
+                  ? "Eliminar definitivamente"
+                  : "Marcar como inactivo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
