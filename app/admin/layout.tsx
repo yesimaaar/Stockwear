@@ -94,6 +94,13 @@ export default function AdminLayout({
 				router.push("/login");
 				return;
 			}
+
+			// Si el usuario no tiene tienda asignada, redirigir al registro de tienda
+			if (!currentUser.tiendaId) {
+				router.push("/register-store");
+				return;
+			}
+
 			setUser(currentUser);
 			setLoading(false);
 		};
@@ -272,125 +279,125 @@ export default function AdminLayout({
 	return (
 		<div className="min-h-screen bg-background flex flex-col lg:flex-row">
 			<div className="flex min-h-screen flex-1 flex-col pb-20 lg:pb-0">
-					<header className="sticky top-0 z-40 border-b border-border/70 bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/70">
-						<div className="flex h-16 w-full items-center gap-3 px-4 sm:px-6 lg:px-10">
-							<div className="flex items-center gap-3">
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<button
-											type="button"
-											className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-background text-muted-foreground transition hover:text-foreground"
-											aria-label="Configurar sidebar"
+				<header className="sticky top-0 z-40 border-b border-border/70 bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/70">
+					<div className="flex h-16 w-full items-center gap-3 px-4 sm:px-6 lg:px-10">
+						<div className="flex items-center gap-3">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-background text-muted-foreground transition hover:text-foreground"
+										aria-label="Configurar sidebar"
+									>
+										<PanelLeft className="h-5 w-5" />
+									</button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start" className="w-48">
+									<p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+										Sidebar
+									</p>
+									{(
+										["closed", "condensed", "hover", "open"] satisfies SidebarMode[]
+									).map((mode) => (
+										<DropdownMenuItem
+											key={mode}
+											onSelect={(event) => {
+												event.preventDefault();
+												setSidebarMode(mode);
+											}}
+											className={cn(
+												"flex items-center justify-between",
+												sidebarMode === mode && "text-primary"
+											)}
 										>
-											<PanelLeft className="h-5 w-5" />
-										</button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="start" className="w-48">
-										<p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-											Sidebar
-										</p>
-										{(
-											["closed", "condensed", "hover", "open"] satisfies SidebarMode[]
-										).map((mode) => (
-											<DropdownMenuItem
-												key={mode}
-												onSelect={(event) => {
-													event.preventDefault();
-													setSidebarMode(mode);
-												}}
+											<span className="capitalize">{mode}</span>
+											<span
 												className={cn(
-													"flex items-center justify-between",
-													sidebarMode === mode && "text-primary"
+													"h-2 w-2 rounded-full",
+													sidebarMode === mode ? "bg-primary" : "bg-muted"
 												)}
-											>
-												<span className="capitalize">{mode}</span>
-												<span
-													className={cn(
-														"h-2 w-2 rounded-full",
-														sidebarMode === mode ? "bg-primary" : "bg-muted"
-													)}
-												/>
-											</DropdownMenuItem>
-										))}
-									</DropdownMenuContent>
-								</DropdownMenu>
-								<div className="hidden h-6 w-px bg-border/60 lg:block" />
-							</div>
-							<div ref={searchWrapperRef} className="relative flex flex-1 items-center">
-								<form onSubmit={handleSearchSubmit} className="relative w-full">
-									<HeaderSearchBar
-										value={searchTerm}
-										onChange={(nextValue) => {
-											setSearchTerm(nextValue);
-											if (canShowSearchModules) {
-												setSearchPanelOpen(true);
-											}
-										}}
-										onFocus={() => {
-											if (canShowSearchModules) {
-												setSearchPanelOpen(true);
-											}
-										}}
-										placeholder="Search"
-										className="w-full"
-										aria-label="Buscar en módulos"
-									/>
-									{searchPanelOpen && canShowSearchModules ? (
-										<div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
-											<div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
-												<p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-													Módulos
-												</p>
-												<span className="text-[11px] text-muted-foreground">Selecciona dónde buscar</span>
-											</div>
-											<ul className="max-h-56 divide-y divide-border/60 overflow-y-auto">
-												{SEARCHABLE_MODULES.map((module) => {
-													const Icon = module.icon;
-													const checked = searchModule === module.href;
-													return (
-														<li key={module.href}>
-															<label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-foreground transition hover:bg-muted/60">
-																<Checkbox
-																	checked={checked}
-																	onCheckedChange={(state) => {
-																		if (state) {
-																			setSearchModule(module.href);
-																		}
-																	}}
-																	className="h-4 w-4 rounded-md"
-																/>
-																<Icon className="h-4 w-4 text-muted-foreground" />
-																<span className="flex-1 truncate">{module.label}</span>
-															</label>
-														</li>
-													);
-												})}
-											</ul>
-											<div className="border-t border-border/80 px-4 py-3">
-												<Button type="submit" className="w-full rounded-xl" disabled={!canSubmitSearch}>
-													Buscar en {selectedModule?.label ?? "Stockwear"}
-												</Button>
-											</div>
+											/>
+										</DropdownMenuItem>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>
+							<div className="hidden h-6 w-px bg-border/60 lg:block" />
+						</div>
+						<div ref={searchWrapperRef} className="relative flex flex-1 items-center">
+							<form onSubmit={handleSearchSubmit} className="relative w-full">
+								<HeaderSearchBar
+									value={searchTerm}
+									onChange={(nextValue) => {
+										setSearchTerm(nextValue);
+										if (canShowSearchModules) {
+											setSearchPanelOpen(true);
+										}
+									}}
+									onFocus={() => {
+										if (canShowSearchModules) {
+											setSearchPanelOpen(true);
+										}
+									}}
+									placeholder="Search"
+									className="w-full"
+									aria-label="Buscar en módulos"
+								/>
+								{searchPanelOpen && canShowSearchModules ? (
+									<div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+										<div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
+											<p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+												Módulos
+											</p>
+											<span className="text-[11px] text-muted-foreground">Selecciona dónde buscar</span>
 										</div>
-									) : null}
-								</form>
-							</div>
+										<ul className="max-h-56 divide-y divide-border/60 overflow-y-auto">
+											{SEARCHABLE_MODULES.map((module) => {
+												const Icon = module.icon;
+												const checked = searchModule === module.href;
+												return (
+													<li key={module.href}>
+														<label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-foreground transition hover:bg-muted/60">
+															<Checkbox
+																checked={checked}
+																onCheckedChange={(state) => {
+																	if (state) {
+																		setSearchModule(module.href);
+																	}
+																}}
+																className="h-4 w-4 rounded-md"
+															/>
+															<Icon className="h-4 w-4 text-muted-foreground" />
+															<span className="flex-1 truncate">{module.label}</span>
+														</label>
+													</li>
+												);
+											})}
+										</ul>
+										<div className="border-t border-border/80 px-4 py-3">
+											<Button type="submit" className="w-full rounded-xl" disabled={!canSubmitSearch}>
+												Buscar en {selectedModule?.label ?? "Stockwear"}
+											</Button>
+										</div>
+									</div>
+								) : null}
+							</form>
+						</div>
 						<div className="flex items-center gap-2">
-								<Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-									<PopoverTrigger asChild>
-										<button
-											type="button"
-											className="relative inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 text-foreground transition hover:bg-foreground/10"
-										>
-											<Bell className="h-5 w-5" />
-											{notificationsBadge ? (
-												<span className="absolute right-2 top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
-													{notificationsBadge}
-												</span>
-											) : null}
-											<span className="sr-only">Abrir notificaciones</span>
-										</button>
-									</PopoverTrigger>
+							<Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+								<PopoverTrigger asChild>
+									<button
+										type="button"
+										className="relative inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 text-foreground transition hover:bg-foreground/10"
+									>
+										<Bell className="h-5 w-5" />
+										{notificationsBadge ? (
+											<span className="absolute right-2 top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
+												{notificationsBadge}
+											</span>
+										) : null}
+										<span className="sr-only">Abrir notificaciones</span>
+									</button>
+								</PopoverTrigger>
 								<PopoverContent align="end" className="w-[320px] p-0">
 									<div className="flex items-center justify-between border-b border-border px-4 py-3">
 										<div>
@@ -481,66 +488,66 @@ export default function AdminLayout({
 										</div>
 									) : null}
 								</PopoverContent>
-								</Popover>
-								<button
-									type="button"
-									onClick={() => {
-										if (typeof window !== "undefined") {
-											window.dispatchEvent(new Event(OPEN_QUICK_CART_EVENT));
-										}
-									}}
-									className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 text-foreground transition hover:bg-foreground/10"
-									aria-label="Abrir carrito de facturación"
-								>
-									<ShoppingCart className="h-5 w-5" />
-								</button>
-								<button
-									type="button"
-									onClick={() => {
-										setTheme(resolvedTheme === "dark" ? "light" : "dark");
-									}}
-									className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 text-foreground transition hover:bg-foreground/10"
-									aria-label="Alternar tema"
-								>
-									<Moon className="h-5 w-5" />
-								</button>
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<button
-											type="button"
-											className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/50 bg-gradient-to-br from-indigo-200 via-purple-200 to-orange-100 text-sm font-medium uppercase text-foreground shadow"
-										>
-											<Avatar className="h-9 w-9 border-2 border-white/80 text-base">
-												<AvatarFallback className="text-sm font-semibold uppercase">
-													{user?.nombre ? user.nombre.charAt(0) : "U"}
-												</AvatarFallback>
-											</Avatar>
-											<span className="sr-only">Abrir menú de usuario</span>
-										</button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="end" className="w-56">
-										<DropdownMenuLabel>
-											<div className="space-y-1">
-												<p className="text-sm font-semibold leading-none text-foreground">{user?.nombre}</p>
-												<p className="text-xs text-muted-foreground">{user?.email}</p>
-											</div>
-										</DropdownMenuLabel>
-										<DropdownMenuSeparator />
-										<DropdownMenuItem
-											className="gap-2 text-destructive focus:text-destructive"
-											onSelect={(event) => {
-												event.preventDefault();
-												void handleLogout();
-											}}
-										>
-											<LogOut className="h-4 w-4" />
-											Cerrar sesión
-										</DropdownMenuItem>
-									</DropdownMenuContent>
-								</DropdownMenu>
-							</div>
+							</Popover>
+							<button
+								type="button"
+								onClick={() => {
+									if (typeof window !== "undefined") {
+										window.dispatchEvent(new Event(OPEN_QUICK_CART_EVENT));
+									}
+								}}
+								className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 text-foreground transition hover:bg-foreground/10"
+								aria-label="Abrir carrito de facturación"
+							>
+								<ShoppingCart className="h-5 w-5" />
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									setTheme(resolvedTheme === "dark" ? "light" : "dark");
+								}}
+								className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 text-foreground transition hover:bg-foreground/10"
+								aria-label="Alternar tema"
+							>
+								<Moon className="h-5 w-5" />
+							</button>
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/50 bg-gradient-to-br from-indigo-200 via-purple-200 to-orange-100 text-sm font-medium uppercase text-foreground shadow"
+									>
+										<Avatar className="h-9 w-9 border-2 border-white/80 text-base">
+											<AvatarFallback className="text-sm font-semibold uppercase">
+												{user?.nombre ? user.nombre.charAt(0) : "U"}
+											</AvatarFallback>
+										</Avatar>
+										<span className="sr-only">Abrir menú de usuario</span>
+									</button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end" className="w-56">
+									<DropdownMenuLabel>
+										<div className="space-y-1">
+											<p className="text-sm font-semibold leading-none text-foreground">{user?.nombre}</p>
+											<p className="text-xs text-muted-foreground">{user?.email}</p>
+										</div>
+									</DropdownMenuLabel>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem
+										className="gap-2 text-destructive focus:text-destructive"
+										onSelect={(event) => {
+											event.preventDefault();
+											void handleLogout();
+										}}
+									>
+										<LogOut className="h-4 w-4" />
+										Cerrar sesión
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
-					</header>
+					</div>
+				</header>
 				<main className="mx-auto w-full flex-1 space-y-7 px-4 pt-7 pb-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-16">
 					{children}
 				</main>

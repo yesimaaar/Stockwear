@@ -73,12 +73,12 @@ export default function RegisterPage() {
       return
     }
 
-    setSuccess("Registro exitoso. Redirigiendo al inicio de sesión...")
+    setSuccess("Registro exitoso. Por favor verifica tu correo electrónico antes de iniciar sesión.")
     setLoading(false)
 
     setTimeout(() => {
       router.push("/login")
-    }, 1500)
+    }, 3000)
   }
 
   const handleGoogleSignup = async () => {

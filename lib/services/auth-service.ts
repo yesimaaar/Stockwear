@@ -105,46 +105,16 @@ export class AuthService {
     if (!user) {
       return {
         success: false,
-        message: 'No se pudo crear el usuario. Verifica que el correo no requiera confirmación.',
+        message: 'No se pudo crear el usuario. Intenta nuevamente.',
       }
     }
 
-    if (!data.session) {
-      await supabase.from('usuarios').upsert({
-        id: user.id,
-        auth_uid: user.id,
-        tienda_id: finalTiendaId,
-        nombre,
-        email: normalizedEmail,
-        rol,
-        telefono: normalizedPhone,
-        estado: 'activo',
-      })
+    // El trigger en la base de datos se encargará de crear el registro en public.usuarios
 
-      return {
-        success: true,
-        message: 'Usuario registrado. Revisa tu correo para confirmar la cuenta.',
-      }
+    return {
+      success: true,
+      message: 'Usuario registrado. Revisa tu correo para confirmar la cuenta.',
     }
-
-    await supabase.from('usuarios').upsert({
-      id: user.id,
-      auth_uid: user.id,
-      tienda_id: finalTiendaId,
-      nombre,
-      email: normalizedEmail,
-      rol,
-      telefono: normalizedPhone,
-      estado: 'activo',
-    })
-
-    const { data: profile } = await supabase
-      .from('usuarios')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    return { success: true, user: mapUsuario(profile as UsuarioRow) }
   }
 
   static async signInWithGoogle(redirectPath?: string): Promise<AuthResponse> {

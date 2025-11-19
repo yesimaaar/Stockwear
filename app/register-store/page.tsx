@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from "next/image"
 import { supabase } from '@/lib/supabase'
@@ -8,23 +8,23 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { Loader2, Store, ArrowRight, LayoutDashboard, ShoppingBag, Users } from 'lucide-react'
+import { Loader2, Store, ArrowRight } from 'lucide-react'
 
 const features = [
     {
-        icon: LayoutDashboard,
-        title: "Panel de Control",
-        description: "Gestiona tu negocio desde un solo lugar."
+        icon: Store,
+        title: "Gestión de Inventario",
+        description: "Control total de tus productos, tallas y colores en tiempo real."
     },
     {
-        icon: ShoppingBag,
-        title: "Catálogo Digital",
-        description: "Muestra tus productos al mundo."
+        icon: ArrowRight,
+        title: "Punto de Venta (POS)",
+        description: "Vende rápidamente desde cualquier dispositivo con nuestra interfaz optimizada."
     },
     {
-        icon: Users,
-        title: "Gestión de Equipo",
-        description: "Administra permisos y roles fácilmente."
+        icon: Loader2,
+        title: "Reportes Detallados",
+        description: "Analiza tus ventas y toma mejores decisiones para tu negocio."
     }
 ]
 
@@ -34,6 +34,16 @@ export default function RegisterStorePage() {
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     const { toast } = useToast()
+
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) {
+                router.replace('/login')
+            }
+        }
+        checkSession()
+    }, [router])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -45,12 +55,16 @@ export default function RegisterStorePage() {
                 throw new Error('No hay sesión activa')
             }
 
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) throw new Error("No authenticated user")
+
             // 1. Crear la tienda
             const { data: tienda, error: tiendaError } = await supabase
                 .from('tiendas')
                 .insert({
                     nombre,
                     slug: slug.toLowerCase().replace(/\s+/g, '-'),
+                    owner_id: user.id
                 })
                 .select()
                 .single()

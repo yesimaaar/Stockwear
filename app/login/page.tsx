@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { GoogleIcon } from "@/components/icons/google-icon"
 import { AuthService } from "@/lib/services/auth-service"
 import { supabase } from "@/lib/supabase"
+import type { Usuario } from "@/lib/types"
 
 const previewQuickStats = [
   { label: "Ventas del día", value: "$128K", trend: "+12%", icon: BarChart3 },
@@ -134,12 +135,20 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
 
-  const navigateByRole = useCallback((role?: string) => {
-    if (role === "admin") {
-      router.push("/admin")
-    } else if (role === "empleado") {
+
+
+  const navigateByRole = useCallback((user?: Usuario) => {
+    if (!user) return
+
+    if (user.rol === "admin") {
+      if (!user.tiendaId) {
+        router.push("/register-store")
+      } else {
+        router.push("/admin")
+      }
+    } else if (user.rol === "empleado") {
       router.push("/empleado")
-    } else if (role) {
+    } else {
       router.push("/")
     }
   }, [router])
@@ -147,7 +156,7 @@ export default function LoginPage() {
   const syncSession = useCallback(async () => {
     const currentUser = await AuthService.getCurrentUser()
     if (currentUser) {
-      navigateByRole(currentUser.rol)
+      navigateByRole(currentUser)
       setCheckingSession(false)
       return
     }
@@ -184,8 +193,7 @@ export default function LoginPage() {
         return
       }
 
-      const role = result.user?.rol
-      navigateByRole(role)
+      navigateByRole(result.user)
     } catch (_error) {
       setError("Ocurrió un problema al iniciar sesión")
     } finally {
