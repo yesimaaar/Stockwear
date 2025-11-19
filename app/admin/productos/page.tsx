@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Fragment, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import * as LucideIcons from "lucide-react"
 const {
@@ -123,7 +123,6 @@ const createEmptyStockEntry = (): StockFormEntry => ({
 
 export default function ProductosPage() {
   const { toast } = useToast()
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [productos, setProductos] = useState<ProductoConStock[]>([])
   const [filteredProductos, setFilteredProductos] = useState<ProductoConStock[]>([])
@@ -2093,20 +2092,20 @@ export default function ProductosPage() {
       </AlertDialog>
 
       <Dialog open={formOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-w-[90vw] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[99vw] max-w-[1900px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo producto</DialogTitle>
             <DialogDescription>Registra un producto sin abandonar el listado actual.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={onSubmitNuevoProducto} className="space-y-5">
-            <div className="grid gap-5 lg:grid-cols-3">
-              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4 lg:col-span-2">
+          <form onSubmit={onSubmitNuevoProducto} className="space-y-8 py-2">
+            <div className="grid gap-8 xl:grid-cols-[1.8fr_1fr] 2xl:grid-cols-[2fr_1fr]">
+              <section className="space-y-6 rounded-2xl border border-border/70 bg-card p-6 shadow-sm xl:p-7">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Información básica</p>
                   <p className="text-xs text-muted-foreground">Completa los datos principales del producto.</p>
                 </header>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2 sm:col-span-1">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
                     <Label htmlFor="nuevo-codigo">Código</Label>
                     <Input
                       id="nuevo-codigo"
@@ -2116,7 +2115,7 @@ export default function ProductosPage() {
                       required
                     />
                   </div>
-                  <div className="space-y-2 sm:col-span-2">
+                  <div className="space-y-2">
                     <Label htmlFor="nuevo-nombre">Nombre</Label>
                     <Input
                       id="nuevo-nombre"
@@ -2126,20 +2125,20 @@ export default function ProductosPage() {
                       required
                     />
                   </div>
-                  <div className="space-y-2 sm:col-span-3">
+                  <div className="space-y-2 md:col-span-2">
                     <Label htmlFor="nuevo-descripcion">Descripción</Label>
                     <Textarea
                       id="nuevo-descripcion"
                       value={nuevoProducto.descripcion}
                       onChange={(event) => setNuevoProducto((prev) => ({ ...prev, descripcion: event.target.value }))}
-                      rows={3}
+                      rows={4}
                       placeholder="Describe brevemente las características principales..."
                     />
                   </div>
                 </div>
               </section>
 
-              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4 lg:col-span-1">
+              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm xl:p-7">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Categorización</p>
                   <p className="text-xs text-muted-foreground">Asigna categoría y proveedor para organizar el inventario.</p>
@@ -2195,9 +2194,9 @@ export default function ProductosPage() {
               </section>
             </div>
 
-            <div className="space-y-5">
+            <div className="grid gap-8 xl:grid-cols-2 2xl:grid-cols-[1.3fr_1fr]">
 
-              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm xl:p-7">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Precios y stock</p>
                   <p className="text-xs text-muted-foreground">Define los valores comerciales y de control.</p>
@@ -2243,7 +2242,7 @@ export default function ProductosPage() {
                 </div>
               </section>
 
-              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm xl:p-7">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Inventario inicial</p>
                   <p className="text-xs text-muted-foreground">
@@ -2371,9 +2370,9 @@ export default function ProductosPage() {
 
             </div>
 
-            <div className="space-y-5">
+            <div className="grid gap-8 lg:grid-cols-2 2xl:grid-cols-[1.2fr_1fr]">
 
-              <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
+              <section className="space-y-4 rounded-2xl border border-border/70 bg-card p-6 shadow-sm xl:p-7">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Imagen opcional</p>
                   <p className="text-xs text-muted-foreground">
@@ -2441,7 +2440,7 @@ export default function ProductosPage() {
                 </div>
               </section>
 
-              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+              <section className="space-y-5 rounded-2xl border border-border/70 bg-card p-6 shadow-sm xl:p-7">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Imágenes de referencia</p>
                   <p className="text-xs text-muted-foreground">

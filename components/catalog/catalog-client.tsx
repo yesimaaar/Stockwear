@@ -12,9 +12,11 @@ interface CatalogClientProps {
     initialProducts: ProductoConStock[]
     categories: string[]
     totalStock: number
+    storeName?: string
+    storeLogoUrl?: string | null
 }
 
-export function CatalogClient({ initialProducts, categories, totalStock }: CatalogClientProps) {
+export function CatalogClient({ initialProducts, categories, totalStock, storeName, storeLogoUrl }: CatalogClientProps) {
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
@@ -33,17 +35,19 @@ export function CatalogClient({ initialProducts, categories, totalStock }: Catal
     }, [initialProducts, searchQuery, selectedCategory])
 
     const numberFormatter = new Intl.NumberFormat("es-MX")
+    const displayName = storeName ?? "StockWear"
+    const logoSrc = storeLogoUrl && storeLogoUrl.length > 0 ? storeLogoUrl : "/stockwear-icon.png"
 
     return (
         <main className="relative mx-auto flex w-full max-w-7xl flex-col px-4 py-8 lg:px-8">
             <header className="mb-8 flex flex-col gap-6">
                 <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
                     <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <Image src="/stockwear-icon.png" alt="StockWear" width={32} height={32} priority />
+                        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <Image src={logoSrc} alt={displayName} width={48} height={48} className="h-full w-full object-cover" priority />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-slate-900">StockWear</h1>
+                            <h1 className="text-2xl font-bold text-slate-900">{displayName}</h1>
                             <p className="text-sm text-slate-500">Catálogo en tiempo real</p>
                         </div>
                     </div>

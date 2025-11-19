@@ -91,7 +91,7 @@ export interface Stock {
   id: number
   tiendaId: number
   productoId: number
-  tallaId: number
+  tallaId: number | null
   almacenId: number
   cantidad: number
   updatedAt: string
@@ -102,7 +102,7 @@ export interface HistorialStock {
   tiendaId: number
   tipo: 'entrada' | 'salida' | 'venta' | 'ajuste'
   productoId: number
-  tallaId: number
+  tallaId: number | null
   almacenId: number
   cantidad: number
   stockAnterior: number

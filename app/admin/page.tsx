@@ -321,23 +321,51 @@ export default function AdminHomePage() {
   const { toast } = useToast()
 
   useEffect(() => {
-    getStoreSettings().then((res) => {
+    let active = true
+    const loadSettings = async () => {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+
+      if (!accessToken) {
+        console.warn("No hay sesión activa para cargar la tienda")
+        return
+      }
+
+      const res = await getStoreSettings(accessToken)
+      if (!active) return
+
       if (res.success && res.data?.whatsapp) {
         setWhatsappNumber(res.data.whatsapp)
+      } else if (!res.success && res.message) {
+        toast({ title: "Error", description: res.message, variant: "destructive" })
       }
-    })
-  }, [])
+    }
+
+    void loadSettings()
+
+    return () => {
+      active = false
+    }
+  }, [toast])
 
   const handleSaveWhatsapp = async () => {
     setSavingWhatsapp(true)
     try {
-      const res = await updateStoreWhatsApp(whatsappNumber)
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+
+      if (!accessToken) {
+        toast({ title: "Sesión requerida", description: "Inicia sesión para actualizar el WhatsApp", variant: "destructive" })
+        return
+      }
+
+      const res = await updateStoreWhatsApp(whatsappNumber, accessToken)
       if (res.success) {
         toast({ title: "Guardado", description: "Número de WhatsApp actualizado" })
       } else {
         toast({ title: "Error", description: res.message, variant: "destructive" })
       }
-    } catch (error) {
+    } catch (_error) {
       toast({ title: "Error", description: "No se pudo guardar", variant: "destructive" })
     } finally {
       setSavingWhatsapp(false)
