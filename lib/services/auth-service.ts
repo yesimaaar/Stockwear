@@ -85,6 +85,57 @@ export class AuthService {
     // El flujo de onboarding se encargará de pedirle que cree su tienda.
     const finalTiendaId = tiendaId ?? null
 
+    if (typeof window !== 'undefined' && finalTiendaId !== null) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+
+      if (sessionError || !accessToken) {
+        return {
+          success: false,
+          message: 'Tu sesión expiró. Inicia sesión nuevamente para continuar.',
+        }
+      }
+
+      try {
+        const response = await fetch('/api/admin/usuarios', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            nombre: nombre.trim(),
+            email: normalizedEmail,
+            password,
+            rol,
+            telefono: normalizedPhone,
+            tiendaId: finalTiendaId,
+          }),
+        })
+
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null
+
+        if (!response.ok) {
+          return {
+            success: false,
+            message: payload?.message ?? 'No se pudo registrar el usuario desde el panel de administración.',
+          }
+        }
+
+        return {
+          success: true,
+          message: payload?.message ?? 'Usuario registrado exitosamente.',
+        }
+      } catch (error) {
+        console.error('Error al registrar usuario desde el panel', error)
+        return {
+          success: false,
+          message: 'No se pudo registrar el usuario. Verifica tu conexión e inténtalo nuevamente.',
+        }
+      }
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
