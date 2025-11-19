@@ -334,157 +334,157 @@ export default function ProductosPage() {
     }
   }
 
-    const getAlmacenNombre = (almacenId: number | null) => {
-      if (almacenId == null) return "Sin almacén específico"
-      return (
-        almacenesActivos.find((almacen) => almacen.id === almacenId)?.nombre ??
-        `Almacén #${almacenId}`
-      )
-    }
+  const getAlmacenNombre = (almacenId: number | null) => {
+    if (almacenId == null) return "Sin almacén específico"
+    return (
+      almacenesActivos.find((almacen) => almacen.id === almacenId)?.nombre ??
+      `Almacén #${almacenId}`
+    )
+  }
 
-    const getTallaNombre = (tallaId: number | null) => {
-      if (tallaId == null) return "Sin talla asignada"
-      return tallasActivas.find((talla) => talla.id === tallaId)?.nombre ?? `Talla #${tallaId}`
-    }
+  const getTallaNombre = (tallaId: number | null) => {
+    if (tallaId == null) return "Sin talla asignada"
+    return tallasActivas.find((talla) => talla.id === tallaId)?.nombre ?? `Talla #${tallaId}`
+  }
 
-    const describeStockDestino = (almacenId: number | null, tallaId: number | null) => {
-      const almacen = getAlmacenNombre(almacenId)
-      const talla = getTallaNombre(tallaId)
-      return tallaId == null ? almacen : `${almacen} · ${talla}`
-    }
+  const describeStockDestino = (almacenId: number | null, tallaId: number | null) => {
+    const almacen = getAlmacenNombre(almacenId)
+    const talla = getTallaNombre(tallaId)
+    return tallaId == null ? almacen : `${almacen} · ${talla}`
+  }
 
-    const normalizeStockEntries = (
-      entries: StockFormEntry[],
-      options: { allowZero: boolean },
-    ): Array<{ almacenId: number | null; tallaId: number | null; cantidad: number }> | null => {
-      const aggregated = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
+  const normalizeStockEntries = (
+    entries: StockFormEntry[],
+    options: { allowZero: boolean },
+  ): Array<{ almacenId: number | null; tallaId: number | null; cantidad: number }> | null => {
+    const aggregated = new Map<string, { almacenId: number | null; tallaId: number | null; cantidad: number }>()
 
-      for (const entry of entries) {
-        const rawCantidad = entry.cantidad.trim()
-        const hasCantidad = rawCantidad.length > 0
-        const hasAlmacen = entry.almacenId.trim().length > 0
-        const tallaSeleccionada = entry.tallaId && entry.tallaId !== STOCK_TALLA_NONE_VALUE
+    for (const entry of entries) {
+      const rawCantidad = entry.cantidad.trim()
+      const hasCantidad = rawCantidad.length > 0
+      const hasAlmacen = entry.almacenId.trim().length > 0
+      const tallaSeleccionada = entry.tallaId && entry.tallaId !== STOCK_TALLA_NONE_VALUE
 
-        if (!hasCantidad && !hasAlmacen && !tallaSeleccionada) {
-          continue
-        }
-
-        if (!hasAlmacen) {
-          toast({
-            title: "Selecciona un almacén",
-            description: "Elige dónde se ubicará este stock.",
-            variant: "destructive",
-          })
-          return null
-        }
-
-        if (!hasCantidad) {
-          toast({
-            title: "Cantidad requerida",
-            description: "Escribe cuántas unidades registrarás para el producto.",
-            variant: "destructive",
-          })
-          return null
-        }
-
-        const cantidad = Number(rawCantidad)
-        if (!Number.isFinite(cantidad) || cantidad < 0) {
-          toast({
-            title: "Cantidad inválida",
-            description: "Las unidades deben ser un número mayor o igual a cero.",
-            variant: "destructive",
-          })
-          return null
-        }
-
-        if (!Number.isInteger(cantidad)) {
-          toast({
-            title: "Cantidad inválida",
-            description: "Las unidades deben ser un número entero.",
-            variant: "destructive",
-          })
-          return null
-        }
-
-        if (!options.allowZero && cantidad === 0) {
-          continue
-        }
-
-        let almacenId: number | null
-        if (entry.almacenId === STOCK_ALMACEN_NONE_VALUE) {
-          almacenId = null
-        } else {
-          const parsedAlmacen = Number(entry.almacenId)
-          if (!Number.isFinite(parsedAlmacen) || parsedAlmacen <= 0) {
-            toast({
-              title: "Almacén inválido",
-              description: "Selecciona un almacén válido para registrar el stock.",
-              variant: "destructive",
-            })
-            return null
-          }
-          almacenId = parsedAlmacen
-        }
-
-        let tallaId: number | null
-        if (!entry.tallaId || entry.tallaId === STOCK_TALLA_NONE_VALUE) {
-          tallaId = null
-        } else {
-          const parsedTalla = Number(entry.tallaId)
-          if (!Number.isFinite(parsedTalla) || parsedTalla <= 0) {
-            toast({
-              title: "Talla inválida",
-              description: "Selecciona una talla válida o deja la opción sin talla.",
-              variant: "destructive",
-            })
-            return null
-          }
-          tallaId = parsedTalla
-        }
-
-        const key = `${almacenId ?? "none"}-${tallaId ?? "none"}`
-        const current = aggregated.get(key)
-        if (current) {
-          aggregated.set(key, {
-            almacenId,
-            tallaId,
-            cantidad: current.cantidad + cantidad,
-          })
-        } else {
-          aggregated.set(key, { almacenId, tallaId, cantidad })
-        }
+      if (!hasCantidad && !hasAlmacen && !tallaSeleccionada) {
+        continue
       }
 
-      return Array.from(aggregated.values())
+      if (!hasAlmacen) {
+        toast({
+          title: "Selecciona un almacén",
+          description: "Elige dónde se ubicará este stock.",
+          variant: "destructive",
+        })
+        return null
+      }
+
+      if (!hasCantidad) {
+        toast({
+          title: "Cantidad requerida",
+          description: "Escribe cuántas unidades registrarás para el producto.",
+          variant: "destructive",
+        })
+        return null
+      }
+
+      const cantidad = Number(rawCantidad)
+      if (!Number.isFinite(cantidad) || cantidad < 0) {
+        toast({
+          title: "Cantidad inválida",
+          description: "Las unidades deben ser un número mayor o igual a cero.",
+          variant: "destructive",
+        })
+        return null
+      }
+
+      if (!Number.isInteger(cantidad)) {
+        toast({
+          title: "Cantidad inválida",
+          description: "Las unidades deben ser un número entero.",
+          variant: "destructive",
+        })
+        return null
+      }
+
+      if (!options.allowZero && cantidad === 0) {
+        continue
+      }
+
+      let almacenId: number | null
+      if (entry.almacenId === STOCK_ALMACEN_NONE_VALUE) {
+        almacenId = null
+      } else {
+        const parsedAlmacen = Number(entry.almacenId)
+        if (!Number.isFinite(parsedAlmacen) || parsedAlmacen <= 0) {
+          toast({
+            title: "Almacén inválido",
+            description: "Selecciona un almacén válido para registrar el stock.",
+            variant: "destructive",
+          })
+          return null
+        }
+        almacenId = parsedAlmacen
+      }
+
+      let tallaId: number | null
+      if (!entry.tallaId || entry.tallaId === STOCK_TALLA_NONE_VALUE) {
+        tallaId = null
+      } else {
+        const parsedTalla = Number(entry.tallaId)
+        if (!Number.isFinite(parsedTalla) || parsedTalla <= 0) {
+          toast({
+            title: "Talla inválida",
+            description: "Selecciona una talla válida o deja la opción sin talla.",
+            variant: "destructive",
+          })
+          return null
+        }
+        tallaId = parsedTalla
+      }
+
+      const key = `${almacenId ?? "none"}-${tallaId ?? "none"}`
+      const current = aggregated.get(key)
+      if (current) {
+        aggregated.set(key, {
+          almacenId,
+          tallaId,
+          cantidad: current.cantidad + cantidad,
+        })
+      } else {
+        aggregated.set(key, { almacenId, tallaId, cantidad })
+      }
     }
 
-    const addNuevoStockEntry = () => {
-      setNuevoStockEntries((prev) => [...prev, createEmptyStockEntry()])
-    }
+    return Array.from(aggregated.values())
+  }
 
-    const updateNuevoStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
-      setNuevoStockEntries((prev) =>
-        prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
-      )
-    }
+  const addNuevoStockEntry = () => {
+    setNuevoStockEntries((prev) => [...prev, createEmptyStockEntry()])
+  }
 
-    const removeNuevoStockEntry = (index: number) => {
-      setNuevoStockEntries((prev) => prev.filter((_, idx) => idx !== index))
-    }
+  const updateNuevoStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
+    setNuevoStockEntries((prev) =>
+      prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
+    )
+  }
 
-    const addEditStockEntry = () => {
-      setEditStockEntries((prev) => [...prev, createEmptyStockEntry()])
-    }
+  const removeNuevoStockEntry = (index: number) => {
+    setNuevoStockEntries((prev) => prev.filter((_, idx) => idx !== index))
+  }
 
-    const updateEditStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
-      setEditStockEntries((prev) =>
-        prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
-      )
-    }
+  const addEditStockEntry = () => {
+    setEditStockEntries((prev) => [...prev, createEmptyStockEntry()])
+  }
 
-    const removeEditStockEntry = (index: number) => {
-      setEditStockEntries((prev) => prev.filter((_, idx) => idx !== index))
-    }
+  const updateEditStockEntry = (index: number, field: keyof StockFormEntry, value: string) => {
+    setEditStockEntries((prev) =>
+      prev.map((entry, idx) => (idx === index ? { ...entry, [field]: value } : entry)),
+    )
+  }
+
+  const removeEditStockEntry = (index: number) => {
+    setEditStockEntries((prev) => prev.filter((_, idx) => idx !== index))
+  }
 
   const handleNewReferenceFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
@@ -555,9 +555,9 @@ export default function ProductosPage() {
       setEditTarget((prev) =>
         prev
           ? {
-              ...prev,
-              referenceImages: prev.referenceImages?.filter((item) => item.id !== safeId),
-            }
+            ...prev,
+            referenceImages: prev.referenceImages?.filter((item) => item.id !== safeId),
+          }
           : prev,
       )
       toast({
@@ -586,9 +586,8 @@ export default function ProductosPage() {
         description:
           result.processed === 0
             ? "No se generaron embeddings porque no hay referencias."
-            : `${result.processed} referencia${result.processed === 1 ? "" : "s"} procesada${
-                result.processed === 1 ? "" : "s"
-              } correctamente`,
+            : `${result.processed} referencia${result.processed === 1 ? "" : "s"} procesada${result.processed === 1 ? "" : "s"
+            } correctamente`,
       })
       if (Array.isArray((result as any)?.failures) && (result as any).failures.length > 0) {
         const failures = (result as any).failures as Array<{ id: number; reason: string }>
@@ -916,8 +915,7 @@ export default function ProductosPage() {
           } catch (stockError) {
             console.error("Error registrando stock inicial", stockError)
             stockErrors.push(
-              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${
-                stockError instanceof Error ? stockError.message : "No se pudo guardar el stock inicial"
+              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${stockError instanceof Error ? stockError.message : "No se pudo guardar el stock inicial"
               }`,
             )
           }
@@ -927,9 +925,8 @@ export default function ProductosPage() {
       if (referenceSuccess > 0) {
         toast({
           title: referenceSuccess === 1 ? "Imagen de referencia registrada" : "Imágenes de referencia registradas",
-          description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${
-            referenceSuccess > 1 ? "s" : ""
-          } correctamente`,
+          description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${referenceSuccess > 1 ? "s" : ""
+            } correctamente`,
         })
       }
 
@@ -1054,9 +1051,9 @@ export default function ProductosPage() {
         setEditTarget((prev) =>
           prev
             ? {
-                ...prev,
-                referenceImages: [...(prev.referenceImages ?? []), ...newReferenceRecords],
-              }
+              ...prev,
+              referenceImages: [...(prev.referenceImages ?? []), ...newReferenceRecords],
+            }
             : prev,
         )
       }
@@ -1069,9 +1066,8 @@ export default function ProductosPage() {
       if (referenceSuccess > 0) {
         toast({
           title: referenceSuccess === 1 ? "Referencia registrada" : "Referencias registradas",
-          description: `${referenceSuccess} referencia${referenceSuccess === 1 ? "" : "s"} procesada${
-            referenceSuccess === 1 ? "" : "s"
-          } correctamente`,
+          description: `${referenceSuccess} referencia${referenceSuccess === 1 ? "" : "s"} procesada${referenceSuccess === 1 ? "" : "s"
+            } correctamente`,
         })
       }
 
@@ -1124,8 +1120,7 @@ export default function ProductosPage() {
           } catch (stockError) {
             console.error("Error ajustando stock del producto", stockError)
             stockAdjustErrors.push(
-              `${describeStockDestino(existing.almacenId, existing.tallaId)}: ${
-                stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
+              `${describeStockDestino(existing.almacenId, existing.tallaId)}: ${stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
               }`,
             )
           }
@@ -1149,8 +1144,7 @@ export default function ProductosPage() {
           } catch (stockError) {
             console.error("Error registrando nuevo stock", stockError)
             stockAdjustErrors.push(
-              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${
-                stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
+              `${describeStockDestino(entry.almacenId, entry.tallaId)}: ${stockError instanceof Error ? stockError.message : "No se pudo aplicar el ajuste"
               }`,
             )
           }
@@ -1160,9 +1154,8 @@ export default function ProductosPage() {
       if (stockAdjustSuccess > 0) {
         toast({
           title: stockAdjustSuccess === 1 ? "Stock actualizado" : "Stock actualizado",
-          description: `${stockAdjustSuccess} ajuste${stockAdjustSuccess === 1 ? "" : "s"} de inventario aplicado${
-            stockAdjustSuccess === 1 ? "" : "s"
-          } correctamente`,
+          description: `${stockAdjustSuccess} ajuste${stockAdjustSuccess === 1 ? "" : "s"} de inventario aplicado${stockAdjustSuccess === 1 ? "" : "s"
+            } correctamente`,
         })
       }
 
@@ -1190,7 +1183,7 @@ export default function ProductosPage() {
 
   return (
     <div className="min-h-screen bg-background">
-  <main className="mx-auto w-full max-w-[88rem] px-3 py-3 space-y-4 sm:px-4 sm:py-4 sm:space-y-5">
+      <main className="mx-auto w-full max-w-[88rem] px-3 py-3 space-y-4 sm:px-4 sm:py-4 sm:space-y-5">
         <div className="rounded-2xl border border-border bg-card/70 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-5 sm:py-3">
             <div className="flex items-center gap-3">
@@ -1444,9 +1437,8 @@ export default function ProductosPage() {
                                       </div>
                                       <div className="text-right">
                                         <p
-                                          className={`text-base font-semibold ${
-                                            enRiesgo ? "text-red-500" : "text-green-500"
-                                          }`}
+                                          className={`text-base font-semibold ${enRiesgo ? "text-red-500" : "text-green-500"
+                                            }`}
                                         >
                                           {detalle.cantidad}
                                         </p>
@@ -1520,21 +1512,21 @@ export default function ProductosPage() {
         )}
       </main>
       <Dialog open={editDialogOpen} onOpenChange={handleEditDialogChange}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-[90vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar producto</DialogTitle>
             <DialogDescription>Realiza cambios sin salir del listado.</DialogDescription>
           </DialogHeader>
           {editForm ? (
             <form onSubmit={onSubmitEditarProducto} className="space-y-5">
-              <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
-                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+              <div className="grid gap-5 lg:grid-cols-3">
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4 lg:col-span-2">
                   <header>
                     <p className="text-sm font-semibold text-foreground">Información básica</p>
                     <p className="text-xs text-muted-foreground">Actualiza los datos principales del producto.</p>
                   </header>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2 sm:col-span-1">
                       <Label htmlFor="editar-codigo">Código</Label>
                       <Input
                         id="editar-codigo"
@@ -1543,7 +1535,7 @@ export default function ProductosPage() {
                         required
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="editar-nombre">Nombre</Label>
                       <Input
                         id="editar-nombre"
@@ -1552,24 +1544,24 @@ export default function ProductosPage() {
                         required
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="editar-descripcion">Descripción</Label>
-                    <Textarea
-                      id="editar-descripcion"
-                      value={editForm.descripcion}
-                      onChange={(event) => updateEditFormField("descripcion", event.target.value)}
-                      rows={3}
-                    />
+                    <div className="space-y-2 sm:col-span-3">
+                      <Label htmlFor="editar-descripcion">Descripción</Label>
+                      <Textarea
+                        id="editar-descripcion"
+                        value={editForm.descripcion}
+                        onChange={(event) => updateEditFormField("descripcion", event.target.value)}
+                        rows={3}
+                      />
+                    </div>
                   </div>
                 </section>
 
-                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+                <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4 lg:col-span-1">
                   <header>
                     <p className="text-sm font-semibold text-foreground">Categorización</p>
                     <p className="text-xs text-muted-foreground">Gestiona la categoría y proveedor.</p>
                   </header>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4">
                     <div className="space-y-2">
                       <Label>Categoría</Label>
                       <Select
@@ -1612,6 +1604,9 @@ export default function ProductosPage() {
                     </div>
                   </div>
                 </section>
+              </div>
+
+              <div className="space-y-5">
 
                 <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
                   <header>
@@ -2098,20 +2093,20 @@ export default function ProductosPage() {
       </AlertDialog>
 
       <Dialog open={formOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-[90vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo producto</DialogTitle>
             <DialogDescription>Registra un producto sin abandonar el listado actual.</DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmitNuevoProducto} className="space-y-5">
-            <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
-              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+            <div className="grid gap-5 lg:grid-cols-3">
+              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4 lg:col-span-2">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Información básica</p>
                   <p className="text-xs text-muted-foreground">Completa los datos principales del producto.</p>
                 </header>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2 sm:col-span-1">
                     <Label htmlFor="nuevo-codigo">Código</Label>
                     <Input
                       id="nuevo-codigo"
@@ -2121,7 +2116,7 @@ export default function ProductosPage() {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="nuevo-nombre">Nombre</Label>
                     <Input
                       id="nuevo-nombre"
@@ -2131,25 +2126,25 @@ export default function ProductosPage() {
                       required
                     />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="nuevo-descripcion">Descripción</Label>
-                  <Textarea
-                    id="nuevo-descripcion"
-                    value={nuevoProducto.descripcion}
-                    onChange={(event) => setNuevoProducto((prev) => ({ ...prev, descripcion: event.target.value }))}
-                    rows={3}
-                    placeholder="Describe brevemente las características principales..."
-                  />
+                  <div className="space-y-2 sm:col-span-3">
+                    <Label htmlFor="nuevo-descripcion">Descripción</Label>
+                    <Textarea
+                      id="nuevo-descripcion"
+                      value={nuevoProducto.descripcion}
+                      onChange={(event) => setNuevoProducto((prev) => ({ ...prev, descripcion: event.target.value }))}
+                      rows={3}
+                      placeholder="Describe brevemente las características principales..."
+                    />
+                  </div>
                 </div>
               </section>
 
-              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
+              <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4 lg:col-span-1">
                 <header>
                   <p className="text-sm font-semibold text-foreground">Categorización</p>
                   <p className="text-xs text-muted-foreground">Asigna categoría y proveedor para organizar el inventario.</p>
                 </header>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4">
                   <div className="space-y-2">
                     <Label>Categoría</Label>
                     <Select
@@ -2198,6 +2193,9 @@ export default function ProductosPage() {
                   </div>
                 </div>
               </section>
+            </div>
+
+            <div className="space-y-5">
 
               <section className="space-y-4 rounded-xl border border-border bg-card/60 p-4">
                 <header>
@@ -2370,6 +2368,10 @@ export default function ProductosPage() {
                   </div>
                 )}
               </section>
+
+            </div>
+
+            <div className="space-y-5">
 
               <section className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
                 <header>

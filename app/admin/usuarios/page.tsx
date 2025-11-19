@@ -19,6 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 
 import { AdminSectionLayout } from "@/components/admin-section-layout"
+import { InviteUserDialog } from "@/components/admin/invite-user-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -320,12 +321,7 @@ export default function UsuariosPage() {
               )}
               Actualizar
             </Button>
-            <Button size="sm" asChild>
-              <Link href="/admin/register">
-                <Plus className="mr-2 h-4 w-4" />
-                Invitar usuario
-              </Link>
-            </Button>
+            <InviteUserDialog onUserInvited={() => void fetchUsuarios(false)} />
           </div>
         }
         sidebar={

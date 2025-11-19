@@ -47,6 +47,12 @@ export default async function CatalogPage() {
   const categories = Array.from(new Set(productos.map((producto) => producto.categoria).filter(Boolean)))
   const totalStock = productos.reduce((total, producto) => total + (producto.stockTotal ?? 0), 0)
 
+  const { data: storeData } = await supabaseAdmin
+    .from("tiendas")
+    .select("whatsapp")
+    .eq("slug", "main")
+    .single()
+
   return (
     <div className="force-light relative min-h-screen overflow-hidden bg-gradient-to-br from-[#f8faff] via-[#f2f4fb] to-[#edf0f7]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(118,131,173,0.25),_transparent_55%)]" />
@@ -58,7 +64,7 @@ export default async function CatalogPage() {
       />
 
       <CartButton />
-      <CartDrawer />
+      <CartDrawer whatsappNumber={storeData?.whatsapp} />
     </div>
   )
 }

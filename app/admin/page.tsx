@@ -304,6 +304,10 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
   }
 }
 
+import { updateStoreWhatsApp, getStoreSettings } from "@/app/actions/store-actions"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+
 export default function AdminHomePage() {
   const router = useRouter()
   const [topProducts, setTopProducts] = useState<HighlightProduct[]>([])
@@ -312,7 +316,33 @@ export default function AdminHomePage() {
   const [isHydratingHighlights, startHighlightsTransition] = useTransition()
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [showMobileNotice, setShowMobileNotice] = useState(false)
+  const [whatsappNumber, setWhatsappNumber] = useState("")
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false)
   const { toast } = useToast()
+
+  useEffect(() => {
+    getStoreSettings().then((res) => {
+      if (res.success && res.data?.whatsapp) {
+        setWhatsappNumber(res.data.whatsapp)
+      }
+    })
+  }, [])
+
+  const handleSaveWhatsapp = async () => {
+    setSavingWhatsapp(true)
+    try {
+      const res = await updateStoreWhatsApp(whatsappNumber)
+      if (res.success) {
+        toast({ title: "Guardado", description: "Número de WhatsApp actualizado" })
+      } else {
+        toast({ title: "Error", description: res.message, variant: "destructive" })
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo guardar", variant: "destructive" })
+    } finally {
+      setSavingWhatsapp(false)
+    }
+  }
 
   const resolveCatalogUrl = () => {
     if (typeof window !== "undefined" && window.location?.origin) {
@@ -545,16 +575,46 @@ export default function AdminHomePage() {
                 Compartir catálogo
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-72 p-4">
               <DropdownMenuLabel>Acciones rápidas</DropdownMenuLabel>
-              <DropdownMenuItem onSelect={() => void copyCatalogLink()}>
-                <Copy className="size-4" />
+              <DropdownMenuItem onSelect={() => void copyCatalogLink()} className="cursor-pointer">
+                <Copy className="mr-2 size-4" />
                 Copiar link
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={openCatalog}>
-                <ExternalLink className="size-4" />
+              <DropdownMenuItem onSelect={openCatalog} className="cursor-pointer">
+                <ExternalLink className="mr-2 size-4" />
                 Abrir catálogo
               </DropdownMenuItem>
+
+              <div className="my-2 border-t border-border" />
+
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="whatsapp-config" className="text-xs font-medium">WhatsApp de Pedidos</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="whatsapp-config"
+                      placeholder="Ej: 573001234567"
+                      className="h-8 text-xs"
+                      value={whatsappNumber}
+                      onChange={(e) => setWhatsappNumber(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 px-3"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleSaveWhatsapp()
+                      }}
+                      disabled={savingWhatsapp}
+                    >
+                      {savingWhatsapp ? "..." : "OK"}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Este número recibirá los pedidos del catálogo.</p>
+                </div>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

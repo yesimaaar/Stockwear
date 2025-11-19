@@ -14,9 +14,9 @@ import { formatCurrency, createWhatsAppLink } from "@/lib/whatsapp"
 import Image from "next/image"
 import { Trash2, ShoppingBag } from "lucide-react"
 
-export default function CartDrawer() {
+export default function CartDrawer({ whatsappNumber }: { whatsappNumber?: string | null }) {
   const { items, total, isCartOpen, closeCart, updateItemQty, removeItem, clearCart } = useCart()
-  const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ""
+  const phone = whatsappNumber || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ""
 
   function onSend() {
     if (!phone) {
