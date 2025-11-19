@@ -2,10 +2,20 @@
 
 import dynamic from "next/dynamic"
 import { useEffect, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import * as LucideIcons from "lucide-react"
-const { MonitorSmartphone, X } = LucideIcons
+const { MonitorSmartphone, X, Paperclip, Copy, ExternalLink } = LucideIcons
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ProductoService } from "@/lib/services/producto-service"
 import { supabase } from "@/lib/supabase"
+import { useToast } from "@/hooks/use-toast"
 
 const SalesWorkspace = dynamic(
   () => import("@/components/facturacion/sales-workspace").then((mod) => mod.SalesWorkspace),
@@ -48,6 +58,7 @@ type HighlightsCache = HighlightsResponse
 const HIGHLIGHT_CACHE_KEY = "stockwear.admin.highlights"
 const MOBILE_NOTICE_DISMISSED_KEY = "stockwear.admin.mobile-notice.dismissed"
 const SHOULD_USE_CACHE = true
+const CATALOG_PATH = "/catalog"
 
 type BrowserWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
@@ -294,12 +305,61 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
 }
 
 export default function AdminHomePage() {
+  const router = useRouter()
   const [topProducts, setTopProducts] = useState<HighlightProduct[]>([])
   const [newProducts, setNewProducts] = useState<HighlightProduct[]>([])
   const [loadingHighlights, setLoadingHighlights] = useState(true)
   const [isHydratingHighlights, startHighlightsTransition] = useTransition()
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [showMobileNotice, setShowMobileNotice] = useState(false)
+  const { toast } = useToast()
+
+  const resolveCatalogUrl = () => {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return `${window.location.origin}${CATALOG_PATH}`
+    }
+
+    const fallbackOrigin =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : "")
+
+    return fallbackOrigin ? `${fallbackOrigin}${CATALOG_PATH}` : CATALOG_PATH
+  }
+
+  const copyCatalogLink = async () => {
+    const catalogUrl = resolveCatalogUrl()
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(catalogUrl)
+      } else if (typeof document !== "undefined") {
+        const textarea = document.createElement("textarea")
+        textarea.value = catalogUrl
+        textarea.setAttribute("readonly", "")
+        textarea.style.position = "absolute"
+        textarea.style.left = "-9999px"
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textarea)
+      }
+
+      toast({
+        title: "Link copiado",
+        description: "El enlace al catálogo está listo para compartir.",
+      })
+    } catch (error) {
+      console.error("No se pudo copiar el link del catálogo", error)
+      toast({
+        title: "No se pudo copiar",
+        description: "Intenta de nuevo o comparte el enlace manualmente.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const openCatalog = () => {
+    router.push(CATALOG_PATH)
+  }
 
   useEffect(() => {
     if (typeof window === "undefined" || !SHOULD_USE_CACHE) return
@@ -470,6 +530,36 @@ export default function AdminHomePage() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Comparte tu catálogo</p>
+            <p className="text-sm text-muted-foreground">
+              Comparte la vista pública para que vendedores y clientes consulten existencias al instante.
+            </p>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Paperclip className="size-4" />
+                Compartir catálogo
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel>Acciones rápidas</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => void copyCatalogLink()}>
+                <Copy className="size-4" />
+                Copiar link
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={openCatalog}>
+                <ExternalLink className="size-4" />
+                Abrir catálogo
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
       {showMobileNotice && (
         <div className="relative w-full overflow-hidden rounded-2xl border border-primary bg-secondary p-4 text-sm text-muted-foreground shadow-sm">
           <div className="flex gap-3">

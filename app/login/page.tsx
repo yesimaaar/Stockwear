@@ -278,9 +278,9 @@ export default function LoginPage() {
                 />
                 Recordar sesión
               </label>
-              <button type="button" className="font-medium text-slate-900 hover:underline">
+              <Link href="/forgot-password" className="font-medium text-slate-900 hover:underline">
                 ¿Olvidaste tu contraseña?
-              </button>
+              </Link>
             </div>
 
             <Button
@@ -339,9 +339,8 @@ export default function LoginPage() {
                   <button
                     key={label}
                     type="button"
-                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                      active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-                    }`}
+                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                      }`}
                   >
                     <Icon className={`h-5 w-5 ${active ? "text-white" : "text-slate-500"}`} />
                     <span>{label}</span>

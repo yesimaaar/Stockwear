@@ -31,7 +31,20 @@ type AlmacenRelacion = {
   nombre?: string | null
 }
 
-type ProductoRow = Producto & {
+export type ProductoRow = {
+  id: number
+  tienda_id: number
+  codigo: string
+  nombre: string
+  categoriaId: number
+  descripcion: string | null
+  precio: number
+  descuento: number
+  proveedor: string | null
+  imagen: string | null
+  stockMinimo: number
+  estado: 'activo' | 'inactivo'
+  createdAt: string
   categoria?: CategoriaRelacion | CategoriaRelacion[] | null
   stock?: Array<{
     id: number | null
@@ -64,8 +77,9 @@ type ProductoRow = Producto & {
   }> | null
 }
 
-const PRODUCTO_SELECT = `
+export const PRODUCTO_SELECT = `
   id,
+  tienda_id,
   codigo,
   nombre,
   descripcion,
@@ -171,8 +185,8 @@ const resolveCategoriaNombre = (categoria: ProductoRow['categoria']): string => 
   return categoria.nombre ?? ''
 }
 
-const mapProductoRow = (row: ProductoRow): ProductoConStock => {
-  const { categoria, stock, embeddings, referenceImages, ...productoBase } = row
+export const mapProductoRow = (row: ProductoRow): ProductoConStock => {
+  const { categoria, stock, embeddings, referenceImages, tienda_id, ...productoBase } = row
   const stockPorTalla = (stock ?? []).map((registro) => ({
     stockId: registro.id ?? 0,
     tallaId: registro.tallaId ?? null,
@@ -186,42 +200,43 @@ const mapProductoRow = (row: ProductoRow): ProductoConStock => {
 
   const mappedEmbeddings: ProductoEmbedding[] | undefined = embeddings
     ? embeddings
-        .filter((item): item is NonNullable<typeof item> => Array.isArray(item.embedding) && item.productoId != null)
-        .map((item) => ({
-          id: item.id ?? 0,
-          productoId: item.productoId ?? productoBase.id,
-          embedding: item.embedding ?? [],
-          fuente: item.fuente ?? null,
-          referenceImageId: item.referenceImageId ?? null,
-          createdAt: item.createdAt ?? new Date().toISOString(),
-          updatedAt: item.updatedAt ?? new Date().toISOString(),
-        }))
+      .filter((item): item is NonNullable<typeof item> => Array.isArray(item.embedding) && item.productoId != null)
+      .map((item) => ({
+        id: item.id ?? 0,
+        productoId: item.productoId ?? productoBase.id,
+        embedding: item.embedding ?? [],
+        fuente: item.fuente ?? null,
+        referenceImageId: item.referenceImageId ?? null,
+        createdAt: item.createdAt ?? new Date().toISOString(),
+        updatedAt: item.updatedAt ?? new Date().toISOString(),
+      }))
     : undefined
 
   const mappedReferenceImages: ProductoReferenceImage[] | undefined = referenceImages
     ? referenceImages
-        .filter((item): item is NonNullable<typeof item> => Boolean(item?.id) && Boolean(item?.url))
-        .map((item) => ({
-          id: item.id ?? 0,
-          productoId: item.productoId ?? productoBase.id,
-          url: item.url ?? '',
-          path: item.path ?? '',
-          bucket: item.bucket ?? null,
-          filename: item.filename ?? null,
-          mimeType: item.mimeType ?? null,
-          size:
-            typeof item.size === 'number'
-              ? item.size
-              : item.size != null
-                ? Number(item.size)
-                : null,
-          createdAt: item.createdAt ?? new Date().toISOString(),
-          updatedAt: item.updatedAt ?? new Date().toISOString(),
-        }))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item?.id) && Boolean(item?.url))
+      .map((item) => ({
+        id: item.id ?? 0,
+        productoId: item.productoId ?? productoBase.id,
+        url: item.url ?? '',
+        path: item.path ?? '',
+        bucket: item.bucket ?? null,
+        filename: item.filename ?? null,
+        mimeType: item.mimeType ?? null,
+        size:
+          typeof item.size === 'number'
+            ? item.size
+            : item.size != null
+              ? Number(item.size)
+              : null,
+        createdAt: item.createdAt ?? new Date().toISOString(),
+        updatedAt: item.updatedAt ?? new Date().toISOString(),
+      }))
     : undefined
 
   return {
     ...productoBase,
+    tiendaId: tienda_id,
     categoria: resolveCategoriaNombre(categoria),
     stockTotal,
     stockPorTalla,
@@ -338,20 +353,36 @@ export class ProductoService {
     return all.filter((p) => p.stockTotal < p.stockMinimo)
   }
 
-  static async create(producto: Omit<Producto, 'id' | 'createdAt'>): Promise<Producto | null> {
+  static async create(producto: Omit<Producto, 'id' | 'createdAt' | 'tiendaId'>): Promise<Producto | null> {
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData.user) return null
+
+    // Fetch user profile to get tienda_id
+    const { data: profile } = await supabase
+      .from('usuarios')
+      .select('tienda_id')
+      .eq('auth_uid', userData.user.id)
+      .single()
+
+    if (!profile?.tienda_id) {
+      console.error('No se pudo obtener la tienda del usuario')
+      return null
+    }
+
     const payload = {
       ...producto,
+      tienda_id: profile.tienda_id,
       descripcion: producto.descripcion?.trim() || null,
       createdAt: new Date(),
     }
 
-    const { data, error } = await supabase.from('productos').insert(payload).select().single()
+    const { data, error } = await supabase.from('productos').insert(payload).select(PRODUCTO_SELECT).single()
     if (error || !data) {
       console.error('Error al crear producto', error)
       return null
     }
     invalidateProductosCache()
-    return data as Producto
+    return mapProductoRow(data as ProductoRow)
   }
 
   static async getCategoriasActivas(): Promise<Categoria[]> {
@@ -376,10 +407,10 @@ export class ProductoService {
   }
 
   static async update(id: number, data: Partial<Producto>): Promise<Producto | null> {
-    const { data: updated, error } = await supabase.from('productos').update(data).eq('id', id).select().single()
+    const { data: updated, error } = await supabase.from('productos').update(data).eq('id', id).select(PRODUCTO_SELECT).single()
     if (error || !updated) return null
     invalidateProductosCache()
-    return updated as Producto
+    return mapProductoRow(updated as ProductoRow)
   }
 
   static async delete(
@@ -394,8 +425,8 @@ export class ProductoService {
       const origin =
         typeof window === 'undefined'
           ? process.env.NEXT_PUBLIC_SITE_URL
-            || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined)
-            || 'http://localhost:3000'
+          || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined)
+          || 'http://localhost:3000'
           : window.location.origin
 
       if (process.env.NODE_ENV !== 'production') {

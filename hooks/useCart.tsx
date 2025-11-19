@@ -1,7 +1,15 @@
 "use client"
-import React, { createContext, useContext, useState } from "react"
+import React, { createContext, useContext, useState, useEffect } from "react"
 
-export type CartItem = { id: string; name: string; price: number; qty: number }
+export type CartItem = {
+  id: string // unique identifier (e.g. "123-M")
+  productId: number
+  name: string
+  price: number
+  qty: number
+  size: string
+  image?: string
+}
 
 type CartContextValue = {
   items: CartItem[]
@@ -22,12 +30,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
 
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("stockwear-cart")
+    if (saved) {
+      try {
+        setItems(JSON.parse(saved))
+      } catch (e) {
+        console.error("Failed to load cart", e)
+      }
+    }
+  }, [])
+
+  // Save cart to localStorage on change
+  useEffect(() => {
+    localStorage.setItem("stockwear-cart", JSON.stringify(items))
+  }, [items])
+
   function addItem(item: CartItem) {
     setItems(prev => {
-      const found = prev.find(p => p.id === item.id)
-      if (found) return prev.map(p => (p.id === item.id ? { ...p, qty: p.qty + item.qty } : p))
+      const existing = prev.find(p => p.id === item.id)
+      if (existing) {
+        return prev.map(p => (p.id === item.id ? { ...p, qty: p.qty + item.qty } : p))
+      }
       return [...prev, item]
     })
+    setIsCartOpen(true)
   }
 
   function removeItem(id: string) {

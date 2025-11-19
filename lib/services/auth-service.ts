@@ -10,6 +10,7 @@ export interface AuthResponse {
 type UsuarioRow = {
   id: string
   auth_uid?: string
+  tienda_id: number
   nombre: string
   email: string
   telefono?: string | null
@@ -29,6 +30,7 @@ function mapUsuario(row?: UsuarioRow | null): Usuario | undefined {
   return {
     id: row.id,
     authUid: row.auth_uid ?? row.id,
+    tiendaId: row.tienda_id,
     nombre: row.nombre,
     email: row.email,
     telefono: row.telefono ?? null,
@@ -74,10 +76,14 @@ export class AuthService {
     return { success: true }
   }
 
-  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado'; telefono?: string }): Promise<AuthResponse> {
-    const { nombre, email, password, rol, telefono } = params
+  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado'; telefono?: string; tiendaId?: number }): Promise<AuthResponse> {
+    const { nombre, email, password, rol, telefono, tiendaId } = params
     const normalizedEmail = email.trim().toLowerCase()
-  const normalizedPhone = telefono ? telefono.replace(/\s+/g, "") : null
+    const normalizedPhone = telefono ? telefono.replace(/\s+/g, "") : null
+
+    // Si no se especifica tienda, asumimos que es un nuevo Owner (tienda_id = null)
+    // El flujo de onboarding se encargará de pedirle que cree su tienda.
+    const finalTiendaId = tiendaId ?? null
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -87,6 +93,7 @@ export class AuthService {
           nombre,
           rol,
           telefono: normalizedPhone ?? undefined,
+          tienda_id: finalTiendaId,
         },
       },
     })
@@ -106,6 +113,7 @@ export class AuthService {
       await supabase.from('usuarios').upsert({
         id: user.id,
         auth_uid: user.id,
+        tienda_id: finalTiendaId,
         nombre,
         email: normalizedEmail,
         rol,
@@ -122,6 +130,7 @@ export class AuthService {
     await supabase.from('usuarios').upsert({
       id: user.id,
       auth_uid: user.id,
+      tienda_id: finalTiendaId,
       nombre,
       email: normalizedEmail,
       rol,
@@ -161,6 +170,32 @@ export class AuthService {
       const message = error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.'
       return { success: false, message }
     }
+  }
+
+  static async resetPasswordForEmail(email: string): Promise<AuthResponse> {
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/update-password`
+      : undefined
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    })
+
+    if (error) {
+      return { success: false, message: error.message }
+    }
+
+    return { success: true, message: 'Se ha enviado un correo para restablecer tu contraseña.' }
+  }
+
+  static async updatePassword(password: string): Promise<AuthResponse> {
+    const { error } = await supabase.auth.updateUser({ password })
+
+    if (error) {
+      return { success: false, message: error.message }
+    }
+
+    return { success: true, message: 'Contraseña actualizada correctamente.' }
   }
 
   static async logout(): Promise<void> {
