@@ -1,171 +1,227 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import Link from "next/link"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { AuthService } from "@/lib/services/auth-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Loader2, ArrowLeft } from "lucide-react"
+import Link from "next/link"
+import { useToast } from "@/hooks/use-toast"
 
-export default function RegisterAdmin() {
+export default function RegisterEmployeePage() {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(false)
+  const [tiendaId, setTiendaId] = useState<number | null>(null)
+
   const [formData, setFormData] = useState({
     nombre: "",
     email: "",
     password: "",
     confirmPassword: "",
-    codigoAdmin: "",
-    departamento: "",
+    telefono: "",
+    rol: "empleado" as "admin" | "empleado",
   })
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState("")
-  const [error, setError] = useState("")
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      const user = await AuthService.getCurrentUser()
+      if (user?.tiendaId) {
+        setTiendaId(user.tiendaId)
+      } else {
+        toast({
+          title: "Error",
+          description: "No se pudo identificar tu tienda. Reinicia sesión.",
+          variant: "destructive"
+        })
+        router.push("/admin/usuarios")
+      }
+    }
+    loadCurrentUser()
+  }, [router, toast])
+
+  const handleChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
-    setMessage("")
 
     if (formData.password !== formData.confirmPassword) {
-      setError("Las contraseñas no coinciden")
+      toast({
+        title: "Error",
+        description: "Las contraseñas no coinciden",
+        variant: "destructive"
+      })
       return
     }
 
-    if (formData.password.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres")
+    if (!tiendaId) {
+      toast({
+        title: "Error",
+        description: "No tienes una tienda asignada para registrar usuarios.",
+        variant: "destructive"
+      })
       return
     }
 
     setLoading(true)
+
     try {
-      const response = await fetch("/api/register/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+      const result = await AuthService.register({
+        nombre: formData.nombre,
+        email: formData.email,
+        password: formData.password,
+        rol: formData.rol,
+        telefono: formData.telefono,
+        tiendaId: tiendaId // Critical: Assign to current store
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        setError(data.message || "Error al registrar admin")
+      if (result.success) {
+        toast({
+          title: "Usuario registrado",
+          description: "El usuario ha sido creado exitosamente.",
+        })
+        router.push("/admin/usuarios")
       } else {
-        setMessage("Admin registrado exitosamente")
-        setFormData({ nombre: "", email: "", password: "", confirmPassword: "", codigoAdmin: "", departamento: "" })
+        toast({
+          title: "Error al registrar",
+          description: result.message || "Ocurrió un error inesperado.",
+          variant: "destructive"
+        })
       }
-    } catch (err) {
-      setError("Error de conexión")
-      console.error(err)
+    } catch (error) {
+      console.error(error)
+      toast({
+        title: "Error",
+        description: "Error de conexión.",
+        variant: "destructive"
+      })
     } finally {
       setLoading(false)
     }
   }
 
+  if (!tiendaId) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="container max-w-2xl py-10">
+      <div className="mb-6">
+        <Button variant="ghost" asChild className="pl-0 hover:bg-transparent">
+          <Link href="/admin/usuarios" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
+            Volver a usuarios
+          </Link>
+        </Button>
+      </div>
+
+      <Card>
         <CardHeader>
-          <CardTitle>Registrar Admin</CardTitle>
-          <CardDescription>Crea una nueva cuenta de administrador</CardDescription>
+          <CardTitle>Registrar nuevo usuario</CardTitle>
+          <CardDescription>
+            Agrega un nuevo administrador o empleado a tu tienda.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Nombre</label>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="nombre">Nombre completo</Label>
               <Input
-                type="text"
-                name="nombre"
+                id="nombre"
                 value={formData.nombre}
-                onChange={handleChange}
-                placeholder="Tu nombre completo"
+                onChange={(e) => handleChange("nombre", e.target.value)}
+                placeholder="Ej. Juan Pérez"
                 required
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
+            <div className="space-y-2">
+              <Label htmlFor="email">Correo electrónico</Label>
               <Input
+                id="email"
                 type="email"
-                name="email"
                 value={formData.email}
-                onChange={handleChange}
-                placeholder="tu@email.com"
+                onChange={(e) => handleChange("email", e.target.value)}
+                placeholder="juan@ejemplo.com"
                 required
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Departamento</label>
-              <select
-                name="departamento"
-                value={formData.departamento}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                required
-              >
-                <option value="">Selecciona un departamento</option>
-                <option value="RRHH">RRHH</option>
-                <option value="Ventas">Ventas</option>
-                <option value="IT">IT</option>
-                <option value="Producción">Producción</option>
-              </select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="telefono">Teléfono (Opcional)</Label>
+                <Input
+                  id="telefono"
+                  value={formData.telefono}
+                  onChange={(e) => handleChange("telefono", e.target.value)}
+                  placeholder="+52..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rol">Rol</Label>
+                <Select
+                  value={formData.rol}
+                  onValueChange={(val) => handleChange("rol", val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="empleado">Empleado</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Código de Admin</label>
-              <Input
-                type="password"
-                name="codigoAdmin"
-                value={formData.codigoAdmin}
-                onChange={handleChange}
-                placeholder="Código secreto"
-                required
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => handleChange("password", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={(e) => handleChange("confirmPassword", e.target.value)}
+                  required
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Contraseña</label>
-              <Input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Mínimo 6 caracteres"
-                required
-              />
+            <div className="flex justify-end pt-4">
+              <Button type="submit" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Registrar usuario
+              </Button>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Confirmar Contraseña</label>
-              <Input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                placeholder="Repite tu contraseña"
-                required
-              />
-            </div>
-
-            {error && <div className="p-3 bg-red-100 text-red-700 rounded">{error}</div>}
-            {message && <div className="p-3 bg-green-100 text-green-700 rounded">{message}</div>}
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Registrando..." : "Registrar"}
-            </Button>
           </form>
-
-          <div className="mt-4 text-center text-sm text-gray-600">
-            <Link href="/" className="text-blue-600 hover:text-blue-700">
-              Volver al inicio
-            </Link>
-          </div>
         </CardContent>
       </Card>
-    </main>
+    </div>
   )
 }

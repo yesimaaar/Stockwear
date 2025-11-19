@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Ruler, Plus, Edit, Trash2 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+const { Ruler, Plus, Edit, Trash2 } = LucideIcons;
 
 import { AdminSectionLayout } from "@/components/admin-section-layout";
 import { Badge } from "@/components/ui/badge";

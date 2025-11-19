@@ -4,7 +4,8 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+const { ArrowLeft } = LucideIcons;
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ProductoService } from "@/lib/services/producto-service";
-import type { Categoria } from "@/lib/types";
+import { uploadProductImage } from "@/lib/services/product-image-service";
+import { deleteReferenceImage, regenerateProductEmbeddings, uploadReferenceImage } from "@/lib/services/product-reference-service";
+import type { Categoria, ProductoReferenceImage } from "@/lib/types";
 
 interface FormState {
   codigo: string;
@@ -29,6 +32,8 @@ interface FormState {
   estado: "activo" | "inactivo";
 }
 
+type ReferenceDraft = { file: File; preview: string };
+
 export default function EditarProductoPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -38,6 +43,30 @@ export default function EditarProductoPage() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [referenceImages, setReferenceImages] = useState<ProductoReferenceImage[]>([]);
+  const [referenceDrafts, setReferenceDrafts] = useState<ReferenceDraft[]>([]);
+  const [uploadingReferences, setUploadingReferences] = useState(false);
+  const [regeneratingEmbeddings, setRegeneratingEmbeddings] = useState(false);
+  const [removingReferenceId, setRemovingReferenceId] = useState<number | null>(null);
+
+  const mapReferenceRecord = (record: any): ProductoReferenceImage => ({
+    id: record?.id ?? 0,
+    productoId: record?.productoId ?? productoId ?? 0,
+    url: record?.url ?? "",
+    path: record?.path ?? "",
+    bucket: record?.bucket ?? null,
+    filename: record?.filename ?? null,
+    mimeType: record?.mimeType ?? null,
+    size:
+      typeof record?.size === "number"
+        ? record.size
+        : record?.size != null
+          ? Number(record.size)
+          : null,
+    createdAt: record?.createdAt ?? new Date().toISOString(),
+    updatedAt: record?.updatedAt ?? new Date().toISOString(),
+  });
 
   const productoId = useMemo(() => {
     const raw = params?.id;
@@ -82,6 +111,7 @@ export default function EditarProductoPage() {
           imagen: producto.imagen ?? "",
           estado: (producto.estado as "activo" | "inactivo") ?? "activo"
         });
+        setReferenceImages(producto.referenceImages ?? []);
       } catch (err) {
         console.error("Error cargando datos del producto", err);
         if (activo) {
@@ -100,6 +130,12 @@ export default function EditarProductoPage() {
       activo = false;
     };
   }, [productoId]);
+
+  useEffect(() => {
+    return () => {
+      referenceDrafts.forEach((draft) => URL.revokeObjectURL(draft.preview));
+    };
+  }, [referenceDrafts]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -155,10 +191,68 @@ export default function EditarProductoPage() {
         return;
       }
 
+      let referenceSuccess = 0;
+      const referenceErrors: Array<{ name: string; message: string }> = [];
+      const newReferenceRecords: ProductoReferenceImage[] = [];
+
+      if (referenceDrafts.length > 0 && productoId != null) {
+        setUploadingReferences(true);
+        try {
+          for (const draft of referenceDrafts) {
+            try {
+              const response = await uploadReferenceImage(productoId, draft.file, {
+                productCode: formData.codigo,
+              });
+              if (response?.referenceImage) {
+                newReferenceRecords.push(mapReferenceRecord(response.referenceImage));
+              }
+              referenceSuccess += 1;
+            } catch (uploadError) {
+              console.error("Error subiendo imagen de referencia", uploadError);
+              referenceErrors.push({
+                name: draft.file.name,
+                message:
+                  uploadError instanceof Error ? uploadError.message : "No se pudo procesar la imagen de referencia",
+              });
+            } finally {
+              URL.revokeObjectURL(draft.preview);
+            }
+          }
+        } finally {
+          setReferenceDrafts([]);
+          setUploadingReferences(false);
+        }
+      }
+
+      if (newReferenceRecords.length > 0) {
+        setReferenceImages((prev) => [...prev, ...newReferenceRecords]);
+      }
+
       toast({
         title: "Producto actualizado",
         description: `${actualizado.nombre} fue actualizado correctamente`
       });
+
+      if (referenceSuccess > 0) {
+        toast({
+          title: referenceSuccess === 1 ? "Referencia registrada" : "Referencias registradas",
+          description: `${referenceSuccess} referencia${referenceSuccess === 1 ? "" : "s"} procesada${
+            referenceSuccess === 1 ? "" : "s"
+          } correctamente`,
+        });
+      }
+
+      if (referenceErrors.length > 0) {
+        toast({
+          title: "Algunas referencias no se procesaron",
+          description: referenceErrors
+            .map((item) => `${item.name}: ${item.message}`)
+            .slice(0, 3)
+            .join(" | "),
+          variant: "destructive",
+        });
+      }
+
       router.push(`/admin/productos/${productoId}`);
     } catch (err) {
       console.error("Error actualizando producto", err);
@@ -169,6 +263,79 @@ export default function EditarProductoPage() {
       });
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const handleReferenceFilesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) {
+      return;
+    }
+
+    const drafts = files.map<ReferenceDraft>((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+
+    setReferenceDrafts((prev) => [...prev, ...drafts]);
+    event.target.value = "";
+  };
+
+  const handleRemoveReferenceDraft = (index: number) => {
+    setReferenceDrafts((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed) {
+        URL.revokeObjectURL(removed.preview);
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteReference = async (referenceId: number) => {
+    try {
+      setRemovingReferenceId(referenceId);
+      await deleteReferenceImage(referenceId);
+      setReferenceImages((prev) => prev.filter((item) => item.id !== referenceId));
+      toast({
+        title: "Referencia eliminada",
+        description: "La imagen de referencia se eliminó correctamente.",
+      });
+    } catch (deleteError) {
+      console.error("Error eliminando imagen de referencia", deleteError);
+      toast({
+        title: "No se pudo eliminar la referencia",
+        description: deleteError instanceof Error ? deleteError.message : "Intenta nuevamente",
+        variant: "destructive",
+      });
+    } finally {
+      setRemovingReferenceId(null);
+    }
+  };
+
+  const handleRegenerateEmbeddings = async () => {
+    if (productoId == null) return;
+    try {
+      setRegeneratingEmbeddings(true);
+      const result = await regenerateProductEmbeddings(productoId);
+      toast({
+        title: "Embeddings regenerados",
+        description:
+          result.processed === 0
+            ? "No se generaron embeddings porque no hay referencias."
+            : `${result.processed} referencia${result.processed === 1 ? "" : "s"} procesada${
+                result.processed === 1 ? "" : "s"
+              } correctamente`,
+      });
+    } catch (regenError) {
+      console.error("Error regenerando embeddings", regenError);
+      toast({
+        title: "No se pudieron regenerar los embeddings",
+        description: regenError instanceof Error ? regenError.message : "Intenta nuevamente",
+        variant: "destructive",
+      });
+    } finally {
+      setRegeneratingEmbeddings(false);
     }
   };
 
@@ -337,41 +504,219 @@ export default function EditarProductoPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Imagen del producto</CardTitle>
+              <CardTitle>Imagen principal del producto</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Label htmlFor="imagen">URL de imagen</Label>
-              <div className="flex items-center gap-3">
-                <Input
-                  id="imagen"
-                  value={formData.imagen}
-                  placeholder="https://"
-                  onChange={(event) => setFormData({ ...formData, imagen: event.target.value })}
-                />
-                {formData.imagen && (
-                  <div className="relative h-16 w-16 overflow-hidden rounded border">
-                    <Image
-                      src={formData.imagen}
-                      alt="Previsualización"
-                      fill
-                      sizes="64px"
-                      loading="lazy"
-                      className="object-cover"
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="imagen-file">Subir nueva imagen</Label>
+                  <Input
+                    id="imagen-file"
+                    type="file"
+                    accept="image/*"
+                    disabled={uploadingImage}
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file || !formData) return;
+                      setUploadingImage(true);
+                      try {
+                        const { url } = await uploadProductImage(file, {
+                          productId: productoId ?? undefined,
+                          productCode: formData.codigo,
+                        });
+                        setFormData((prev) => (prev ? { ...prev, imagen: url } : prev));
+                        toast({ title: "Imagen actualizada", description: "La imagen se almacenó correctamente." });
+                      } catch (uploadError) {
+                        console.error("Error subiendo imagen", uploadError);
+                        toast({
+                          title: "No se pudo subir la imagen",
+                          description:
+                            uploadError instanceof Error ? uploadError.message : "Intenta nuevamente con otro archivo",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setUploadingImage(false);
+                        event.target.value = "";
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Selecciona una imagen desde tu dispositivo. Reemplazará la imagen actual del producto.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="imagen">URL de imagen</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="imagen"
+                      value={formData.imagen}
+                      placeholder="https://"
+                      onChange={(event) => setFormData({ ...formData, imagen: event.target.value })}
                     />
+                    {formData.imagen && (
+                      <div className="relative h-16 w-16 overflow-hidden rounded border">
+                        <Image
+                          src={formData.imagen}
+                          alt="Previsualización"
+                          fill
+                          sizes="64px"
+                          loading="lazy"
+                          className="object-cover"
+                        />
+                      </div>
+                    )}
                   </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Imágenes de referencia para reconocimiento</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Imágenes registradas</Label>
+                {referenceImages.length > 0 ? (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {referenceImages.map((reference) => {
+                      const imageSrc = reference.url && reference.url.length > 0 ? reference.url : undefined;
+                      return (
+                        <div key={reference.id} className="flex flex-col gap-2">
+                          <div className="relative h-24 w-full overflow-hidden rounded border">
+                            {imageSrc ? (
+                              <Image
+                                src={imageSrc}
+                                alt={reference.filename ?? `Referencia ${reference.id}`}
+                                fill
+                                sizes="120px"
+                                loading="lazy"
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">
+                                Sin vista previa
+                              </div>
+                            )}
+                          </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex-1 truncate text-xs text-muted-foreground">
+                            {reference.filename ?? reference.path}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteReference(reference.id)}
+                            disabled={
+                              removingReferenceId === reference.id ||
+                              uploadingReferences ||
+                              guardando
+                            }
+                          >
+                            {removingReferenceId === reference.id ? "Eliminando…" : "Eliminar"}
+                          </Button>
+                        </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Aún no hay imágenes de referencia registradas para este producto.
+                  </p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reference-files">Añadir nuevas imágenes</Label>
+                <Input
+                  id="reference-files"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={guardando || uploadingImage || uploadingReferences}
+                  onChange={handleReferenceFilesChange}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Agrega fotos adicionales del producto para mejorar los resultados del reconocimiento visual.
+                </p>
+              </div>
+
+              {referenceDrafts.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Imágenes pendientes de carga</Label>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {referenceDrafts.map((draft, index) => (
+                      <div key={`${draft.preview}-${index}`} className="flex flex-col gap-2">
+                        <div className="relative h-24 w-full overflow-hidden rounded border">
+                          <Image
+                            src={draft.preview}
+                            alt={`Referencia pendiente ${index + 1}`}
+                            fill
+                            sizes="120px"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleRemoveReferenceDraft(index)}
+                          disabled={guardando || uploadingReferences}
+                        >
+                          Quitar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleRegenerateEmbeddings}
+                  disabled={
+                    regeneratingEmbeddings ||
+                    uploadingReferences ||
+                    referenceImages.length === 0 ||
+                    guardando
+                  }
+                >
+                  {regeneratingEmbeddings ? "Regenerando…" : "Regenerar embeddings"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Úsalo cuando reemplaces referencias existentes o después de eliminarlas.
+                </p>
               </div>
             </CardContent>
           </Card>
 
           <div className="flex justify-end gap-4">
             <Link href={`/admin/productos/${productoId}`}>
-              <Button type="button" variant="outline" disabled={guardando}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={guardando || uploadingReferences || regeneratingEmbeddings || removingReferenceId !== null}
+              >
                 Cancelar
               </Button>
             </Link>
-            <Button type="submit" disabled={guardando || categorias.length === 0}>
-              {guardando ? "Guardando..." : "Guardar cambios"}
+            <Button
+              type="submit"
+              disabled={
+                guardando ||
+                categorias.length === 0 ||
+                uploadingImage ||
+                uploadingReferences ||
+                regeneratingEmbeddings
+              }
+            >
+              {guardando || uploadingReferences ? "Procesando..." : "Guardar cambios"}
             </Button>
           </div>
         </form>

@@ -10,6 +10,7 @@ export interface AuthResponse {
 type UsuarioRow = {
   id: string
   auth_uid?: string
+  tienda_id: number
   nombre: string
   email: string
   telefono?: string | null
@@ -19,12 +20,17 @@ type UsuarioRow = {
   createdAt?: string
 }
 
+type UpdateUsuarioInput = Partial<
+  Pick<Usuario, 'nombre' | 'email' | 'telefono' | 'rol' | 'estado'>
+>
+
 function mapUsuario(row?: UsuarioRow | null): Usuario | undefined {
   if (!row) return undefined
   const createdValue = row.createdAt ?? row.created_at ?? new Date().toISOString()
   return {
     id: row.id,
     authUid: row.auth_uid ?? row.id,
+    tiendaId: row.tienda_id,
     nombre: row.nombre,
     email: row.email,
     telefono: row.telefono ?? null,
@@ -70,10 +76,65 @@ export class AuthService {
     return { success: true }
   }
 
-  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado'; telefono?: string }): Promise<AuthResponse> {
-    const { nombre, email, password, rol, telefono } = params
+  static async register(params: { nombre: string; email: string; password: string; rol: 'admin' | 'empleado'; telefono?: string; tiendaId?: number }): Promise<AuthResponse> {
+    const { nombre, email, password, rol, telefono, tiendaId } = params
     const normalizedEmail = email.trim().toLowerCase()
-    const normalizedPhone = telefono?.trim() || null
+    const normalizedPhone = telefono ? telefono.replace(/\s+/g, "") : null
+
+    // Si no se especifica tienda, asumimos que es un nuevo Owner (tienda_id = null)
+    // El flujo de onboarding se encargará de pedirle que cree su tienda.
+    const finalTiendaId = tiendaId ?? null
+
+    if (typeof window !== 'undefined' && finalTiendaId !== null) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+
+      if (sessionError || !accessToken) {
+        return {
+          success: false,
+          message: 'Tu sesión expiró. Inicia sesión nuevamente para continuar.',
+        }
+      }
+
+      try {
+        const response = await fetch('/api/admin/usuarios', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            nombre: nombre.trim(),
+            email: normalizedEmail,
+            password,
+            rol,
+            telefono: normalizedPhone,
+            tiendaId: finalTiendaId,
+          }),
+        })
+
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null
+
+        if (!response.ok) {
+          return {
+            success: false,
+            message: payload?.message ?? 'No se pudo registrar el usuario desde el panel de administración.',
+          }
+        }
+
+        return {
+          success: true,
+          message: payload?.message ?? 'Usuario registrado exitosamente.',
+        }
+      } catch (error) {
+        console.error('Error al registrar usuario desde el panel', error)
+        return {
+          success: false,
+          message: 'No se pudo registrar el usuario. Verifica tu conexión e inténtalo nuevamente.',
+        }
+      }
+    }
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -83,6 +144,7 @@ export class AuthService {
           nombre,
           rol,
           telefono: normalizedPhone ?? undefined,
+          tienda_id: finalTiendaId,
         },
       },
     })
@@ -94,44 +156,67 @@ export class AuthService {
     if (!user) {
       return {
         success: false,
-        message: 'No se pudo crear el usuario. Verifica que el correo no requiera confirmación.',
+        message: 'No se pudo crear el usuario. Intenta nuevamente.',
       }
     }
 
-    if (!data.session) {
-      await supabase.from('usuarios').upsert({
-        id: user.id,
-        auth_uid: user.id,
-        nombre,
-        email: normalizedEmail,
-        rol,
-        telefono: normalizedPhone,
-        estado: 'activo',
+    // El trigger en la base de datos se encargará de crear el registro en public.usuarios
+
+    return {
+      success: true,
+      message: 'Usuario registrado. Revisa tu correo para confirmar la cuenta.',
+    }
+  }
+
+  static async signInWithGoogle(redirectPath?: string): Promise<AuthResponse> {
+    try {
+      const redirectTo =
+        typeof window === 'undefined'
+          ? undefined
+          : `${window.location.origin}${redirectPath && redirectPath.startsWith('/') ? redirectPath : ''}`
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+        },
       })
 
-      return {
-        success: true,
-        message: 'Usuario registrado. Revisa tu correo para confirmar la cuenta.',
+      if (error) {
+        return { success: false, message: error.message }
       }
-    }
 
-    await supabase.from('usuarios').upsert({
-      id: user.id,
-      auth_uid: user.id,
-      nombre,
-      email: normalizedEmail,
-      rol,
-      telefono: normalizedPhone,
-      estado: 'activo',
+      return { success: true, message: data?.url }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.'
+      return { success: false, message }
+    }
+  }
+
+  static async resetPasswordForEmail(email: string): Promise<AuthResponse> {
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/update-password`
+      : undefined
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
     })
 
-    const { data: profile } = await supabase
-      .from('usuarios')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
+    if (error) {
+      return { success: false, message: error.message }
+    }
 
-    return { success: true, user: mapUsuario(profile as UsuarioRow) }
+    return { success: true, message: 'Se ha enviado un correo para restablecer tu contraseña.' }
+  }
+
+  static async updatePassword(password: string): Promise<AuthResponse> {
+    const { error } = await supabase.auth.updateUser({ password })
+
+    if (error) {
+      return { success: false, message: error.message }
+    }
+
+    return { success: true, message: 'Contraseña actualizada correctamente.' }
   }
 
   static async logout(): Promise<void> {
@@ -151,7 +236,7 @@ export class AuthService {
         .maybeSingle()
 
       return mapUsuario(profile as UsuarioRow) ?? null
-    } catch (error) {
+    } catch (_error) {
       return null
     }
   }
@@ -183,5 +268,51 @@ export class AuthService {
     return (data as UsuarioRow[])
       .map((row) => mapUsuario(row))
       .filter((user): user is Usuario => Boolean(user))
+  }
+
+  static async updateUsuario(id: string, updates: UpdateUsuarioInput): Promise<Usuario | null> {
+    if (!id) {
+      throw new Error('El identificador del usuario es obligatorio.')
+    }
+
+    const payload: Partial<UsuarioRow> = {}
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'nombre')) {
+      payload.nombre = updates.nombre?.trim() ?? ''
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'email') && updates.email) {
+      payload.email = updates.email.trim().toLowerCase()
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'telefono')) {
+      const telefonoNormalizado = updates.telefono?.trim() ?? null
+      payload.telefono = telefonoNormalizado === '' ? null : telefonoNormalizado
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'rol') && updates.rol) {
+      payload.rol = updates.rol
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'estado') && updates.estado) {
+      payload.estado = updates.estado
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return null
+    }
+
+    const { data, error } = await supabase
+      .from('usuarios')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(error.message || 'No se pudo actualizar el usuario.')
+    }
+
+    return mapUsuario(data as UsuarioRow) ?? null
   }
 }

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { ArrowLeftRight } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+const { ArrowLeftRight } = LucideIcons;
 
 import { AdminSectionLayout } from "@/components/admin-section-layout";
 import { Button } from "@/components/ui/button";

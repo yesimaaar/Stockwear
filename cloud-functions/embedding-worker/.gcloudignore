@@ -1,0 +1,22 @@
+# .gcloudignore
+# Este archivo especifica los archivos que NO se suben a Google Cloud.
+# Sigue la misma sintaxis que .gitignore.
+
+# Ignora el propio archivo .gcloudignore
+.gcloudignore
+
+# Ignora directorios y archivos relacionados con Git
+.git
+.gitignore
+
+# Ignora los módulos de Node (se instalarán en Cloud Build)
+node_modules/
+
+# Ignora archivos temporales o de configuración local que no son necesarios
+# Añade aquí cualquier otro patrón que quieras excluir, como:
+# .env
+# npm-debug.log*
+
+# Por defecto, NO se ignora el código fuente y los modelos.
+# Se incluirán package.json, package-lock.json, index.js y la carpeta models/
+# ya que no están explícitamente ignorados.
