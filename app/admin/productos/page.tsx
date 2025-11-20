@@ -960,8 +960,8 @@ export default function ProductosPage() {
     } catch (error) {
       console.error("Error creando producto", error)
       toast({
-        title: "Error inesperado",
-        description: "Revisa la consola para más detalles.",
+        title: "Error al crear producto",
+        description: error instanceof Error ? error.message : "Revisa la consola para más detalles.",
         variant: "destructive",
       })
     } finally {

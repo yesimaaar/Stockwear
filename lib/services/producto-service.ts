@@ -388,13 +388,27 @@ export class ProductoService {
       createdAt: new Date(),
     }
 
-    const { data, error } = await supabase.from('productos').insert(payload).select(PRODUCTO_SELECT).single()
+    const { data, error } = await supabase.from('productos').insert(payload).select().single()
     if (error || !data) {
-      console.error('Error al crear producto', error)
+      console.error('Error al crear producto. Payload:', payload)
+      console.error('Detalles del error:', JSON.stringify(error, null, 2))
+      if (error?.code === '23505') {
+        throw new Error('El código del producto ya existe. Por favor utiliza uno diferente.')
+      }
       return null
     }
     invalidateProductosCache(tiendaId)
-    return mapProductoRow(data as ProductoRow)
+
+    // Manually construct the result since we know it's a new product with no relations yet
+    const newProduct: ProductoConStock = {
+      ...mapProductoRow(data as ProductoRow),
+      stockTotal: 0,
+      stockPorTalla: [],
+      embeddings: [],
+      referenceImages: []
+    }
+
+    return newProduct
   }
 
   static async getCategoriasActivas(): Promise<Categoria[]> {

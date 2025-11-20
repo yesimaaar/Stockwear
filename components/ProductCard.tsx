@@ -1,30 +1,15 @@
-"use client"
 import React, { useState } from "react"
 import Image from "next/image"
-import { Package, Check, ChevronsUpDown } from "lucide-react"
+import { Package, X } from "lucide-react"
 import { useCart, type CartItem } from "@/hooks/useCart"
 import { formatCurrency } from "@/lib/whatsapp"
 import { Button } from "@/components/ui/button"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import type { ProductoConStock } from "@/lib/services/producto-service"
 
 export default function ProductCard({ product }: { product: ProductoConStock }) {
   const { addItem } = useCart()
-  const [selectedSize, setSelectedSize] = useState<string>("")
-  const [open, setOpen] = useState(false)
+  const [showSizes, setShowSizes] = useState(false)
 
   // Group stock by size
   const stockBySize = React.useMemo(() => {
@@ -52,25 +37,25 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
     })
   }, [product.stockPorTalla])
 
-  function onAdd() {
-    if (!selectedSize) return
-
+  function onAdd(size: string) {
     const item: CartItem = {
-      id: `${product.id}-${selectedSize}`,
+      id: `${product.id}-${size}`,
       productId: product.id,
       name: product.nombre,
       price: product.precio,
       qty: 1,
-      size: selectedSize,
+      size: size,
       image: product.imagen || undefined
     }
     addItem(item)
-    setSelectedSize("") // Reset selection after adding
+    setShowSizes(false)
   }
+
+  const hasStock = stockBySize.length > 0
 
   return (
     <div className="group flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm transition-all hover:border-border hover:shadow-md">
-      <div className="relative h-56 w-full overflow-hidden rounded-xl border border-border/40 bg-white">
+      <div className="relative h-56 w-full overflow-hidden rounded-xl border border-border/40 bg-card">
         {product.imagen ? (
           <Image
             src={product.imagen}
@@ -106,68 +91,44 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
             <p className="text-lg font-bold text-foreground">{formatCurrency(product.precio ?? 0)}</p>
           </div>
 
-          <div className="grid gap-2">
-            {stockBySize.length > 0 ? (
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between"
-                  >
-                    {selectedSize
-                      ? `Talla ${selectedSize}`
-                      : "Seleccionar talla..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Buscar talla..." />
-                    <CommandList>
-                      <CommandEmpty>Sin stock.</CommandEmpty>
-                      <CommandGroup>
-                        {stockBySize.map(([size, details]) => (
-                          <CommandItem
-                            key={size}
-                            value={size}
-                            onSelect={(currentValue) => {
-                              setSelectedSize(currentValue === selectedSize ? "" : currentValue)
-                              setOpen(false)
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedSize === size ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-1 justify-between items-center">
-                              <span>Talla {size}</span>
-                              <span className="text-xs text-muted-foreground">({details.total})</span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <Button variant="outline" disabled className="w-full opacity-50">
-                Agotado
+          <div className="min-h-[44px]">
+            {!showSizes ? (
+              <Button
+                onClick={() => setShowSizes(true)}
+                className="w-full rounded-xl font-medium shadow-sm transition-all active:scale-[0.98]"
+                variant="default"
+                disabled={!hasStock}
+              >
+                {hasStock ? "Agregar al carrito" : "Agotado"}
               </Button>
+            ) : (
+              <div className="animate-in fade-in zoom-in duration-200 space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-medium text-muted-foreground">Selecciona tu talla</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowSizes(false)}
+                    className="h-6 w-6 rounded-full p-0 hover:bg-accent"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {stockBySize.map(([size]) => (
+                    <Button
+                      key={size}
+                      variant="outline"
+                      size="sm"
+                      className="h-9 w-full p-0 text-xs font-medium hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => onAdd(size)}
+                    >
+                      {size}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             )}
-
-            <Button
-              onClick={onAdd}
-              className="w-full rounded-xl font-medium shadow-sm transition-all active:scale-[0.98]"
-              variant="default"
-              disabled={!selectedSize || product.stockTotal === 0}
-            >
-              {product.stockTotal === 0 ? "Sin stock" : "Agregar al carrito"}
-            </Button>
           </div>
         </div>
       </div>

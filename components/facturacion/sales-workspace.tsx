@@ -191,7 +191,7 @@ export function SalesWorkspace({
 
     setBuscando(true)
     try {
-  const resultados = await ProductoService.search(termino)
+      const resultados = await ProductoService.search(termino)
       setProductosEncontrados(resultados)
     } catch (error) {
       console.error("Error buscando productos", error)
@@ -597,46 +597,46 @@ export function SalesWorkspace({
                 </SheetTrigger>
               )}
               <SheetContent side="right" className="flex h-full w-full max-w-full flex-col p-0 sm:max-w-xl">
-                  <SheetHeader className="space-y-1 border-b px-6 py-5">
-                    <SheetTitle className="flex items-center gap-2 text-lg">
-                      <Package className="h-4 w-4" /> Carrito de venta
-                    </SheetTitle>
-                    <SheetDescription>
-                      Revisa los productos y confirma la venta cuando estés listo.
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="flex-1 overflow-hidden px-6 py-4">
-                    {lineas.length ? (
-                      <ScrollArea className="h-full pr-3">
-                        {renderCartContent({
-                          emptyMessageClass:
-                            "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
-                          showTotals: false,
-                        })}
-                      </ScrollArea>
-                    ) : (
-                      renderCartContent({
+                <SheetHeader className="space-y-1 border-b px-6 py-5">
+                  <SheetTitle className="flex items-center gap-2 text-lg">
+                    <Package className="h-4 w-4" /> Carrito de venta
+                  </SheetTitle>
+                  <SheetDescription>
+                    Revisa los productos y confirma la venta cuando estés listo.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="flex-1 overflow-hidden px-6 py-4">
+                  {lineas.length ? (
+                    <ScrollArea className="h-full pr-3">
+                      {renderCartContent({
                         emptyMessageClass:
                           "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
                         showTotals: false,
-                      })
-                    )}
-                  </div>
-                  <SheetFooter className="border-t px-6 py-5">
-                    <div className="flex w-full flex-col gap-4">
-                      {renderEmpleadoSelector("venta-empleado-sheet")}
-                      <div className="space-y-1 text-right">
-                        <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
-                        <p className="text-lg font-semibold text-foreground">
-                          Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
-                        </p>
-                      </div>
-                      <Button onClick={registrarVenta} disabled={registerDisabled} className="self-end">
-                        <Receipt className="mr-2 h-4 w-4" />
-                        {registrando ? "Registrando..." : "Registrar venta"}
-                      </Button>
+                      })}
+                    </ScrollArea>
+                  ) : (
+                    renderCartContent({
+                      emptyMessageClass:
+                        "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
+                      showTotals: false,
+                    })
+                  )}
+                </div>
+                <SheetFooter className="border-t px-6 py-5">
+                  <div className="flex w-full flex-col gap-4">
+                    {renderEmpleadoSelector("venta-empleado-sheet")}
+                    <div className="space-y-1 text-right">
+                      <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
+                      <p className="text-lg font-semibold text-foreground">
+                        Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
+                      </p>
                     </div>
-                  </SheetFooter>
+                    <Button onClick={registrarVenta} disabled={registerDisabled} className="self-end">
+                      <Receipt className="mr-2 h-4 w-4" />
+                      {registrando ? "Registrando..." : "Registrar venta"}
+                    </Button>
+                  </div>
+                </SheetFooter>
               </SheetContent>
             </Sheet>
           </div>
@@ -858,6 +858,10 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
   const handleSelectGroup = (group: TallaGroup) => {
     const preferred = group.opciones.find((stock) => stock.cantidad > 0) ?? group.opciones[0] ?? null
     setSelectedStockId(preferred?.stockId ?? null)
+
+    if (preferred && preferred.cantidad > 0 && productoDetalle) {
+      onQuickAdd(productoDetalle, preferred)
+    }
   }
 
   const isGroupSelected = (group: TallaGroup) =>
@@ -915,23 +919,13 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                variant="secondary"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
-                onClick={handleToggle}
-                aria-label={expanded ? "Ocultar tallas" : "Mostrar tallas disponibles"}
-              >
-                <ChevronDown className={cn("h-4 w-4 transition-transform", expanded ? "rotate-180" : undefined)} />
-              </Button>
-              <Button
-                size="sm"
                 variant="outline"
                 className="inline-flex h-9 items-center justify-center gap-1 rounded-full px-3"
-                disabled={quickAddDisabled}
-                onClick={handleAddToCart}
-                aria-label="Añadir talla seleccionada al carrito"
+                onClick={handleToggle}
+                aria-label={expanded ? "Ocultar tallas" : "Ver tallas disponibles"}
               >
                 <ShoppingCart className="h-4 w-4" />
-                <Plus className="h-3.5 w-3.5" />
+                {expanded ? <ChevronDown className="h-3.5 w-3.5 rotate-180" /> : <Plus className="h-3.5 w-3.5" />}
               </Button>
             </div>
           </div>
@@ -950,7 +944,7 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
                         .map((option) => `${option.almacen || "Sin almacén"}: ${option.cantidad} ud`)
                         .join("\n")
                       return (
-                      <button
+                        <button
                           key={group.talla}
                           type="button"
                           onClick={() => handleSelectGroup(group)}
@@ -961,10 +955,10 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
                               : "border-border/60 text-foreground hover:border-primary/40"
                           )}
                           title={almacenesTooltip}
-                      >
+                        >
                           <span>{group.talla}</span>
                           <span className="text-muted-foreground">{group.total} ud</span>
-                      </button>
+                        </button>
                       )
                     })}
                   </div>

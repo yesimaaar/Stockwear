@@ -76,7 +76,7 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
   const totalStock = productos.reduce((total, producto) => total + (producto.stockTotal ?? 0), 0)
 
   return (
-    <div className="force-light relative min-h-screen overflow-hidden bg-gradient-to-br from-[#f8faff] via-[#f2f4fb] to-[#edf0f7]">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#f8faff] via-[#f2f4fb] to-[#edf0f7] dark:from-background dark:via-background dark:to-background">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(118,131,173,0.25),_transparent_55%)]" />
 
       <CatalogClient
@@ -85,6 +85,7 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
         totalStock={totalStock}
         storeName={store.nombre}
         storeLogoUrl={store.logo_url}
+        storeSlug={store.slug}
       />
 
       <CartButton />
