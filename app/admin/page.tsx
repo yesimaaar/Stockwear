@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ProductoService } from "@/lib/services/producto-service"
 import { supabase } from "@/lib/supabase"
+import { getCurrentTiendaId } from "@/lib/services/tenant-service"
 import { useToast } from "@/hooks/use-toast"
 
 const SalesWorkspace = dynamic(
@@ -58,7 +59,7 @@ type HighlightsCache = HighlightsResponse
 const HIGHLIGHT_CACHE_KEY = "stockwear.admin.highlights"
 const MOBILE_NOTICE_DISMISSED_KEY = "stockwear.admin.mobile-notice.dismissed"
 const SHOULD_USE_CACHE = true
-const CATALOG_PATH = "/catalog"
+const CATALOG_BASE_PATH = "/catalog"
 
 type BrowserWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
@@ -156,28 +157,44 @@ function formatRecent(producto: ProductoRow, index: number): HighlightProduct {
 }
 
 async function loadHighlightsFallback(): Promise<HighlightsResponse> {
+  const tiendaId = await getCurrentTiendaId().catch(() => null)
+
+  if (!tiendaId) {
+    throw new Error("No se pudo determinar la tienda actual")
+  }
+
+  const scopedVentas = supabase
+    .from("ventas")
+    .select("id,total,\"createdAt\"")
+    .eq("tienda_id", tiendaId)
+    .order("createdAt", { ascending: false })
+    .limit(VENTAS_LIMIT)
+
+  const scopedDetalles = supabase
+    .from("ventasDetalle")
+    .select("\"ventaId\",\"productoId\",cantidad,\"precioUnitario\",descuento,subtotal")
+    .eq("tienda_id", tiendaId)
+    .limit(DETALLE_LIMIT)
+
+  const scopedProductos = supabase
+    .from("productos")
+    .select(`id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`)
+    .eq("tienda_id", tiendaId)
+    .limit(PRODUCTOS_LIMIT)
+
+  const scopedHistorial = supabase
+    .from("historialStock")
+    .select("tipo,\"productoId\",cantidad,\"costoUnitario\",\"createdAt\"")
+    .eq("tipo", "venta")
+    .eq("tienda_id", tiendaId)
+    .order("createdAt", { ascending: false })
+    .limit(HISTORIAL_LIMIT)
+
   const [ventasResp, detallesResp, productosResp, historialResp] = await Promise.all([
-    supabase
-      .from("ventas")
-      .select("id,total,\"createdAt\"")
-      .order("createdAt", { ascending: false })
-      .limit(VENTAS_LIMIT),
-    supabase
-      .from("ventasDetalle")
-      .select("\"ventaId\",\"productoId\",cantidad,\"precioUnitario\",descuento,subtotal")
-      .limit(DETALLE_LIMIT),
-    supabase
-      .from("productos")
-      .select(
-        `id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`,
-      )
-      .limit(PRODUCTOS_LIMIT),
-    supabase
-      .from("historialStock")
-      .select("tipo,\"productoId\",cantidad,\"costoUnitario\",\"createdAt\"")
-      .eq("tipo", "venta")
-      .order("createdAt", { ascending: false })
-      .limit(HISTORIAL_LIMIT),
+    scopedVentas,
+    scopedDetalles,
+    scopedProductos,
+    scopedHistorial,
   ])
 
   if (ventasResp.error || detallesResp.error || productosResp.error || historialResp.error) {
@@ -318,6 +335,7 @@ export default function AdminHomePage() {
   const [showMobileNotice, setShowMobileNotice] = useState(false)
   const [whatsappNumber, setWhatsappNumber] = useState("")
   const [savingWhatsapp, setSavingWhatsapp] = useState(false)
+  const [storeSlug, setStoreSlug] = useState<string | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -334,8 +352,11 @@ export default function AdminHomePage() {
       const res = await getStoreSettings(accessToken)
       if (!active) return
 
-      if (res.success && res.data?.whatsapp) {
-        setWhatsappNumber(res.data.whatsapp)
+      if (res.success && res.data) {
+        setStoreSlug(res.data.slug ?? null)
+        if (res.data.whatsapp) {
+          setWhatsappNumber(res.data.whatsapp)
+        }
       } else if (!res.success && res.message) {
         toast({ title: "Error", description: res.message, variant: "destructive" })
       }
@@ -373,19 +394,35 @@ export default function AdminHomePage() {
   }
 
   const resolveCatalogUrl = () => {
+    if (!storeSlug) {
+      return null
+    }
+    const catalogPath = `${CATALOG_BASE_PATH}/${storeSlug}`
     if (typeof window !== "undefined" && window.location?.origin) {
-      return `${window.location.origin}${CATALOG_PATH}`
+      return `${window.location.origin}${catalogPath}`
     }
 
     const fallbackOrigin =
       process.env.NEXT_PUBLIC_SITE_URL ||
       (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : "")
 
-    return fallbackOrigin ? `${fallbackOrigin}${CATALOG_PATH}` : CATALOG_PATH
+    if (fallbackOrigin) {
+      return `${fallbackOrigin}${catalogPath}`
+    }
+
+    return catalogPath
   }
 
   const copyCatalogLink = async () => {
     const catalogUrl = resolveCatalogUrl()
+    if (!catalogUrl) {
+      toast({
+        title: "Configura el slug",
+        description: "Asigna un slug a tu tienda para compartir el catálogo.",
+        variant: "destructive",
+      })
+      return
+    }
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(catalogUrl)
@@ -416,7 +453,15 @@ export default function AdminHomePage() {
   }
 
   const openCatalog = () => {
-    router.push(CATALOG_PATH)
+    if (!storeSlug) {
+      toast({
+        title: "Slug requerido",
+        description: "No se encontró el slug de la tienda para abrir el catálogo.",
+        variant: "destructive",
+      })
+      return
+    }
+    router.push(`${CATALOG_BASE_PATH}/${storeSlug}`)
   }
 
   useEffect(() => {

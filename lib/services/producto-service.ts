@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentTiendaId } from '@/lib/services/tenant-service'
 import type { Producto, Categoria, ProductoEmbedding, ProductoReferenceImage } from '@/lib/types'
 
 export interface ProductoConStock extends Producto {
@@ -135,46 +136,60 @@ export const PRODUCTO_SELECT = `
 const PRODUCTO_CACHE_TTL_MS = 2 * 60 * 1000
 const CATEGORIA_CACHE_TTL_MS = 5 * 60 * 1000
 
-let cachedProductos: ProductoConStock[] | null = null
-let cachedProductosExpiresAt = 0
+type CacheEntry<T> = {
+  data: T
+  expiresAt: number
+}
 
-let cachedCategorias: Categoria[] | null = null
-let cachedCategoriasExpiresAt = 0
+const productosCache = new Map<number, CacheEntry<ProductoConStock[]>>()
+const categoriasCache = new Map<number, CacheEntry<Categoria[]>>()
 
 const now = () => Date.now()
 
-const getCachedProductos = (force?: boolean): ProductoConStock[] | null => {
-  if (!force && cachedProductos && cachedProductosExpiresAt > now()) {
-    return cachedProductos
+const getCachedProductos = (tiendaId: number, force?: boolean): ProductoConStock[] | null => {
+  const entry = productosCache.get(tiendaId)
+  if (!force && entry && entry.expiresAt > now()) {
+    return entry.data
   }
   return null
 }
 
-const setCachedProductos = (data: ProductoConStock[]) => {
-  cachedProductos = data
-  cachedProductosExpiresAt = now() + PRODUCTO_CACHE_TTL_MS
+const setCachedProductos = (tiendaId: number, data: ProductoConStock[]) => {
+  productosCache.set(tiendaId, {
+    data,
+    expiresAt: now() + PRODUCTO_CACHE_TTL_MS,
+  })
 }
 
-const invalidateProductosCache = () => {
-  cachedProductos = null
-  cachedProductosExpiresAt = 0
+const invalidateProductosCache = (tiendaId?: number) => {
+  if (typeof tiendaId === 'number') {
+    productosCache.delete(tiendaId)
+    return
+  }
+  productosCache.clear()
 }
 
-const getCachedCategorias = (force?: boolean): Categoria[] | null => {
-  if (!force && cachedCategorias && cachedCategoriasExpiresAt > now()) {
-    return cachedCategorias
+const getCachedCategorias = (tiendaId: number, force?: boolean): Categoria[] | null => {
+  const entry = categoriasCache.get(tiendaId)
+  if (!force && entry && entry.expiresAt > now()) {
+    return entry.data
   }
   return null
 }
 
-const setCachedCategorias = (data: Categoria[]) => {
-  cachedCategorias = data
-  cachedCategoriasExpiresAt = now() + CATEGORIA_CACHE_TTL_MS
+const setCachedCategorias = (tiendaId: number, data: Categoria[]) => {
+  categoriasCache.set(tiendaId, {
+    data,
+    expiresAt: now() + CATEGORIA_CACHE_TTL_MS,
+  })
 }
 
-const invalidateCategoriasCache = () => {
-  cachedCategorias = null
-  cachedCategoriasExpiresAt = 0
+const invalidateCategoriasCache = (tiendaId?: number) => {
+  if (typeof tiendaId === 'number') {
+    categoriasCache.delete(tiendaId)
+    return
+  }
+  categoriasCache.clear()
 }
 
 const resolveCategoriaNombre = (categoria: ProductoRow['categoria']): string => {
@@ -247,14 +262,18 @@ export const mapProductoRow = (row: ProductoRow): ProductoConStock => {
 
 export class ProductoService {
   static async getAll(options?: { force?: boolean }): Promise<ProductoConStock[]> {
-    const cached = getCachedProductos(options?.force)
+    const tiendaId = await getCurrentTiendaId()
+    const cached = getCachedProductos(tiendaId, options?.force)
     if (cached) {
       return cached
     }
 
-    const lastKnownSnapshot = cachedProductos
+    const lastKnownSnapshot = productosCache.get(tiendaId)?.data ?? null
 
-    const { data, error } = await supabase.from('productos').select(PRODUCTO_SELECT)
+    const { data, error } = await supabase
+      .from('productos')
+      .select(PRODUCTO_SELECT)
+      .eq('tienda_id', tiendaId)
 
     if (error) {
       console.error('Error cargando productos', error)
@@ -266,12 +285,14 @@ export class ProductoService {
     }
 
     const mapped = (data as ProductoRow[]).map(mapProductoRow)
-    setCachedProductos(mapped)
+    setCachedProductos(tiendaId, mapped)
     return mapped
   }
 
   static async getById(id: number): Promise<ProductoConStock | null> {
-    const cached = cachedProductos?.find((producto) => producto.id === id)
+    const tiendaId = await getCurrentTiendaId()
+    const cachedList = productosCache.get(tiendaId)?.data ?? []
+    const cached = cachedList.find((producto) => producto.id === id)
     if (cached) {
       return cached
     }
@@ -280,6 +301,7 @@ export class ProductoService {
       .from('productos')
       .select(PRODUCTO_SELECT)
       .eq('id', id)
+      .eq('tienda_id', tiendaId)
       .maybeSingle()
 
     if (error) {
@@ -296,6 +318,7 @@ export class ProductoService {
 
   static async search(query: string): Promise<ProductoConStock[]> {
     const q = query.trim()
+    const tiendaId = await getCurrentTiendaId()
     if (!q) return this.getAll()
 
     const catalogo = await this.getAll()
@@ -319,6 +342,7 @@ export class ProductoService {
     const { data, error } = await supabase
       .from('productos')
       .select(PRODUCTO_SELECT)
+      .eq('tienda_id', tiendaId)
       .or(`nombre.ilike.%${q}%,codigo.ilike.%${q}%`)
 
     if (error || !data) {
@@ -329,6 +353,7 @@ export class ProductoService {
   }
 
   static async getByCategoria(categoriaId: number): Promise<ProductoConStock[]> {
+    const tiendaId = await getCurrentTiendaId()
     const catalogo = await this.getAll()
     const filtrados = catalogo.filter((producto) => producto.categoriaId === categoriaId)
     if (filtrados.length > 0 || catalogo.length === 0) {
@@ -339,6 +364,7 @@ export class ProductoService {
       .from('productos')
       .select(PRODUCTO_SELECT)
       .eq('categoriaId', categoriaId)
+      .eq('tienda_id', tiendaId)
 
     if (error || !data) {
       console.error('Error filtrando productos por categoría', error)
@@ -354,24 +380,10 @@ export class ProductoService {
   }
 
   static async create(producto: Omit<Producto, 'id' | 'createdAt' | 'tiendaId'>): Promise<Producto | null> {
-    const { data: userData } = await supabase.auth.getUser()
-    if (!userData.user) return null
-
-    // Fetch user profile to get tienda_id
-    const { data: profile } = await supabase
-      .from('usuarios')
-      .select('tienda_id')
-      .eq('auth_uid', userData.user.id)
-      .single()
-
-    if (!profile?.tienda_id) {
-      console.error('No se pudo obtener la tienda del usuario')
-      return null
-    }
-
+    const tiendaId = await getCurrentTiendaId()
     const payload = {
       ...producto,
-      tienda_id: profile.tienda_id,
+      tienda_id: tiendaId,
       descripcion: producto.descripcion?.trim() || null,
       createdAt: new Date(),
     }
@@ -381,12 +393,13 @@ export class ProductoService {
       console.error('Error al crear producto', error)
       return null
     }
-    invalidateProductosCache()
+    invalidateProductosCache(tiendaId)
     return mapProductoRow(data as ProductoRow)
   }
 
   static async getCategoriasActivas(): Promise<Categoria[]> {
-    const cached = getCachedCategorias()
+    const tiendaId = await getCurrentTiendaId()
+    const cached = getCachedCategorias(tiendaId)
     if (cached) {
       return cached
     }
@@ -395,21 +408,29 @@ export class ProductoService {
       .from('categorias')
       .select('*')
       .eq('estado', 'activo')
+      .eq('tienda_id', tiendaId)
       .order('nombre', { ascending: true })
 
     if (error || !data) {
-      return cachedCategorias ?? []
+      return categoriasCache.get(tiendaId)?.data ?? []
     }
 
     const mapped = data as Categoria[]
-    setCachedCategorias(mapped)
+    setCachedCategorias(tiendaId, mapped)
     return mapped
   }
 
   static async update(id: number, data: Partial<Producto>): Promise<Producto | null> {
-    const { data: updated, error } = await supabase.from('productos').update(data).eq('id', id).select(PRODUCTO_SELECT).single()
+    const tiendaId = await getCurrentTiendaId()
+    const { data: updated, error } = await supabase
+      .from('productos')
+      .update(data)
+      .eq('id', id)
+      .eq('tienda_id', tiendaId)
+      .select(PRODUCTO_SELECT)
+      .single()
     if (error || !updated) return null
-    invalidateProductosCache()
+    invalidateProductosCache(tiendaId)
     return mapProductoRow(updated as ProductoRow)
   }
 
@@ -433,6 +454,8 @@ export class ProductoService {
         console.debug('[ProductoService.delete] request', { id, mode, origin })
       }
 
+      const tiendaId = await getCurrentTiendaId()
+
       const response = await fetch(`${origin}/api/admin/productos/${id}?mode=${mode}`, {
         method: 'DELETE',
         headers: {
@@ -450,7 +473,7 @@ export class ProductoService {
         console.debug('[ProductoService.delete] success', { id, mode })
       }
 
-      invalidateProductosCache()
+      invalidateProductosCache(tiendaId)
       return true
     } catch (error) {
       console.error('Falló la solicitud para eliminar producto', error)

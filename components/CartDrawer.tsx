@@ -6,7 +6,6 @@ import {
   SheetHeader,
   SheetTitle,
   SheetFooter,
-  SheetClose
 } from "@/components/ui/sheet"
 import { useCart } from "@/hooks/useCart"
 import { Button } from "@/components/ui/button"
@@ -16,11 +15,12 @@ import { Trash2, ShoppingBag } from "lucide-react"
 
 export default function CartDrawer({ whatsappNumber }: { whatsappNumber?: string | null }) {
   const { items, total, isCartOpen, closeCart, updateItemQty, removeItem, clearCart } = useCart()
-  const phone = whatsappNumber || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ""
+  const phone = (whatsappNumber ?? "").trim()
+  const hasWhatsapp = phone.length > 0
 
   function onSend() {
-    if (!phone) {
-      alert("Configura NEXT_PUBLIC_WHATSAPP_NUMBER en .env.local")
+    if (!hasWhatsapp) {
+      alert("La tienda aún no configuró su número de WhatsApp.")
       return
     }
     if (items.length === 0) {
@@ -118,8 +118,8 @@ export default function CartDrawer({ whatsappNumber }: { whatsappNumber?: string
                 <span>{formatCurrency(total)}</span>
               </div>
               <div className="grid gap-2">
-                <Button onClick={onSend} className="w-full gap-2" size="lg">
-                  Completar pedido por WhatsApp
+                <Button onClick={onSend} className="w-full gap-2" size="lg" disabled={!hasWhatsapp}>
+                  {hasWhatsapp ? "Completar pedido por WhatsApp" : "La tienda no configuró WhatsApp"}
                 </Button>
                 <Button variant="outline" onClick={() => { clearCart(); closeCart(); }}>
                   Vaciar carrito

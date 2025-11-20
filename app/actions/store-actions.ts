@@ -3,49 +3,6 @@
 import { StoreService } from '@/lib/services/store-service'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import fs from 'node:fs/promises'
-import path from 'node:path'
-
-const ENV_PATH = path.join(process.cwd(), '.env.local')
-
-async function syncEnvValue(key: string, value: string) {
-    try {
-        const serializedValue = value.trim()
-        let current = ''
-        try {
-            current = await fs.readFile(ENV_PATH, 'utf8')
-        } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                throw error
-            }
-        }
-
-        const line = `${key}=${serializedValue}`
-        const regex = new RegExp(`^${key}=.*$`, 'm')
-        let nextContents: string
-
-        if (current) {
-            if (regex.test(current)) {
-                nextContents = current.replace(regex, line)
-            } else {
-                const needsNewline = !current.endsWith('\n')
-                nextContents = `${current}${needsNewline ? '\n' : ''}${line}`
-            }
-        } else {
-            nextContents = `${line}\n`
-        }
-
-        if (!nextContents.endsWith('\n')) {
-            nextContents += '\n'
-        }
-
-        await fs.writeFile(ENV_PATH, nextContents, 'utf8')
-        process.env[key] = serializedValue
-    } catch (error) {
-        console.warn(`No se pudo sincronizar ${key} en .env.local`, error)
-    }
-}
-
 async function resolveUser(accessToken?: string) {
     if (!accessToken) {
         return null
@@ -75,9 +32,16 @@ export async function updateStoreWhatsApp(whatsapp: string, accessToken?: string
         const success = await StoreService.updateWhatsAppAdmin(userProfile.tienda_id, whatsapp)
 
         if (success) {
-            await syncEnvValue('NEXT_PUBLIC_WHATSAPP_NUMBER', whatsapp)
+            const { data: tienda } = await supabaseAdmin
+                .from('tiendas')
+                .select('slug')
+                .eq('id', userProfile.tienda_id)
+                .single()
+
             revalidatePath('/admin')
-            revalidatePath('/catalog')
+            if (tienda?.slug) {
+                revalidatePath(`/catalog/${tienda.slug}`)
+            }
             return { success: true, message: 'Número de WhatsApp actualizado' }
         }
 

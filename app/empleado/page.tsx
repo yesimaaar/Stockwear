@@ -464,6 +464,7 @@ export default function EmpleadoDashboard() {
         embedding,
         empleadoId: user.id,
         umbral: threshold,
+        tiendaId: user.tiendaId,
       })
 
       setResultado(result)
@@ -555,6 +556,7 @@ export default function EmpleadoDashboard() {
         embedding,
         empleadoId: user?.id ?? null,
         umbral: threshold,
+        tiendaId: user?.tiendaId,
       })
 
       setResultado(result)

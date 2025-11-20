@@ -22,6 +22,7 @@ const {
   Search,
 } = LucideIcons
 import { supabase } from "@/lib/supabase"
+import { getCurrentTiendaId } from "@/lib/services/tenant-service"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -502,18 +503,36 @@ export default function ReportesPage() {
     const loadDashboard = async () => {
       setLoading(true)
       try {
+        const tiendaId = await getCurrentTiendaId()
         const [historialResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp] =
           await Promise.all([
             supabase
               .from("historialStock")
               .select("tipo,cantidad,\"costoUnitario\",\"createdAt\",\"usuarioId\"")
+              .eq("tienda_id", tiendaId)
               .order("createdAt", { ascending: false })
               .limit(500),
-            supabase.from("productos").select("id,estado,\"stockMinimo\",\"createdAt\",nombre").limit(500),
-            supabase.from("stock").select("\"productoId\",cantidad").limit(2000),
-            supabase.from("usuarios").select("id,estado,\"createdAt\",nombre,rol").limit(500),
-            supabase.from("almacenes").select("id").limit(200),
-            ReconocimientoService.getProductosMasConsultados(5),
+            supabase
+              .from("productos")
+              .select("id,estado,\"stockMinimo\",\"createdAt\",nombre")
+              .eq("tienda_id", tiendaId)
+              .limit(500),
+            supabase
+              .from("stock")
+              .select("\"productoId\",cantidad")
+              .eq("tienda_id", tiendaId)
+              .limit(2000),
+            supabase
+              .from("usuarios")
+              .select("id,estado,\"createdAt\",nombre,rol")
+              .eq("tienda_id", tiendaId)
+              .limit(500),
+            supabase
+              .from("almacenes")
+              .select("id")
+              .eq("tienda_id", tiendaId)
+              .limit(200),
+            ReconocimientoService.getProductosMasConsultados(5, { tiendaId }),
           ])
 
         if (canceled) return

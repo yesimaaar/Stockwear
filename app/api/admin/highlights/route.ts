@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentTiendaId } from "@/lib/services/tenant-service"
 // import { cookies } from "next/headers" // Si usas cookies() directamente, necesitas esta línea
 
 // *** SOLUCIÓN CRÍTICA: FORZAR DINÁMICO ***
@@ -119,27 +120,37 @@ export async function GET() {
         // En una ruta dinámica, Supabase crea un cliente que puede acceder
         // a las cookies (necesario para el auth).
         const supabase = await createClient()
+        let tiendaId: number
+        try {
+            tiendaId = await getCurrentTiendaId({ client: supabase })
+        } catch (error) {
+            return NextResponse.json({ message: 'Tienda no encontrada para el usuario.' }, { status: 403 })
+        }
 
         const [ventasResp, detallesResp, productosResp, historialResp] = await Promise.all([
             supabase
                 .from("ventas")
                 .select("id,total,\"createdAt\"")
+                .eq("tienda_id", tiendaId)
                 .order("createdAt", { ascending: false })
                 .limit(VENTAS_LIMIT),
             supabase
                 .from("ventasDetalle")
                 .select("\"ventaId\",\"productoId\",cantidad,\"precioUnitario\",descuento,subtotal")
+                .eq("tienda_id", tiendaId)
                 .limit(DETALLE_LIMIT),
             supabase
                 .from("productos")
                 .select(
                     `id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`
                 )
+                .eq("tienda_id", tiendaId)
                 .limit(PRODUCTOS_LIMIT),
             supabase
                 .from("historialStock")
                 .select("tipo,\"productoId\",cantidad,\"costoUnitario\",\"createdAt\"")
                 .eq("tipo", "venta")
+                .eq("tienda_id", tiendaId)
                 .order("createdAt", { ascending: false })
                 .limit(HISTORIAL_LIMIT),
         ])

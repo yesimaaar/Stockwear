@@ -61,11 +61,12 @@ async function getCatalogProducts(storeId: number): Promise<ProductoConStock[]> 
 }
 
 interface CatalogPageProps {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }
 
 export default async function CatalogPage({ params }: CatalogPageProps) {
-  const store = await getStoreBySlug(params.slug)
+  const { slug } = await params
+  const store = await getStoreBySlug(slug)
   if (!store) {
     notFound()
   }

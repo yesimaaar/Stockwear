@@ -109,6 +109,9 @@ export default function AdminLayout({
 	}, [router]);
 
 	const loadNotifications = useCallback(async () => {
+			if (!user?.tiendaId) {
+				return
+			}
 		setNotificationsLoading(true);
 		setNotificationsError(null);
 		try {
@@ -116,6 +119,7 @@ export default function AdminLayout({
 				.from("productos")
 				.select("id,nombre,estado,\"stockMinimo\"")
 				.eq("estado", "activo")
+					.eq("tienda_id", user.tiendaId)
 				.order("nombre", { ascending: true })
 				.limit(500);
 
@@ -130,6 +134,7 @@ export default function AdminLayout({
 				const { data: stockData, error: stockError } = await supabase
 					.from("stock")
 					.select("\"productoId\",cantidad")
+					.eq("tienda_id", user.tiendaId)
 					.in("productoId", productIds)
 					.limit(5000);
 
@@ -180,7 +185,7 @@ export default function AdminLayout({
 		} finally {
 			setNotificationsLoading(false);
 		}
-	}, []);
+	}, [user?.tiendaId]);
 
 	useEffect(() => {
 		if (!user) {

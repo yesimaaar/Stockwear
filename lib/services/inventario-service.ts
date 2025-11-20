@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { GeocodingService } from '@/lib/services/geocoding-service'
+import { getCurrentTiendaId } from '@/lib/services/tenant-service'
 import type {
   Almacen,
   Categoria,
@@ -192,7 +193,7 @@ export class InventarioService {
       return existente.id
     }
 
-    const tiendaId = await this.getCurrentTiendaId()
+    const tiendaId = await getCurrentTiendaId()
     const { data: insertData, error: insertError } = await supabase
       .from('stock')
       .insert({
@@ -212,9 +213,17 @@ export class InventarioService {
     return (insertData as { id: number }).id
   }
   static async getCategoriasResumen(): Promise<CategoriaResumen[]> {
+    const tiendaId = await getCurrentTiendaId()
     const [categoriasResp, productosResp] = await Promise.all([
-      supabase.from('categorias').select('id,nombre,descripcion,estado').order('nombre', { ascending: true }),
-      supabase.from('productos').select('id,"categoriaId",estado')
+      supabase
+        .from('categorias')
+        .select('id,nombre,descripcion,estado')
+        .eq('tienda_id', tiendaId)
+        .order('nombre', { ascending: true }),
+      supabase
+        .from('productos')
+        .select('id,"categoriaId",estado')
+        .eq('tienda_id', tiendaId),
     ])
 
     if (categoriasResp.error) {
@@ -239,22 +248,8 @@ export class InventarioService {
     }))
   }
 
-  private static async getCurrentTiendaId(): Promise<number> {
-    const { data: userData } = await supabase.auth.getUser()
-    if (!userData.user) throw new Error('Usuario no autenticado')
-
-    const { data: profile } = await supabase
-      .from('usuarios')
-      .select('tienda_id')
-      .eq('auth_uid', userData.user.id)
-      .single()
-
-    if (!profile?.tienda_id) throw new Error('Usuario sin tienda asignada')
-    return profile.tienda_id
-  }
-
   static async createCategoria(payload: CategoriaUpsertPayload): Promise<Categoria> {
-    const tiendaId = await this.getCurrentTiendaId()
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('categorias')
       .insert({
@@ -274,6 +269,7 @@ export class InventarioService {
   }
 
   static async updateCategoria(id: number, payload: CategoriaUpsertPayload): Promise<Categoria> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('categorias')
       .update({
@@ -282,6 +278,7 @@ export class InventarioService {
         estado: payload.estado,
       })
       .eq('id', id)
+      .eq('tienda_id', tiendaId)
       .select('id,nombre,descripcion,estado')
       .single()
 
@@ -293,7 +290,8 @@ export class InventarioService {
   }
 
   static async deleteCategoria(id: number): Promise<void> {
-    const { error } = await supabase.from('categorias').delete().eq('id', id)
+    const tiendaId = await getCurrentTiendaId()
+    const { error } = await supabase.from('categorias').delete().eq('id', id).eq('tienda_id', tiendaId)
 
     if (error) {
       throw new Error(error.message || 'No se pudo eliminar la categoría')
@@ -301,9 +299,11 @@ export class InventarioService {
   }
 
   static async getTallas(): Promise<Talla[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data } = await supabase
       .from('tallas')
       .select('id,nombre,tipo,estado')
+      .eq('tienda_id', tiendaId)
       .order('tipo', { ascending: true })
       .order('nombre', { ascending: true })
 
@@ -311,10 +311,12 @@ export class InventarioService {
   }
 
   static async getTallasActivas(): Promise<Talla[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('tallas')
       .select('id,nombre,tipo,estado')
       .eq('estado', 'activo')
+      .eq('tienda_id', tiendaId)
       .order('tipo', { ascending: true })
       .order('nombre', { ascending: true })
 
@@ -326,10 +328,12 @@ export class InventarioService {
   }
 
   static async getProductosActivosBasicos(): Promise<Array<{ id: number; nombre: string; codigo: string }>> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('productos')
       .select('id,nombre,codigo,estado')
       .eq('estado', 'activo')
+      .eq('tienda_id', tiendaId)
       .order('nombre', { ascending: true })
 
     if (error) {
@@ -344,11 +348,13 @@ export class InventarioService {
   }
 
   static async getAlmacenesActivos(): Promise<Almacen[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await this.executeAlmacenesFetch<Almacen[] | null>(async (fields) => {
       const result = await supabase
         .from('almacenes')
         .select(fields)
         .eq('estado', 'activo')
+        .eq('tienda_id', tiendaId)
         .order('nombre', { ascending: true })
       return result as any
     })
@@ -361,7 +367,7 @@ export class InventarioService {
   }
 
   static async createTalla(payload: TallaUpsertPayload): Promise<Talla> {
-    const tiendaId = await this.getCurrentTiendaId()
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('tallas')
       .insert({
@@ -381,6 +387,7 @@ export class InventarioService {
   }
 
   static async updateTalla(id: number, payload: TallaUpsertPayload): Promise<Talla> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('tallas')
       .update({
@@ -389,6 +396,7 @@ export class InventarioService {
         estado: payload.estado,
       })
       .eq('id', id)
+      .eq('tienda_id', tiendaId)
       .select('id,nombre,tipo,estado')
       .single()
 
@@ -400,7 +408,8 @@ export class InventarioService {
   }
 
   static async deleteTalla(id: number): Promise<void> {
-    const { error } = await supabase.from('tallas').delete().eq('id', id)
+    const tiendaId = await getCurrentTiendaId()
+    const { error } = await supabase.from('tallas').delete().eq('id', id).eq('tienda_id', tiendaId)
 
     if (error) {
       throw new Error(error.message || 'No se pudo eliminar la talla')
@@ -422,7 +431,7 @@ export class InventarioService {
 
     await this.guardarStock(payload.productoId, payload.tallaId ?? null, payload.almacenId ?? null, stockNuevo)
 
-    const tiendaId = await this.getCurrentTiendaId()
+    const tiendaId = await getCurrentTiendaId()
     const { error: historialError } = await supabase.from('historialStock').insert({
       tienda_id: tiendaId,
       tipo: 'entrada',
@@ -466,7 +475,7 @@ export class InventarioService {
 
     await this.guardarStock(payload.productoId, payload.tallaId ?? null, payload.almacenId ?? null, stockNuevo)
 
-    const tiendaId = await this.getCurrentTiendaId()
+    const tiendaId = await getCurrentTiendaId()
     const { error: historialError } = await supabase.from('historialStock').insert({
       tienda_id: tiendaId,
       tipo: payload.tipo,
@@ -521,7 +530,7 @@ export class InventarioService {
       ? `${payload.motivo} (destino)`
       : `Transferencia desde almacén ${payload.origenId}`
 
-    const tiendaId = await this.getCurrentTiendaId()
+    const tiendaId = await getCurrentTiendaId()
     const { error: historialError } = await supabase.from('historialStock').insert([
       {
         tienda_id: tiendaId,
@@ -559,12 +568,17 @@ export class InventarioService {
   }
 
   static async getAlmacenesResumen(): Promise<AlmacenResumen[]> {
+    const tiendaId = await getCurrentTiendaId()
     const [almacenesResp, stockResp] = await Promise.all([
       this.executeAlmacenesFetch<Almacen[] | null>(async (fields) => {
-        const result = await supabase.from('almacenes').select(fields).order('nombre', { ascending: true })
+        const result = await supabase
+          .from('almacenes')
+          .select(fields)
+          .eq('tienda_id', tiendaId)
+          .order('nombre', { ascending: true })
         return result as any
       }),
-      supabase.from('stock').select('productoId,"almacenId",cantidad'),
+      supabase.from('stock').select('productoId,"almacenId",cantidad').eq('tienda_id', tiendaId),
     ])
 
     if (almacenesResp.error) {
@@ -600,10 +614,12 @@ export class InventarioService {
   }
 
   static async getAlmacenProductos(almacenId: number): Promise<AlmacenProductoDetalle[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data: stockData, error: stockError } = await supabase
       .from('stock')
       .select('productoId,tallaId,cantidad,almacenId')
       .eq('almacenId', almacenId)
+      .eq('tienda_id', tiendaId)
 
     if (stockError) {
       throw new Error(stockError.message || 'No se pudo obtener el inventario del almacén')
@@ -630,8 +646,15 @@ export class InventarioService {
 
     const [{ data: productosData, error: productosError }, { data: categoriasData, error: categoriasError }] =
       await Promise.all([
-        supabase.from('productos').select('id,nombre,codigo,categoriaId').in('id', productoIds),
-        supabase.from('categorias').select('id,nombre'),
+        supabase
+          .from('productos')
+          .select('id,nombre,codigo,categoriaId')
+          .eq('tienda_id', tiendaId)
+          .in('id', productoIds),
+        supabase
+          .from('categorias')
+          .select('id,nombre')
+          .eq('tienda_id', tiendaId),
       ])
 
     if (productosError) {
@@ -646,6 +669,7 @@ export class InventarioService {
       const { data: tallasData, error: tallasError } = await supabase
         .from('tallas')
         .select('id,nombre')
+        .eq('tienda_id', tiendaId)
         .in('id', tallaIds)
       if (tallasError) {
         throw new Error(tallasError.message || 'No se pudieron obtener las tallas asociadas')
@@ -701,7 +725,7 @@ export class InventarioService {
   }
 
   static async createAlmacen(payload: AlmacenUpsertPayload): Promise<Almacen> {
-    const tiendaId = await this.getCurrentTiendaId()
+    const tiendaId = await getCurrentTiendaId()
     const direccion = this.normalizeDireccion(payload.direccion)
     const geocodeResult = await this.geocodeDireccion(direccion)
 
@@ -745,6 +769,7 @@ export class InventarioService {
   }
 
   static async updateAlmacen(id: number, payload: AlmacenUpsertPayload): Promise<Almacen> {
+    const tiendaId = await getCurrentTiendaId()
     const direccion = this.normalizeDireccion(payload.direccion)
     const geocodeResult = await this.geocodeDireccion(direccion)
 
@@ -768,7 +793,13 @@ export class InventarioService {
 
       const fields = includeCoords ? this.ALMACEN_FIELDS_WITH_COORDS : this.ALMACEN_BASE_FIELDS
 
-      return supabase.from('almacenes').update(updateData).eq('id', id).select(fields).single()
+      return supabase
+        .from('almacenes')
+        .update(updateData)
+        .eq('id', id)
+        .eq('tienda_id', tiendaId)
+        .select(fields)
+        .single()
     }
 
     let includeCoords = this.shouldRequestAlmacenCoords()
@@ -789,7 +820,8 @@ export class InventarioService {
   }
 
   static async deleteAlmacen(id: number): Promise<void> {
-    const { error } = await supabase.from('almacenes').delete().eq('id', id)
+    const tiendaId = await getCurrentTiendaId()
+    const { error } = await supabase.from('almacenes').delete().eq('id', id).eq('tienda_id', tiendaId)
 
     if (error) {
       throw new Error(error.message || 'No se pudo eliminar el almacén')
@@ -797,9 +829,11 @@ export class InventarioService {
   }
 
   static async getHistorialDetallado(limit = 50): Promise<MovimientoDetallado[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data: movimientosData, error: movimientosError } = await supabase
       .from('historialStock')
       .select('id,tipo,productoId,tallaId,almacenId,cantidad,usuarioId,motivo,"createdAt"')
+      .eq('tienda_id', tiendaId)
       .order('createdAt', { ascending: false })
       .limit(limit)
 
@@ -840,16 +874,24 @@ export class InventarioService {
 
     const [productosResp, tallasResp, almacenesResp, usuariosResp] = await Promise.all([
       productoIds.length
-        ? supabase.from('productos').select('id,nombre').in('id', productoIds)
+        ? supabase
+          .from('productos')
+          .select('id,nombre')
+          .eq('tienda_id', tiendaId)
+          .in('id', productoIds)
         : Promise.resolve({ data: [], error: null }),
       tallaIds.length
-        ? supabase.from('tallas').select('id,nombre').in('id', tallaIds)
+        ? supabase.from('tallas').select('id,nombre').eq('tienda_id', tiendaId).in('id', tallaIds)
         : Promise.resolve({ data: [], error: null }),
       almacenIds.length
-        ? supabase.from('almacenes').select('id,nombre').in('id', almacenIds)
+        ? supabase
+          .from('almacenes')
+          .select('id,nombre')
+          .eq('tienda_id', tiendaId)
+          .in('id', almacenIds)
         : Promise.resolve({ data: [], error: null }),
       usuarioIds.length
-        ? supabase.from('usuarios').select('id,nombre').in('id', usuarioIds)
+        ? supabase.from('usuarios').select('id,nombre').eq('tienda_id', tiendaId).in('id', usuarioIds)
         : Promise.resolve({ data: [], error: null }),
     ])
 

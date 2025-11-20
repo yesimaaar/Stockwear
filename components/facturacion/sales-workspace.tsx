@@ -596,8 +596,8 @@ export function SalesWorkspace({
                   </Button>
                 </SheetTrigger>
               )}
-              <SheetContent side="right" className="sm:max-w-xl">
-                  <SheetHeader>
+              <SheetContent side="right" className="flex h-full w-full max-w-full flex-col p-0 sm:max-w-xl">
+                  <SheetHeader className="space-y-1 border-b px-6 py-5">
                     <SheetTitle className="flex items-center gap-2 text-lg">
                       <Package className="h-4 w-4" /> Carrito de venta
                     </SheetTitle>
@@ -605,9 +605,9 @@ export function SalesWorkspace({
                       Revisa los productos y confirma la venta cuando estés listo.
                     </SheetDescription>
                   </SheetHeader>
-                  <div className="flex h-full flex-1 flex-col gap-4 px-4 pb-4">
+                  <div className="flex-1 overflow-hidden px-6 py-4">
                     {lineas.length ? (
-                      <ScrollArea className="-mx-1 max-h-[60vh] px-1">
+                      <ScrollArea className="h-full pr-3">
                         {renderCartContent({
                           emptyMessageClass:
                             "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
@@ -622,10 +622,10 @@ export function SalesWorkspace({
                       })
                     )}
                   </div>
-                  <SheetFooter>
+                  <SheetFooter className="border-t px-6 py-5">
                     <div className="flex w-full flex-col gap-4">
                       {renderEmpleadoSelector("venta-empleado-sheet")}
-                      <div className="text-right space-y-1">
+                      <div className="space-y-1 text-right">
                         <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
                         <p className="text-lg font-semibold text-foreground">
                           Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}

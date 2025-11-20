@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentTiendaId } from '@/lib/services/tenant-service'
 import type { Usuario } from '@/lib/types'
 
 export interface AuthResponse {
@@ -256,9 +257,11 @@ export class AuthService {
   }
 
   static async getAll(): Promise<Usuario[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('usuarios')
       .select('*')
+      .eq('tienda_id', tiendaId)
       .order('nombre', { ascending: true })
 
     if (error || !data) {
