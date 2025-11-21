@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useEffect, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import * as LucideIcons from "lucide-react"
 const { MonitorSmartphone, X, Paperclip, Copy, ExternalLink } = LucideIcons
 import { Button } from "@/components/ui/button"
@@ -327,6 +327,8 @@ import { Label } from "@/components/ui/label"
 
 export default function AdminHomePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const searchQuery = searchParams.get("q") ?? ""
   const [topProducts, setTopProducts] = useState<HighlightProduct[]>([])
   const [newProducts, setNewProducts] = useState<HighlightProduct[]>([])
   const [loadingHighlights, setLoadingHighlights] = useState(true)
@@ -730,6 +732,8 @@ export default function AdminHomePage() {
         onSaleRegistered={handleSaleRegistered}
         hideCartTrigger
         searchPlaceholder="Busca un producto para realizar una venta"
+        initialPreviewState={{ searchTerm: searchQuery }}
+        key={searchQuery}
       />
     </div>
   )

@@ -157,6 +157,10 @@ export function SalesWorkspace({
 
     void loadEmpleados()
 
+    if (busqueda && productosEncontrados.length === 0) {
+      void realizarBusqueda(busqueda)
+    }
+
     return () => {
       active = false
     }
@@ -415,53 +419,22 @@ export function SalesWorkspace({
 
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">Selecciona el stock disponible que deseas añadir a la venta.</p>
-        <div className="grid gap-4 md:grid-cols-2">
+        <p className="text-sm text-muted-foreground">Resultados de la búsqueda</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {productosEncontrados.map((producto) => (
-            <Card key={producto.id} className="border-muted/70">
-              <CardHeader className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-foreground">{producto.nombre}</h3>
-                    <p className="text-xs text-muted-foreground">Código: {producto.codigo}</p>
-                  </div>
-                  <Badge variant="outline">{producto.categoria}</Badge>
-                </div>
-                {producto.descripcion ? (
-                  <p className="text-xs text-muted-foreground line-clamp-2">{producto.descripcion}</p>
-                ) : null}
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {producto.stockPorTalla.length === 0 ? (
-                  <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
-                    No hay stock disponible para este producto.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {producto.stockPorTalla.map((stock) => (
-                      <div
-                        key={stock.stockId}
-                        className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between"
-                      >
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                          <Badge variant="secondary">{stock.almacen || "Sin almacén"}</Badge>
-                          <Badge variant="outline">Talla {stock.talla || "N/A"}</Badge>
-                          <Badge variant={stock.cantidad > 0 ? "default" : "destructive"}>{stock.cantidad} ud</Badge>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => agregarLinea(producto, stock)}
-                          disabled={stock.cantidad <= 0}
-                        >
-                          <ShoppingCart className="mr-2 h-4 w-4" /> Añadir
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <HighlightProductCard
+              key={producto.id}
+              producto={{
+                id: producto.id,
+                nombre: producto.nombre,
+                codigo: producto.codigo,
+                categoria: producto.categoria,
+                precio: producto.precio,
+                imagen: producto.imagen,
+                tag: producto.stockPorTalla.reduce((acc, s) => acc + s.cantidad, 0) > 0 ? "Disponible" : "Agotado"
+              }}
+              onQuickAdd={(detalle, stock) => agregarLinea(detalle, stock)}
+            />
           ))}
         </div>
       </div>
@@ -642,49 +615,17 @@ export function SalesWorkspace({
           </div>
         </div>
 
-        <Card className="border-dashed border-border/60 bg-card/40 shadow-none">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={busqueda}
-                  onChange={(event) => setBusqueda(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault()
-                      void realizarBusqueda()
-                    }
-                  }}
-                  placeholder={inputPlaceholder}
-                  className="h-12 rounded-xl border-border/60 bg-background pl-10 text-base shadow-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20"
-                />
-                {busqueda ? (
-                  <button
-                    type="button"
-                    onClick={clearBusqueda}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    aria-label="Limpiar búsqueda"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                ) : null}
-              </div>
+        {buscando && (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            Buscando productos...
+          </div>
+        )}
 
-              {buscando && (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  Buscando productos...
-                </div>
-              )}
-
-              {!buscando && productosEncontrados.length > 0 && (
-                <div className="animate-in fade-in slide-in-from-top-2">
-                  {renderResultados()}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {!buscando && productosEncontrados.length > 0 && (
+          <div className="animate-in fade-in slide-in-from-top-2">
+            {renderResultados()}
+          </div>
+        )}
 
         {!busqueda && !productosEncontrados.length && highlights && (highlights.top.length > 0 || highlights.recent.length > 0) ? (
           <div className="space-y-6">
