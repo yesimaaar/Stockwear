@@ -23,6 +23,7 @@ type CategoriaUpsertPayload = {
 
 type AlmacenUpsertPayload = {
   nombre: string
+  abreviatura?: string | null
   direccion: string | null
   tipo: Almacen['tipo']
   estado: EstadoRegistro
@@ -733,6 +734,7 @@ export class InventarioService {
       const insertPayload: Record<string, unknown> = {
         tienda_id: tiendaId,
         nombre: payload.nombre,
+        abreviatura: payload.abreviatura,
         direccion,
         tipo: payload.tipo,
         estado: payload.estado,
@@ -776,6 +778,7 @@ export class InventarioService {
     const attempt = (includeCoords: boolean) => {
       const updateData: Record<string, unknown> = {
         nombre: payload.nombre,
+        abreviatura: payload.abreviatura,
         direccion,
         tipo: payload.tipo,
         estado: payload.estado,

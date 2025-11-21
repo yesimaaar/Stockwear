@@ -38,12 +38,12 @@ export interface LineaVentaForm {
   tallaId: number | null
   almacen: string
   almacenId: number | null
+  almacenAbreviatura?: string
   disponible: number
   cantidad: number
   precioUnitario: number
   descuento: number
 }
-
 type SalesWorkspaceVariant = "page" | "dashboard"
 
 interface HighlightSummary {
@@ -117,6 +117,11 @@ export function SalesWorkspace({
   const [empleadosLoading, setEmpleadosLoading] = useState(initialEmpleados.length === 0)
   const [empleadosError, setEmpleadosError] = useState<string | null>(null)
   const [selectedEmpleadoId, setSelectedEmpleadoId] = useState<string | null>(initialEmpleados[0]?.id ?? null)
+
+  const dashboardTitle = title ?? "Facturación rápida"
+  const dashboardDescription = description ?? "Añade productos destacados rápidamente a tu carrito de facturación."
+  const inputPlaceholder = searchPlaceholder ?? "Código o nombre del producto"
+
   const clearBusqueda = () => {
     setBusqueda("")
     setProductosEncontrados([])
@@ -240,8 +245,9 @@ export function SalesWorkspace({
           nombre: producto.nombre,
           talla: stock.talla,
           tallaId: stock.tallaId,
-          almacen: stock.almacen,
+          almacen: stock.almacen || "Almacén desconocido",
           almacenId: stock.almacenId,
+          almacenAbreviatura: stock.almacenAbreviatura,
           disponible: stock.cantidad,
           cantidad: 1,
           precioUnitario: producto.precio,
@@ -460,17 +466,17 @@ export function SalesWorkspace({
 
     return (
       <div className="space-y-4">
-        <div className="overflow-x-auto">
+        <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Producto</TableHead>
-                <TableHead>Ubicación</TableHead>
-                <TableHead className="w-28 text-center">Cantidad</TableHead>
-                <TableHead className="w-32 text-center">Precio (COP)</TableHead>
-                <TableHead className="w-32 text-center">Descuento %</TableHead>
-                <TableHead className="w-32 text-right">Subtotal</TableHead>
-                <TableHead className="w-12" />
+                <TableHead className="w-[40%]">Producto</TableHead>
+                <TableHead>Almacén</TableHead>
+                <TableHead className="text-center">Cantidad</TableHead>
+                <TableHead className="text-right">Precio</TableHead>
+                <TableHead className="text-right">Desc %</TableHead>
+                <TableHead className="text-right">Subtotal</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -485,34 +491,58 @@ export function SalesWorkspace({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-muted-foreground">{linea.almacen || "Sin almacén"}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {linea.almacenAbreviatura || "Sin almacén"}
+                      </span>
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={linea.disponible}
-                        value={linea.cantidad}
-                        onChange={(event) => actualizarCantidad(linea.stockId, Number(event.target.value))}
-                      />
-                      <p className="mt-1 text-[10px] text-muted-foreground">Disponible: {linea.disponible}</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => actualizarCantidad(linea.stockId, linea.cantidad - 1)}
+                          disabled={linea.cantidad <= 1}
+                        >
+                          <LucideIcons.Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="w-8 text-center font-medium">{linea.cantidad}</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => actualizarCantidad(linea.stockId, linea.cantidad + 1)}
+                          disabled={linea.cantidad >= linea.disponible}
+                        >
+                          <LucideIcons.Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <p className="mt-1 text-center text-[10px] text-muted-foreground">Max: {linea.disponible}</p>
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={linea.precioUnitario}
-                        onChange={(event) => actualizarPrecio(linea.stockId, Number(event.target.value))}
-                      />
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="pl-6 text-right"
+                          value={linea.precioUnitario}
+                          onChange={(event) => actualizarPrecio(linea.stockId, Number(event.target.value))}
+                        />
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={linea.descuento}
-                        onChange={(event) => actualizarDescuento(linea.stockId, Number(event.target.value))}
-                      />
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          className="pr-6 text-right"
+                          value={linea.descuento}
+                          onChange={(event) => actualizarDescuento(linea.stockId, Number(event.target.value))}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">${subtotal.toLocaleString("es-CO")}</TableCell>
                     <TableCell className="text-right">
@@ -538,11 +568,6 @@ export function SalesWorkspace({
       </div>
     )
   }
-
-  const dashboardTitle = title ?? "Facturación rápida"
-  const dashboardDescription =
-    description ?? "Añade productos destacados rápidamente a tu carrito de facturación."
-  const inputPlaceholder = searchPlaceholder ?? "Código o nombre del producto"
 
   if (variant === "dashboard") {
     return (
@@ -573,7 +598,7 @@ export function SalesWorkspace({
                     </Button>
                   </SheetTrigger>
                 )}
-                <SheetContent side="right" className="flex h-full w-full max-w-full flex-col p-0 sm:max-w-xl">
+                <SheetContent side="right" className="flex h-full w-full max-w-full flex-col p-0 sm:max-w-2xl">
                   <SheetHeader className="space-y-1 border-b px-6 py-5">
                     <SheetTitle className="flex items-center gap-2 text-lg">
                       <Package className="h-4 w-4" /> Carrito de venta
@@ -951,15 +976,7 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
                     )
                   })}
                 </div>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  disabled={quickAddDisabled}
-                  onClick={handleAddToCart}
-                >
-                  <ShoppingCart className="mr-2 h-3.5 w-3.5" />
-                  Agregar
-                </Button>
+
               </>
             )}
           </div>

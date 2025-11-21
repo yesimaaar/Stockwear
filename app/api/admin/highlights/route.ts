@@ -6,7 +6,7 @@ import { getCurrentTiendaId } from "@/lib/services/tenant-service"
 // *** SOLUCIÓN CRÍTICA: FORZAR DINÁMICO ***
 // Esto soluciona el error de "Dynamic server usage" 
 // y asegura que la ruta se ejecute en tiempo de solicitud (en lugar de ser estática).
-export const dynamic = 'force-dynamic'; 
+export const dynamic = 'force-dynamic';
 
 // La revalidación automática de Next.js es excelente, pero la propiedad 'dynamic'
 // es necesaria para el uso de recursos específicos del request como cookies().
@@ -124,7 +124,9 @@ export async function GET() {
         try {
             tiendaId = await getCurrentTiendaId({ client: supabase })
         } catch (error) {
-            return NextResponse.json({ message: 'Tienda no encontrada para el usuario.' }, { status: 403 })
+            console.error("Error determinando tienda para highlights:", error)
+            const message = error instanceof Error ? error.message : 'Tienda no encontrada'
+            return NextResponse.json({ message }, { status: 403 })
         }
 
         const [ventasResp, detallesResp, productosResp, historialResp] = await Promise.all([

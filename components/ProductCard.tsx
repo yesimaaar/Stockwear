@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import Image from "next/image"
-import { Package, X } from "lucide-react"
+import { Package } from "lucide-react"
 import { useCart, type CartItem } from "@/hooks/useCart"
 import { formatCurrency } from "@/lib/whatsapp"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,6 @@ import type { ProductoConStock } from "@/lib/services/producto-service"
 
 export default function ProductCard({ product }: { product: ProductoConStock }) {
   const { addItem } = useCart()
-  const [showSizes, setShowSizes] = useState(false)
 
   // Group stock by size
   const stockBySize = React.useMemo(() => {
@@ -48,7 +47,6 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
       image: product.imagen || undefined
     }
     addItem(item)
-    setShowSizes(false)
   }
 
   const hasStock = stockBySize.length > 0
@@ -92,42 +90,28 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
           </div>
 
           <div className="min-h-[44px]">
-            {!showSizes ? (
-              <Button
-                onClick={() => setShowSizes(true)}
-                className="w-full rounded-xl font-medium shadow-sm transition-all active:scale-[0.98]"
-                variant="default"
-                disabled={!hasStock}
-              >
-                {hasStock ? "Agregar al carrito" : "Agotado"}
-              </Button>
-            ) : (
-              <div className="animate-in fade-in zoom-in duration-200 space-y-2">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-xs font-medium text-muted-foreground">Selecciona tu talla</span>
+            {hasStock ? (
+              <div className="grid grid-cols-4 gap-1.5">
+                {stockBySize.map(([size]) => (
                   <Button
-                    variant="ghost"
+                    key={size}
+                    variant="outline"
                     size="sm"
-                    onClick={() => setShowSizes(false)}
-                    className="h-6 w-6 rounded-full p-0 hover:bg-accent"
+                    className="h-9 w-full p-0 text-xs font-medium hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                    onClick={() => onAdd(size)}
                   >
-                    <X className="h-3 w-3" />
+                    {size}
                   </Button>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {stockBySize.map(([size]) => (
-                    <Button
-                      key={size}
-                      variant="outline"
-                      size="sm"
-                      className="h-9 w-full p-0 text-xs font-medium hover:border-primary hover:bg-primary hover:text-primary-foreground"
-                      onClick={() => onAdd(size)}
-                    >
-                      {size}
-                    </Button>
-                  ))}
-                </div>
+                ))}
               </div>
+            ) : (
+              <Button
+                className="w-full rounded-xl font-medium shadow-sm"
+                variant="secondary"
+                disabled
+              >
+                Agotado
+              </Button>
             )}
           </div>
         </div>

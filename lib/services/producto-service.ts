@@ -11,6 +11,7 @@ export interface ProductoConStock extends Producto {
     almacenId: number | null
     talla: string
     almacen: string
+    almacenAbreviatura?: string
     cantidad: number
   }>
   embeddings?: ProductoEmbedding[]
@@ -30,6 +31,7 @@ type TallaRelacion = {
 type AlmacenRelacion = {
   id?: number | null
   nombre?: string | null
+  abreviatura?: string | null
 }
 
 export type ProductoRow = {
@@ -208,6 +210,7 @@ export const mapProductoRow = (row: ProductoRow): ProductoConStock => {
     almacenId: registro.almacenId ?? null,
     talla: registro.talla?.nombre ?? '',
     almacen: registro.almacen?.nombre ?? '',
+    almacenAbreviatura: registro.almacen?.abreviatura ?? undefined,
     cantidad: typeof registro.cantidad === 'number' ? registro.cantidad : Number(registro.cantidad ?? 0),
   }))
 
