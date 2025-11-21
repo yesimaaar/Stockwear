@@ -82,6 +82,7 @@ interface SalesWorkspaceProps {
   description?: string
   searchPlaceholder?: string
   className?: string
+  headerActions?: React.ReactNode
 }
 
 const priceFormatter = new Intl.NumberFormat("es-CO", {
@@ -101,6 +102,7 @@ export function SalesWorkspace({
   description,
   searchPlaceholder,
   className,
+  headerActions,
 }: SalesWorkspaceProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -557,61 +559,64 @@ export function SalesWorkspace({
               </p>
             </div>
 
-            <Sheet open={cartOpen} onOpenChange={setCartOpen}>
-              {hideCartTrigger ? null : (
-                <SheetTrigger asChild>
-                  <Button variant="secondary" className="flex items-center gap-2">
-                    <ShoppingCart className="h-4 w-4" />
-                    <span>Carrito</span>
-                    <Badge variant="outline" className="ml-1">
-                      {lineas.length}
-                    </Badge>
-                  </Button>
-                </SheetTrigger>
-              )}
-              <SheetContent side="right" className="flex h-full w-full max-w-full flex-col p-0 sm:max-w-xl">
-                <SheetHeader className="space-y-1 border-b px-6 py-5">
-                  <SheetTitle className="flex items-center gap-2 text-lg">
-                    <Package className="h-4 w-4" /> Carrito de venta
-                  </SheetTitle>
-                  <SheetDescription>
-                    Revisa los productos y confirma la venta cuando estés listo.
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="flex-1 overflow-hidden px-6 py-4">
-                  {lineas.length ? (
-                    <ScrollArea className="h-full pr-3">
-                      {renderCartContent({
+            <div className="flex items-center gap-2">
+              {headerActions}
+              <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+                {hideCartTrigger ? null : (
+                  <SheetTrigger asChild>
+                    <Button variant="secondary" className="flex items-center gap-2">
+                      <ShoppingCart className="h-4 w-4" />
+                      <span>Carrito</span>
+                      <Badge variant="outline" className="ml-1">
+                        {lineas.length}
+                      </Badge>
+                    </Button>
+                  </SheetTrigger>
+                )}
+                <SheetContent side="right" className="flex h-full w-full max-w-full flex-col p-0 sm:max-w-xl">
+                  <SheetHeader className="space-y-1 border-b px-6 py-5">
+                    <SheetTitle className="flex items-center gap-2 text-lg">
+                      <Package className="h-4 w-4" /> Carrito de venta
+                    </SheetTitle>
+                    <SheetDescription>
+                      Revisa los productos y confirma la venta cuando estés listo.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="flex-1 overflow-hidden px-6 py-4">
+                    {lineas.length ? (
+                      <ScrollArea className="h-full pr-3">
+                        {renderCartContent({
+                          emptyMessageClass:
+                            "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
+                          showTotals: false,
+                        })}
+                      </ScrollArea>
+                    ) : (
+                      renderCartContent({
                         emptyMessageClass:
                           "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
                         showTotals: false,
-                      })}
-                    </ScrollArea>
-                  ) : (
-                    renderCartContent({
-                      emptyMessageClass:
-                        "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
-                      showTotals: false,
-                    })
-                  )}
-                </div>
-                <SheetFooter className="border-t px-6 py-5">
-                  <div className="flex w-full flex-col gap-4">
-                    {renderEmpleadoSelector("venta-empleado-sheet")}
-                    <div className="space-y-1 text-right">
-                      <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
-                      <p className="text-lg font-semibold text-foreground">
-                        Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
-                      </p>
-                    </div>
-                    <Button onClick={registrarVenta} disabled={registerDisabled} className="self-end">
-                      <Receipt className="mr-2 h-4 w-4" />
-                      {registrando ? "Registrando..." : "Registrar venta"}
-                    </Button>
+                      })
+                    )}
                   </div>
-                </SheetFooter>
-              </SheetContent>
-            </Sheet>
+                  <SheetFooter className="border-t px-6 py-5">
+                    <div className="flex w-full flex-col gap-4">
+                      {renderEmpleadoSelector("venta-empleado-sheet")}
+                      <div className="space-y-1 text-right">
+                        <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
+                        <p className="text-lg font-semibold text-foreground">
+                          Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
+                        </p>
+                      </div>
+                      <Button onClick={registrarVenta} disabled={registerDisabled} className="self-end">
+                        <Receipt className="mr-2 h-4 w-4" />
+                        {registrando ? "Registrando..." : "Registrar venta"}
+                      </Button>
+                    </div>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
+            </div>
           </div>
         </div>
 

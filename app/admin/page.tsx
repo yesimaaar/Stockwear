@@ -635,14 +635,46 @@ export default function AdminHomePage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Comparte tu catálogo</p>
-            <p className="text-sm text-muted-foreground">
-              Comparte la vista pública para que vendedores y clientes consulten existencias al instante.
-            </p>
+      {showMobileNotice && (
+        <div className="relative w-full overflow-hidden rounded-2xl border border-primary bg-secondary p-4 text-sm text-muted-foreground shadow-sm">
+          <div className="flex gap-3">
+            <span className="mt-0.5 flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <MonitorSmartphone className="h-4 w-4" />
+            </span>
+            <div className="flex-1 text-[0.92rem] leading-relaxed text-muted-foreground">
+              <p className="font-medium text-foreground">Optimiza tu experiencia</p>
+              <p>
+                StockWear recomienda gestionar el panel desde un equipo de escritorio para aprovechar todo el
+                espacio disponible. Puedes continuar en tu dispositivo movil cuando lo necesites.
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={dismissMobileNotice}
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition hover:border-border hover:text-foreground"
+          >
+            <span className="sr-only">Ocultar aviso</span>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {(loadingHighlights || isHydratingHighlights) && topProducts.length === 0 && newProducts.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
+          Calculando recomendaciones de productos
+        </div>
+      ) : null}
+
+      <SalesWorkspace
+        variant="dashboard"
+        highlights={{ top: topProducts, recent: newProducts }}
+        onSaleRegistered={handleSaleRegistered}
+        hideCartTrigger
+        searchPlaceholder="Busca un producto para realizar una venta"
+        initialPreviewState={{ searchTerm: searchQuery }}
+        key={searchQuery}
+        headerActions={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
@@ -692,48 +724,7 @@ export default function AdminHomePage() {
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
-
-      {showMobileNotice && (
-        <div className="relative w-full overflow-hidden rounded-2xl border border-primary bg-secondary p-4 text-sm text-muted-foreground shadow-sm">
-          <div className="flex gap-3">
-            <span className="mt-0.5 flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <MonitorSmartphone className="h-4 w-4" />
-            </span>
-            <div className="flex-1 text-[0.92rem] leading-relaxed text-muted-foreground">
-              <p className="font-medium text-foreground">Optimiza tu experiencia</p>
-              <p>
-                StockWear recomienda gestionar el panel desde un equipo de escritorio para aprovechar todo el
-                espacio disponible. Puedes continuar en tu dispositivo movil cuando lo necesites.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={dismissMobileNotice}
-            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition hover:border-border hover:text-foreground"
-          >
-            <span className="sr-only">Ocultar aviso</span>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {(loadingHighlights || isHydratingHighlights) && topProducts.length === 0 && newProducts.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
-          Calculando recomendaciones de productos
-        </div>
-      ) : null}
-
-      <SalesWorkspace
-        variant="dashboard"
-        highlights={{ top: topProducts, recent: newProducts }}
-        onSaleRegistered={handleSaleRegistered}
-        hideCartTrigger
-        searchPlaceholder="Busca un producto para realizar una venta"
-        initialPreviewState={{ searchTerm: searchQuery }}
-        key={searchQuery}
+        }
       />
     </div>
   )
