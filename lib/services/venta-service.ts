@@ -119,6 +119,7 @@ export class VentaService {
         precioUnitario,
         descuento,
         subtotal,
+        tiendaId,
       })
 
       movimientosHistorial.push({
@@ -156,9 +157,10 @@ export class VentaService {
 
     const venta = ventaData as Venta
 
-    const detallesInsert = detallesParaInsertar.map((detalle) => ({
+    const detallesInsert = detallesParaInsertar.map(({ tiendaId: _, ...detalle }) => ({
       ...detalle,
       ventaId: venta.id,
+      tienda_id: tiendaId,
       precioUnitario: Number(detalle.precioUnitario.toFixed(2)),
       subtotal: Number(detalle.subtotal.toFixed(2)),
     }))

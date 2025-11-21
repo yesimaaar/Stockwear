@@ -729,6 +729,7 @@ export default function AdminHomePage() {
         highlights={{ top: topProducts, recent: newProducts }}
         onSaleRegistered={handleSaleRegistered}
         hideCartTrigger
+        searchPlaceholder="Busca un producto para realizar una venta"
       />
     </div>
   )

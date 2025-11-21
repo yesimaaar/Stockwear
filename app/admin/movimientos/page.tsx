@@ -444,25 +444,22 @@ export default function MovimientosPage() {
     ))
 
   return (
-    <AdminSectionLayout title="Movimientos">
-      <div className="space-y-6 p-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Movimientos</h1>
-            <p className="text-sm text-muted-foreground">Gestiona tus transacciones y cierres de caja</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-2 bg-background">
-              <Store className="h-4 w-4 text-amber-500" />
-              Abrir caja
-            </Button>
-            <Button variant="outline" className="gap-2 bg-background">
-              <Download className="h-4 w-4 text-amber-500" />
-              Descargar reporte
-            </Button>
-          </div>
+    <AdminSectionLayout
+      title="Movimientos"
+      actions={
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="gap-2 bg-background">
+            <Store className="h-4 w-4 text-amber-500" />
+            Abrir caja
+          </Button>
+          <Button variant="outline" className="gap-2 bg-background">
+            <Download className="h-4 w-4 text-amber-500" />
+            Descargar reporte
+          </Button>
         </div>
+      }
+    >
+      <div className="space-y-6 p-6">
 
         {/* Main Content */}
         <Tabs defaultValue="transacciones" className="space-y-6">

@@ -36,9 +36,11 @@ import { ReconocimientoService } from "@/lib/services/reconocimiento-service"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { format, endOfDay, startOfDay } from "date-fns"
+import { format, endOfDay, startOfDay, subDays, startOfHour, eachHourOfInterval, isSameHour } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import type { WorkSheet } from "xlsx"
+
+type TimeRange = "90d" | "30d" | "7d" | "1d"
 
 type Trend = "up" | "down" | "flat"
 
@@ -359,6 +361,8 @@ export default function ReportesPage() {
       trend: "flat",
     })),
   )
+  const [allSales, setAllSales] = useState<HistorialRow[]>([])
+  const [chartRange, setChartRange] = useState<TimeRange>("7d")
   const [salesSeries, setSalesSeries] = useState<Array<{ date: string; value: number }>>([])
   const [goals, setGoals] = useState<Record<GoalPeriod, GoalState>>({
     daily: { target: 0, progress: 0 },
@@ -377,7 +381,7 @@ export default function ReportesPage() {
   })
   const [exportingReport, setExportingReport] = useState(false)
   const [lowStockCount, setLowStockCount] = useState(0)
-  const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([])
+
   const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null)
   const [topConsulted, setTopConsulted] = useState<TopConsultedProduct[]>([])
   const [loading, setLoading] = useState(false)
@@ -510,8 +514,8 @@ export default function ReportesPage() {
               .from("historialStock")
               .select("tipo,cantidad,\"costoUnitario\",\"createdAt\",\"usuarioId\"")
               .eq("tienda_id", tiendaId)
-              .order("createdAt", { ascending: false })
-              .limit(500),
+              .gte("createdAt", subDays(new Date(), 90).toISOString())
+              .order("createdAt", { ascending: false }),
             supabase
               .from("productos")
               .select("id,estado,\"stockMinimo\",\"createdAt\",nombre")
@@ -590,11 +594,11 @@ export default function ReportesPage() {
         const monthSalesCount = monthSales.length
         const previousMonthSalesCount = previousMonthSales.length
 
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const dayOfWeek = (now.getDay() + 6) % 7 // Monday-based week start
-  const weekStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek)
-  const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
-  const yearStartDate = new Date(now.getFullYear(), 0, 1)
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const dayOfWeek = (now.getDay() + 6) % 7 // Monday-based week start
+        const weekStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek)
+        const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        const yearStartDate = new Date(now.getFullYear(), 0, 1)
         const salesToday = ventas.filter((v) => new Date(v.createdAt) >= today)
         const dailySalesValue = salesToday.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
         const weeklySales = ventas.filter((v) => new Date(v.createdAt) >= weekStartDate)
@@ -673,32 +677,9 @@ export default function ReportesPage() {
           return month === previousMonth && year === previousMonthYear
         })
 
-        const salesMap = new Map<string, number>()
-        const lastSevenDays: Date[] = []
-        for (let i = 6; i >= 0; i--) {
-          lastSevenDays.push(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i))
-        }
+        setAllSales(ventas)
 
-        for (const date of lastSevenDays) {
-          const key = date.toISOString().slice(0, 10)
-          salesMap.set(key, 0)
-        }
 
-        ventas.forEach((venta) => {
-          const key = new Date(venta.createdAt).toISOString().slice(0, 10)
-          if (!salesMap.has(key)) return
-          const previous = salesMap.get(key) || 0
-          salesMap.set(key, previous + (venta.costoUnitario || 0) * venta.cantidad)
-        })
-
-        const series = lastSevenDays.map((date) => {
-          const isoKey = date.toISOString().slice(0, 10)
-          const value = salesMap.get(isoKey) || 0
-          return {
-            date: isoKey,
-            value,
-          }
-        })
 
         const monthSalesTrend = computeTrend(monthSalesValue, previousMonthSalesValue)
         const monthSalesCountTrend = computeTrend(monthSalesCount, previousMonthSalesCount)
@@ -736,11 +717,11 @@ export default function ReportesPage() {
         ]
 
         const computedDailyProgress = Math.round(dailySalesValue)
-  const computedWeeklyProgress = Math.round(weeklySalesValue)
+        const computedWeeklyProgress = Math.round(weeklySalesValue)
         const computedMonthlyProgress = Math.round(monthSalesValue)
         const computedYearlyProgress = Math.round(yearlySalesValue)
         const computedDailyTarget = Math.max(Math.round(dailySalesValue * 1.2), 1)
-  const computedWeeklyTarget = Math.max(Math.round(weeklySalesValue * 1.18), 1)
+        const computedWeeklyTarget = Math.max(Math.round(weeklySalesValue * 1.18), 1)
         const computedMonthlyTarget = Math.max(Math.round(monthSalesValue * 1.15), 1)
         const computedYearlyTarget = Math.max(Math.round(yearlySalesValue * 1.1), 1)
 
@@ -777,8 +758,8 @@ export default function ReportesPage() {
 
         setMetrics(metricsPayload)
         setLowStockCount(lowStock.length)
-        setLowStockProducts(lowStock)
-        setSalesSeries(series)
+
+        // setSalesSeries is now handled by useEffect depending on chartRange
         setGoals({
           daily: { target: computedDailyTarget, progress: computedDailyProgress },
           weekly: { target: computedWeeklyTarget, progress: computedWeeklyProgress },
@@ -803,7 +784,7 @@ export default function ReportesPage() {
               change: metric.change,
               trend: metric.trend,
             })),
-            salesSeries: series,
+            salesSeries: [],
             dailyTarget: computedDailyTarget,
             dailyProgress: computedDailyProgress,
             weeklyTarget: computedWeeklyTarget,
@@ -832,6 +813,79 @@ export default function ReportesPage() {
       canceled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (allSales.length === 0) {
+      setSalesSeries([])
+      return
+    }
+
+    const now = new Date()
+    let filteredSales = allSales
+
+    if (chartRange === "1d") {
+      const startOfToday = startOfDay(now)
+      filteredSales = allSales.filter((sale) => new Date(sale.createdAt) >= startOfToday)
+
+      const hours = eachHourOfInterval({
+        start: startOfToday,
+        end: endOfDay(now),
+      })
+
+      const salesMap = new Map<string, number>()
+      hours.forEach((hour) => {
+        salesMap.set(hour.toISOString(), 0)
+      })
+
+      filteredSales.forEach((sale) => {
+        const saleDate = new Date(sale.createdAt)
+        const hourKey = startOfHour(saleDate).toISOString()
+        if (salesMap.has(hourKey)) {
+          const current = salesMap.get(hourKey) || 0
+          salesMap.set(hourKey, current + (sale.costoUnitario || 0) * sale.cantidad)
+        }
+      })
+
+      const series = hours.map((hour) => ({
+        date: hour.toISOString(),
+        value: salesMap.get(hour.toISOString()) || 0,
+      }))
+      setSalesSeries(series)
+    } else {
+      let daysToSubtract = 90
+      if (chartRange === "30d") daysToSubtract = 30
+      if (chartRange === "7d") daysToSubtract = 7
+
+      const startDate = subDays(startOfDay(now), daysToSubtract - 1) // Include today
+      filteredSales = allSales.filter((sale) => new Date(sale.createdAt) >= startDate)
+
+      const salesMap = new Map<string, number>()
+      const dates: Date[] = []
+      for (let i = 0; i < daysToSubtract; i++) {
+        const date = subDays(now, daysToSubtract - 1 - i)
+        const key = format(date, "yyyy-MM-dd")
+        salesMap.set(key, 0)
+        dates.push(date)
+      }
+
+      filteredSales.forEach((sale) => {
+        const key = format(new Date(sale.createdAt), "yyyy-MM-dd")
+        if (salesMap.has(key)) {
+          const current = salesMap.get(key) || 0
+          salesMap.set(key, current + (sale.costoUnitario || 0) * sale.cantidad)
+        }
+      })
+
+      const series = dates.map((date) => {
+        const key = format(date, "yyyy-MM-dd")
+        return {
+          date: key,
+          value: salesMap.get(key) || 0,
+        }
+      })
+      setSalesSeries(series)
+    }
+  }, [allSales, chartRange])
 
   const dailyPercentage = useMemo(() => {
     if (dailyTarget === 0) return 0
@@ -910,9 +964,9 @@ export default function ReportesPage() {
           employees.length === 0
             ? [[1, "Sin registros", 0, 0]]
             : employees.map((employee, index) => {
-                const share = totalEmployeeSales > 0 ? Number(((employee.total / totalEmployeeSales) * 100).toFixed(2)) : 0
-                return [index + 1, employee.nombre, Number(employee.total.toFixed(2)), share]
-              }),
+              const share = totalEmployeeSales > 0 ? Number(((employee.total / totalEmployeeSales) * 100).toFixed(2)) : 0
+              return [index + 1, employee.nombre, Number(employee.total.toFixed(2)), share]
+            }),
       }
 
       const notesTable = {
@@ -1142,7 +1196,7 @@ export default function ReportesPage() {
       const generatedAtLabel = REPORT_DATE_FORMATTER.format(new Date())
       const workbook = XLSX.utils.book_new()
 
-  const sheetAddTable = ((XLSX.utils as unknown as { sheet_add_table?: (ws: WorkSheet, opts: any) => void }).sheet_add_table)
+      const sheetAddTable = ((XLSX.utils as unknown as { sheet_add_table?: (ws: WorkSheet, opts: any) => void }).sheet_add_table)
 
       GOAL_ORDER.forEach((period, index) => {
         const { metadata, summaryTable, employeeTable, notesTable } = buildPeriodReportTables(period, generatedAtLabel)
@@ -1401,11 +1455,14 @@ export default function ReportesPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <SalesPerformanceChart
+          key={chartRange}
           className="border-none shadow-sm lg:col-span-2"
           data={salesSeries}
           formatter={(value) => currencyFormatter.format(value)}
           title="Ventas recientes"
           description="Filtra la tendencia y compara el ingreso acumulado por rango de fecha"
+          timeRange={chartRange}
+          onTimeRangeChange={setChartRange}
         />
 
         <Card className="border-none bg-gradient-to-b from-card via-muted/40 to-muted text-foreground shadow-sm dark:from-[#161616] dark:via-[#111] dark:to-[#0e0e0e] dark:text-white">
@@ -1659,7 +1716,7 @@ export default function ReportesPage() {
                     className="text-xs"
                   />
                   <ChartTooltip
-                    content={(contentProps) => (
+                    content={({ content, ...contentProps }) => (
                       <ChartTooltipContent
                         {...contentProps}
                         labelFormatter={(_, items = []) => {
@@ -1857,47 +1914,7 @@ export default function ReportesPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <CardTitle>Productos con stock bajo</CardTitle>
-              <CardDescription>
-                Listado de productos cuya disponibilidad está por debajo del mínimo configurado
-              </CardDescription>
-            </div>
-            <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-semibold">
-              {lowStockCount} alerta{lowStockCount === 1 ? "" : "s"}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {loading && lowStockProducts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Calculando niveles de stock…</p>
-          ) : lowStockProducts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Todos los productos cumplen con el stock mínimo establecido.</p>
-          ) : (
-            <div className="grid gap-3">
-              {lowStockProducts.map((producto) => (
-                <div key={producto.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <p className="font-medium">{producto.nombre}</p>
-                    <p className="text-xs text-muted-foreground">Stock total: {producto.stockTotal}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-red-600">Mínimo requerido: {producto.stockMinimo}</p>
-                    <Link href={`/admin/productos/${producto.id}`}>
-                      <Button variant="outline" size="sm" className="mt-2">
-                        Revisar
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+
     </div>
   )
 }

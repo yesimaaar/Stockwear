@@ -41,6 +41,7 @@ pnpm run dev --webpack
 
 - <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="Next.js" width="18" /> **Next.js 16**: App Router, RSC y manejo de layouts.
 - <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="React" width="18" /> **React 18**: Componentización y hooks personalizados para estado y servicios.
+- <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg" alt="TypeScript" width="18" /> **TypeScript**: Tipado estático para mayor robustez y mantenibilidad.
 - <img src="https://www.vectorlogo.zone/logos/tailwindcss/tailwindcss-icon.svg" alt="Tailwind CSS" width="18" /> **Tailwind CSS + shadcn/ui**: Sistema de diseño y componentes accesibles.
 - <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/supabase/supabase-original.svg" alt="Supabase" width="18" /> **Supabase**: Postgres multi-tenant, Auth, Storage y funciones administrativas.
 - <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/googlecloud/googlecloud-original.svg" alt="Google Cloud" width="18" /> **Google Cloud Functions**: Servicio de embeddings y procesamiento ML.
@@ -53,6 +54,13 @@ pnpm run dev --webpack
 1. Haz fork y crea una rama feature (`git checkout -b feature/nueva-funcionalidad`).
 2. Ejecuta `pnpm run lint` / `pnpm run test` antes de abrir un PR.
 3. Describe claramente los cambios y adjunta capturas o pasos de prueba cuando aplique.
+
+## Licencia
+
+Este proyecto está bajo la **Business Source License 1.1**.
+El uso no comercial y académico está permitido, pero el uso en producción o comercial requiere una licencia comercial separada hasta la fecha de cambio (2035-01-01), momento en el cual pasará a ser **Apache License 2.0**.
+
+Consulta el archivo [LICENSE](./LICENSE) para más detalles.
 
 ## Autores
 

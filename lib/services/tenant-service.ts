@@ -10,17 +10,40 @@ async function fetchTenantId(client: SupabaseClient): Promise<number> {
     throw new Error('Usuario no autenticado')
   }
 
+  // 1. Try to get from profile
   const { data: profile, error: profileError } = await client
     .from('usuarios')
     .select('tienda_id')
     .eq('auth_uid', userData.user.id)
     .single()
 
-  if (profileError || !profile?.tienda_id) {
-    throw new Error('Usuario sin tienda asignada')
+  if (profile?.tienda_id) {
+    return profile.tienda_id
   }
 
-  return profile.tienda_id
+  // 2. Fallback: Check if user owns a store
+  const { data: store, error: storeError } = await client
+    .from('tiendas')
+    .select('id')
+    .eq('owner_id', userData.user.id)
+    .single()
+
+  if (store?.id) {
+    // Optional: Self-heal the user profile
+    // We don't await this to avoid blocking the response
+    void client
+      .from('usuarios')
+      .update({ tienda_id: store.id })
+      .eq('auth_uid', userData.user.id)
+      .then(({ error }) => {
+        if (error) console.warn('Failed to auto-heal user tienda_id', error)
+      })
+
+    return store.id
+  }
+
+  console.error('Tenant resolution failed:', { profileError, storeError })
+  throw new Error('Usuario sin tienda asignada')
 }
 
 export async function getCurrentTiendaId(options?: {

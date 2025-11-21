@@ -7,7 +7,7 @@ const enableTfjsNode = process.env.ENABLE_TFJS_NODE === "true";
 
 const nextConfig: NextConfig = {
   compress: true,
-  reactCompiler: true,
+  reactCompiler: false,
   modularizeImports: {
     "lucide-react": {
       transform: "lucide-react/dist/esm/icons/{{member}}",
@@ -63,9 +63,9 @@ const nextConfig: NextConfig = {
 
     if (isServer) {
       const externalModules = [
-        "aws-sdk", 
-        "mock-aws-s3", 
-        "nock", 
+        "aws-sdk",
+        "mock-aws-s3",
+        "nock",
         "rimraf",
       ];
       const existingExternals = config.externals ?? [];

@@ -642,7 +642,51 @@ export function SalesWorkspace({
           </div>
         </div>
 
-        {highlights && (highlights.top.length > 0 || highlights.recent.length > 0) ? (
+        <Card className="border-dashed border-border/60 bg-card/40 shadow-none">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={busqueda}
+                  onChange={(event) => setBusqueda(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault()
+                      void realizarBusqueda()
+                    }
+                  }}
+                  placeholder={inputPlaceholder}
+                  className="h-12 rounded-xl border-border/60 bg-background pl-10 text-base shadow-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20"
+                />
+                {busqueda ? (
+                  <button
+                    type="button"
+                    onClick={clearBusqueda}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+
+              {buscando && (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  Buscando productos...
+                </div>
+              )}
+
+              {!buscando && productosEncontrados.length > 0 && (
+                <div className="animate-in fade-in slide-in-from-top-2">
+                  {renderResultados()}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {!busqueda && !productosEncontrados.length && highlights && (highlights.top.length > 0 || highlights.recent.length > 0) ? (
           <div className="space-y-6">
             <section className="space-y-3">
               <header className="flex items-center justify-between">
@@ -689,7 +733,9 @@ export function SalesWorkspace({
             </section>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">Aún no hay recomendaciones para mostrar.</p>
+          !busqueda && !productosEncontrados.length ? (
+            <p className="text-xs text-muted-foreground">Aún no hay recomendaciones para mostrar.</p>
+          ) : null
         )}
       </div>
     )
@@ -899,88 +945,88 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
                   {producto.tag}
                 </span>
               ) : null}
-              {producto.totalVendidas ? (
-                <span>
-                  {producto.totalVendidas === 1 ? "1 venta" : `${producto.totalVendidas} ventas`}
-                </span>
-              ) : null}
-              {producto.ingresos != null ? (
-                <span>{priceFormatter.format(producto.ingresos)}</span>
-              ) : null}
               {producto.etiqueta ? <span>{producto.etiqueta}</span> : null}
+              {producto.totalVendidas ? <span>{producto.totalVendidas} vendidas</span> : null}
             </div>
           ) : null}
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-base font-semibold text-foreground">
-              {producto.precio != null ? priceFormatter.format(producto.precio) : "--"}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="inline-flex h-9 items-center justify-center gap-1 rounded-full px-3"
-                onClick={handleToggle}
-                aria-label={expanded ? "Ocultar tallas" : "Ver tallas disponibles"}
-              >
-                <ShoppingCart className="h-4 w-4" />
-                {expanded ? <ChevronDown className="h-3.5 w-3.5 rotate-180" /> : <Plus className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-          </div>
-          {expanded ? (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 p-3 text-xs">
-              {loadingSizes ? (
-                <p className="text-muted-foreground">Cargando tallas...</p>
-              ) : stockError ? (
-                <p className="text-destructive">{stockError}</p>
-              ) : tallaGroups.length ? (
-                <div className="space-y-2">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Tallas</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {tallaGroups.map((group) => {
-                      const almacenesTooltip = group.opciones
-                        .map((option) => `${option.almacen || "Sin almacén"}: ${option.cantidad} ud`)
-                        .join("\n")
-                      return (
-                        <button
-                          key={group.talla}
-                          type="button"
-                          onClick={() => handleSelectGroup(group)}
-                          className={cn(
-                            "flex items-center justify-between rounded-xl border px-3 py-2 text-[0.72rem] font-medium transition",
-                            isGroupSelected(group)
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border/60 text-foreground hover:border-primary/40"
-                          )}
-                          title={almacenesTooltip}
-                        >
-                          <span>{group.talla}</span>
-                          <span className="text-muted-foreground">{group.total} ud</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {!hasAvailableStock ? (
-                    <p className="text-[0.7rem] text-destructive">Sin stock disponible.</p>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">No hay tallas registradas.</p>
-              )}
-            </div>
-          ) : null}
+
+        <div className="flex items-center justify-between">
+          <p className="font-medium text-foreground">
+            {producto.precio ? priceFormatter.format(producto.precio) : "Sin precio"}
+          </p>
+          <Button
+            size="sm"
+            variant={expanded ? "secondary" : "outline"}
+            className="h-8 px-3"
+            onClick={handleToggle}
+          >
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            <span className="sr-only">Ver tallas</span>
+          </Button>
         </div>
       </div>
+
+      {expanded && (
+        <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+          <div className="space-y-3 rounded-xl border border-border/50 bg-background/50 p-3">
+            {loadingSizes ? (
+              <div className="flex justify-center py-2">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : stockError ? (
+              <p className="text-center text-xs text-destructive">{stockError}</p>
+            ) : !hasAvailableStock ? (
+              <p className="text-center text-xs text-muted-foreground">Agotado</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {tallaGroups.map((group) => {
+                    const isSelected = isGroupSelected(group)
+                    const isAvailable = group.total > 0
+                    return (
+                      <button
+                        key={group.talla}
+                        type="button"
+                        disabled={!isAvailable}
+                        onClick={() => handleSelectGroup(group)}
+                        className={cn(
+                          "flex min-w-[2rem] items-center justify-center rounded-md border px-2 py-1 text-xs transition-colors",
+                          isSelected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : isAvailable
+                              ? "border-border bg-background hover:bg-secondary"
+                              : "cursor-not-allowed border-border/50 bg-muted text-muted-foreground opacity-50",
+                        )}
+                        title={`${group.total} disponibles`}
+                      >
+                        {group.talla}
+                      </button>
+                    )
+                  })}
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={quickAddDisabled}
+                  onClick={handleAddToCart}
+                >
+                  <ShoppingCart className="mr-2 h-3.5 w-3.5" />
+                  Agregar
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 function EmptyHighlightCard({ mensaje }: { mensaje: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/70 bg-background/40 p-6 text-center text-sm text-muted-foreground">
-      <Package className="h-6 w-6" />
+    <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/10 p-6 text-center text-sm text-muted-foreground">
+      <Package className="h-8 w-8 opacity-20" />
       <p>{mensaje}</p>
     </div>
   )
