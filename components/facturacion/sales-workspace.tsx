@@ -19,6 +19,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { CreditCard, Banknote, ArrowLeftRight } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -404,33 +406,53 @@ export function SalesWorkspace({
 
   )
 
-  const renderMetodoPagoSelector = (id: string) => (
-    <div className="space-y-2">
-      <Label htmlFor={id} className="text-sm font-medium text-foreground">
-        Método de pago
-      </Label>
-      <Select
-        value={selectedMetodoPagoId ?? ""}
-        onValueChange={(value) => setSelectedMetodoPagoId(value)}
-      >
-        <SelectTrigger id={id}>
-          <SelectValue placeholder="Selecciona método de pago" />
-        </SelectTrigger>
-        <SelectContent>
-          {metodosPago.map((metodo) => (
-            <SelectItem key={metodo.id} value={String(metodo.id)}>
-              {metodo.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {!sesionActual && (
-        <p className="text-xs text-amber-600 font-medium">
-          ⚠️ No tienes una caja abierta.
-        </p>
-      )}
-    </div>
-  )
+
+
+  const renderMetodoPagoSelector = (id: string) => {
+    const opciones: MetodoPago[] = metodosPago.length > 0 ? metodosPago : [
+      { id: 1, nombre: "Efectivo", tipo: "efectivo", tiendaId: 0, estado: "activo" },
+      { id: 2, nombre: "Transferencia", tipo: "banco", tiendaId: 0, estado: "activo" },
+      { id: 3, nombre: "Tarjeta", tipo: "banco", tiendaId: 0, estado: "activo" }
+    ]
+
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={id} className="text-sm font-medium text-foreground">
+          Método de Pago
+        </Label>
+        <RadioGroup
+          value={selectedMetodoPagoId ?? ""}
+          onValueChange={(value) => setSelectedMetodoPagoId(value)}
+          className="grid grid-cols-3 gap-2"
+        >
+          {opciones.map((metodo) => {
+            let Icon = Banknote
+            if (metodo.nombre.toLowerCase().includes("tarjeta")) Icon = CreditCard
+            else if (metodo.nombre.toLowerCase().includes("transferencia")) Icon = ArrowLeftRight
+
+            return (
+              <div key={metodo.id}>
+                <RadioGroupItem value={String(metodo.id)} id={`${id}-${metodo.id}`} className="peer sr-only" />
+                <Label
+                  htmlFor={`${id}-${metodo.id}`}
+                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-2 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                >
+                  <Icon className="mb-2 h-5 w-5" />
+                  <span className="text-xs font-medium">{metodo.nombre}</span>
+                </Label>
+              </div>
+            )
+          })}
+        </RadioGroup>
+        {!sesionActual && (
+          <p className="text-xs text-amber-600 font-medium">
+            ⚠️ No tienes una caja abierta.
+          </p>
+        )}
+      </div>
+    )
+  }
+
 
   const registrarVenta = async () => {
     if (!sesionActual) {

@@ -137,6 +137,7 @@ export interface CajaSesion {
   id: number
   tiendaId: number
   usuarioId: string
+  usuarioNombre?: string
   fechaApertura: string
   fechaCierre?: string | null
   montoInicial: number

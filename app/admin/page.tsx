@@ -547,14 +547,14 @@ export default function AdminHomePage() {
         })
 
         if (!response.ok) {
-          // if (response.status === 403) {
-          //   // Si es 403, probablemente el usuario no tiene tienda asignada aún.
-          //   // No lanzamos error para evitar ruido en consola, simplemente no cargamos destacados.
-          //   if (!canceled) {
-          //     setLoadingHighlights(false)
-          //   }
-          //   return
-          // }
+          if (response.status === 403) {
+            // Si es 403, probablemente el usuario no tiene tienda asignada aún.
+            // No lanzamos error para evitar ruido en consola, simplemente no cargamos destacados.
+            if (!canceled) {
+              setLoadingHighlights(false)
+            }
+            return
+          }
           throw new Error(`No se pudieron cargar los destacados (${response.status})`)
         }
 

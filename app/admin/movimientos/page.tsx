@@ -49,6 +49,15 @@ import { CajaService } from "@/lib/services/caja-service"
 import { AuthService } from "@/lib/services/auth-service"
 import type { CajaSesion } from "@/lib/types"
 import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED } from "@/lib/events"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 
 // --- Schemas (Existing) ---
 
@@ -174,6 +183,10 @@ export default function MovimientosPage() {
   const [montoInicial, setMontoInicial] = useState("")
   const [montoFinal, setMontoFinal] = useState("")
   const [resumenCierre, setResumenCierre] = useState<{ totalVentas: number, totalGastos: number } | null>(null)
+  
+  // Cierres History State
+  const [cierres, setCierres] = useState<CajaSesion[]>([])
+  const [loadingCierres, setLoadingCierres] = useState(true)
 
   const entradaForm = useForm<EntradaFormValues>({
     resolver: zodResolver(entradaSchema),
@@ -273,6 +286,38 @@ export default function MovimientosPage() {
     }
     loadSesion()
   }, [])
+
+  // Load Cierres History
+  useEffect(() => {
+    let active = true
+
+    const loadCierres = async () => {
+      setLoadingCierres(true)
+      try {
+        const cierresData = await CajaService.getHistorialCierres()
+        if (active) {
+          setCierres(cierresData)
+        }
+      } catch (error) {
+        console.error("Error al cargar cierres", error)
+        toast({
+          title: "Error al cargar cierres",
+          description: "No se pudieron cargar los cierres. Intenta nuevamente más tarde.",
+          variant: "destructive",
+        })
+      } finally {
+        if (active) {
+          setLoadingCierres(false)
+        }
+      }
+    }
+
+    void loadCierres()
+
+    return () => {
+      active = false
+    }
+  }, [toast])
 
   const filteredHistorial = useMemo(() => {
     return historial.filter((item) => {
@@ -493,6 +538,41 @@ export default function MovimientosPage() {
       toast({ title: "Error", description: "No se pudo cerrar la caja", variant: "destructive" })
     }
   }
+
+  const filteredCierres = useMemo(() => {
+    return cierres.filter((cierre) => {
+      // Filter by date
+      if (date && cierre.fechaCierre) {
+        const cierreDate = new Date(cierre.fechaCierre)
+        const selectedDate = new Date(date)
+
+        if (periodo === "diario") {
+          const isSameDay =
+            cierreDate.getDate() === selectedDate.getDate() &&
+            cierreDate.getMonth() === selectedDate.getMonth() &&
+            cierreDate.getFullYear() === selectedDate.getFullYear()
+          if (!isSameDay) return false
+        } else if (periodo === "mensual") {
+          const isSameMonth =
+            cierreDate.getMonth() === selectedDate.getMonth() &&
+            cierreDate.getFullYear() === selectedDate.getFullYear()
+          if (!isSameMonth) return false
+        } else if (periodo === "semanal") {
+          const startOfWeek = new Date(selectedDate)
+          startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay())
+          startOfWeek.setHours(0, 0, 0, 0)
+
+          const endOfWeek = new Date(startOfWeek)
+          endOfWeek.setDate(startOfWeek.getDate() + 6)
+          endOfWeek.setHours(23, 59, 59, 999)
+
+          if (cierreDate < startOfWeek || cierreDate > endOfWeek) return false
+        }
+      }
+
+      return true
+    })
+  }, [cierres, date, periodo])
 
   const accionesDeshabilitadas = loadingCatalogos || productos.length === 0 || almacenes.length === 0
 
@@ -1213,11 +1293,68 @@ export default function MovimientosPage() {
           </TabsContent>
 
           <TabsContent value="cierres">
-            <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
-              <div className="text-center">
-                <h3 className="text-lg font-medium">Cierres de caja</h3>
-                <p className="text-sm text-muted-foreground">Próximamente podrás gestionar tus cierres aquí.</p>
-              </div>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha Apertura</TableHead>
+                    <TableHead>Fecha Cierre</TableHead>
+                    <TableHead>Usuario</TableHead>
+                    <TableHead>Monto Inicial</TableHead>
+                    <TableHead>Ventas</TableHead>
+                    <TableHead>Diferencia</TableHead>
+                    <TableHead>Estado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingCierres ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center">
+                        Cargando cierres...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredCierres.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center">
+                        No se encontraron cierres de caja.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredCierres.map((cierre) => (
+                      <TableRow key={cierre.id}>
+                        <TableCell>{format(new Date(cierre.fechaApertura), "PP p", { locale: es })}</TableCell>
+                        <TableCell>
+                          {cierre.fechaCierre
+                            ? format(new Date(cierre.fechaCierre), "PP p", { locale: es })
+                            : "-"}
+                        </TableCell>
+                        <TableCell>{cierre.usuarioNombre || "Usuario"}</TableCell>
+                        <TableCell>{currencyFormatter.format(cierre.montoInicial)}</TableCell>
+                        <TableCell>
+                          {cierre.montoFinalEsperado !== undefined && cierre.montoFinalEsperado !== null
+                            ? currencyFormatter.format(cierre.montoFinalEsperado - cierre.montoInicial)
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {cierre.diferencia !== undefined && cierre.diferencia !== null ? (
+                            <span className={cn(
+                              cierre.diferencia < 0 ? "text-rose-600" : "text-emerald-600",
+                              "font-medium"
+                            )}>
+                              {currencyFormatter.format(cierre.diferencia)}
+                            </span>
+                          ) : "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={cierre.estado === "abierta" ? "default" : "secondary"}>
+                            {cierre.estado === "abierta" ? "Abierta" : "Cerrada"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </TabsContent>
         </Tabs>

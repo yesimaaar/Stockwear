@@ -135,5 +135,50 @@ export const CajaService = {
             totalVentas,
             totalGastos: 0, // Placeholder
         }
+    },
+
+    async getHistorialCierres(): Promise<CajaSesion[]> {
+        const tiendaId = await getCurrentTiendaId()
+        
+        // 1. Get sessions
+        const { data: sesiones, error } = await supabase
+            .from("caja_sesiones")
+            .select("*")
+            .eq("tienda_id", tiendaId)
+            .eq("estado", "cerrada")
+            .order("fecha_cierre", { ascending: false })
+
+        if (error) throw error
+        if (!sesiones || sesiones.length === 0) return []
+
+        // 2. Get unique user IDs
+        const userIds = Array.from(new Set(sesiones.map(s => s.usuario_id)))
+
+        // 3. Get users
+        let userMap = new Map<string, string>()
+        if (userIds.length > 0) {
+            const { data: usuarios } = await supabase
+                .from("usuarios")
+                .select("id, nombre")
+                .in("id", userIds)
+            
+            if (usuarios) {
+                usuarios.forEach(u => userMap.set(u.id, u.nombre))
+            }
+        }
+
+        return sesiones.map((row) => ({
+            id: row.id,
+            tiendaId: row.tienda_id,
+            usuarioId: row.usuario_id,
+            usuarioNombre: userMap.get(row.usuario_id),
+            fechaApertura: row.fecha_apertura,
+            fechaCierre: row.fecha_cierre,
+            montoInicial: Number(row.monto_inicial),
+            montoFinalEsperado: Number(row.monto_final_esperado),
+            montoFinalReal: Number(row.monto_final_real),
+            diferencia: Number(row.diferencia),
+            estado: row.estado,
+        }))
     }
 }
