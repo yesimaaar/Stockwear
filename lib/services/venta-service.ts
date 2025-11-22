@@ -41,6 +41,12 @@ export class VentaService {
     items: VentaDraftItem[]
     metodoPagoId?: number
     cajaSesionId?: number
+    clienteId?: number | null
+    tipoVenta?: 'contado' | 'credito'
+    numeroCuotas?: number
+    interesPorcentaje?: number
+    montoCuota?: number
+    frecuenciaPago?: 'semanal' | 'mensual'
   }): Promise<VentaConDetalles | null> {
     console.log("Creating Sale with Payload:", payload)
     const tiendaId = await getCurrentTiendaId()
@@ -147,6 +153,17 @@ export class VentaService {
     const folio = payload.folio?.trim() && payload.folio.trim().length > 0 ? payload.folio.trim() : this.generarFolio()
     const usuarioId = payload.usuarioId ?? null
 
+    let fechaPrimerVencimiento: string | null = null
+    if (payload.tipoVenta === 'credito' && payload.frecuenciaPago) {
+      const fecha = new Date()
+      if (payload.frecuenciaPago === 'semanal') {
+        fecha.setDate(fecha.getDate() + 7)
+      } else if (payload.frecuenciaPago === 'mensual') {
+        fecha.setMonth(fecha.getMonth() + 1)
+      }
+      fechaPrimerVencimiento = fecha.toISOString()
+    }
+
     const { data: ventaData, error: ventaError } = await supabase
       .from('ventas')
       .insert({
@@ -157,6 +174,14 @@ export class VentaService {
         tienda_id: tiendaId,
         metodo_pago_id: payload.metodoPagoId ?? null,
         caja_sesion_id: payload.cajaSesionId ?? null,
+        cliente_id: payload.clienteId ?? null,
+        tipo_venta: payload.tipoVenta ?? 'contado',
+        saldo_pendiente: payload.tipoVenta === 'credito' ? (payload.montoCuota ? payload.montoCuota * (payload.numeroCuotas || 1) : totalVenta) : 0,
+        numero_cuotas: payload.numeroCuotas ?? 1,
+        interes_porcentaje: payload.interesPorcentaje ?? 0,
+        monto_cuota: payload.montoCuota ?? 0,
+        frecuencia_pago: payload.frecuenciaPago ?? null,
+        fecha_primer_vencimiento: fechaPrimerVencimiento
       })
       .select()
       .single()
@@ -216,6 +241,25 @@ export class VentaService {
 
       if (historialError) {
         console.error('Error al registrar historial de stock', historialError)
+      }
+    }
+
+    // Update client balance if credit sale
+    if (payload.tipoVenta === 'credito' && payload.clienteId) {
+      const totalDeuda = payload.montoCuota ? payload.montoCuota * (payload.numeroCuotas || 1) : totalVenta
+      const { error: clientError } = await supabase.rpc('actualizar_saldo_cliente', {
+        p_cliente_id: payload.clienteId,
+        p_monto: totalDeuda
+      })
+
+      if (clientError) {
+        // Fallback manual update
+        const { data: client } = await supabase.from('clientes').select('saldo_actual').eq('id', payload.clienteId).single()
+        if (client) {
+          const totalDeuda = payload.montoCuota ? payload.montoCuota * (payload.numeroCuotas || 1) : totalVenta
+          const newBalance = (client.saldo_actual || 0) + totalDeuda
+          await supabase.from('clientes').update({ saldo_actual: newBalance }).eq('id', payload.clienteId)
+        }
       }
     }
 
