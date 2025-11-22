@@ -169,8 +169,8 @@ export class VentaService {
       .insert({
         folio,
         total: totalVenta,
-        usuarioId,
-        createdAt: new Date().toISOString(),
+        usuario_id: usuarioId,
+        created_at: new Date().toISOString(),
         tienda_id: tiendaId,
         metodo_pago_id: payload.metodoPagoId ?? null,
         caja_sesion_id: payload.cajaSesionId ?? null,

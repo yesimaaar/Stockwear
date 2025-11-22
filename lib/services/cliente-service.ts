@@ -68,6 +68,7 @@ export class ClienteService {
         metodoPagoId?: number
         nota?: string
         usuarioId?: string
+        ventaId?: number
     }): Promise<Abono | null> {
         const tiendaId = await getCurrentTiendaId()
 
@@ -77,6 +78,7 @@ export class ClienteService {
             .insert({
                 tienda_id: tiendaId,
                 cliente_id: payload.clienteId,
+                venta_id: payload.ventaId,
                 monto: payload.monto,
                 metodo_pago_id: payload.metodoPagoId,
                 usuario_id: payload.usuarioId,
@@ -91,19 +93,10 @@ export class ClienteService {
         }
 
         // 2. Update Client Balance
-        // We use a stored procedure or direct update. For simplicity, direct update here, 
-        // but ideally this should be a transaction or RPC.
-        // Fetch current balance first to be safe or use increment (not natively supported in simple update without RPC)
-
-        // Let's use an RPC if possible, but standard update for now:
         const { error: updateError } = await supabase.rpc('actualizar_saldo_cliente', {
             p_cliente_id: payload.clienteId,
             p_monto: -payload.monto // Negative to reduce debt
         })
-
-        // Fallback if RPC doesn't exist (we didn't create it in migration, so let's do manual read-update for now or add RPC in next step if needed. 
-        // Actually, let's do a manual read-update to be safe without extra migration for RPC right now, 
-        // although RPC is better for concurrency.
 
         if (updateError) {
             // If RPC fails (likely doesn't exist), do manual
@@ -111,6 +104,15 @@ export class ClienteService {
             if (client) {
                 const newBalance = (client.saldo_actual || 0) - payload.monto
                 await supabase.from('clientes').update({ saldo_actual: newBalance }).eq('id', payload.clienteId)
+            }
+        }
+
+        // 3. Update Sale Balance if ventaId is provided
+        if (payload.ventaId) {
+            const { data: venta } = await supabase.from('ventas').select('saldo_pendiente').eq('id', payload.ventaId).single()
+            if (venta) {
+                const nuevoSaldo = Math.max(0, (venta.saldo_pendiente || 0) - payload.monto)
+                await supabase.from('ventas').update({ saldo_pendiente: nuevoSaldo }).eq('id', payload.ventaId)
             }
         }
 

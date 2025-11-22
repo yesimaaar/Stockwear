@@ -4,8 +4,7 @@ import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useS
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import * as LucideIcons from "lucide-react";
-const { Settings } = LucideIcons;
+import { Settings } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ADMIN_NAV_ITEMS } from "@/lib/admin-nav";

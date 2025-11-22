@@ -2,8 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import * as LucideIcons from "lucide-react"
-const {
+import {
   Users,
   Plus,
   Mail,
@@ -13,7 +12,7 @@ const {
   X,
   Filter,
   RefreshCw,
-} = LucideIcons
+} from "lucide-react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"

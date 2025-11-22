@@ -3,8 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import * as LucideIcons from "lucide-react"
-const { ShoppingCart, Search, Trash2, Receipt, Package, X, ChevronDown, Plus, ChevronRight } = LucideIcons
+import {
+  ShoppingCart,
+  Search,
+  Trash2,
+  Receipt,
+  Package,
+  X,
+  ChevronDown,
+  Plus,
+  ChevronRight,
+  Minus,
+  Banknote,
+  ArrowLeftRight,
+  Settings2,
+  User,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -19,8 +33,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { CreditCard, Banknote, ArrowLeftRight } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -140,6 +152,7 @@ export function SalesWorkspace({
 
   // Customer Data Form State
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [isConfigOpen, setIsConfigOpen] = useState(true) // Default open for quick access
   const [formData, setFormData] = useState({
     name: "",
     identification: "",
@@ -484,30 +497,30 @@ export function SalesWorkspace({
         <Label htmlFor={id} className="text-sm font-medium text-foreground">
           Método de Pago
         </Label>
-        <RadioGroup
+        <Select
           value={selectedMetodoPagoId ?? ""}
           onValueChange={(value) => setSelectedMetodoPagoId(value)}
-          className="grid grid-cols-3 gap-2"
         >
-          {[...displayOptions, cuotasOption].map((metodo) => {
-            let Icon = Banknote
-            if (metodo.nombre === "Cuotas") Icon = Receipt
-            else if (metodo.nombre.toLowerCase().includes("transferencia")) Icon = ArrowLeftRight
-
-            return (
-              <div key={metodo.id}>
-                <RadioGroupItem value={String(metodo.id)} id={`${id}-${metodo.id}`} className="peer sr-only" />
-                <Label
-                  htmlFor={`${id}-${metodo.id}`}
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-2 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
-                >
-                  <Icon className="mb-2 h-5 w-5" />
-                  <span className="text-xs font-medium">{metodo.nombre}</span>
-                </Label>
-              </div>
-            )
-          })}
-        </RadioGroup>
+          <SelectTrigger id={id}>
+            <SelectValue placeholder="Seleccionar método" />
+          </SelectTrigger>
+          <SelectContent>
+            {[...displayOptions, cuotasOption].map((metodo) => (
+              <SelectItem key={metodo.id} value={String(metodo.id)}>
+                <div className="flex items-center gap-2">
+                  {metodo.nombre === "Cuotas" ? (
+                    <Receipt className="h-4 w-4" />
+                  ) : metodo.nombre.toLowerCase().includes("transferencia") ? (
+                    <ArrowLeftRight className="h-4 w-4" />
+                  ) : (
+                    <Banknote className="h-4 w-4" />
+                  )}
+                  <span>{metodo.nombre}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {selectedMetodoPagoId === 'cuotas' && (
           <div className="mt-3 space-y-3 rounded-md border bg-muted/30 p-3 animate-in slide-in-from-top-2">
@@ -648,14 +661,54 @@ export function SalesWorkspace({
     }
 
     const isCredito = selectedMetodoPagoId === 'cuotas'
+    let clienteIdParaVenta = selectedClienteId && selectedClienteId !== 'anonimo' ? Number(selectedClienteId) : null
 
-    if (isCredito && (!selectedClienteId || selectedClienteId === 'anonimo')) {
-      toast({
-        title: "Cliente requerido",
-        description: "Para ventas a crédito (cuotas) debes seleccionar un cliente registrado.",
-        variant: "destructive",
-      })
-      return
+    // Si es crédito y no hay cliente seleccionado, intentamos usar los datos del formulario
+    if (isCredito && !clienteIdParaVenta) {
+      if (formData.name && formData.identification) {
+        try {
+          // Intentar crear el cliente al vuelo
+          const nuevoCliente = await ClienteService.create({
+            nombre: formData.name,
+            documento: formData.identification,
+            telefono: formData.phone,
+            direccion: formData.address,
+          })
+
+          if (nuevoCliente) {
+            clienteIdParaVenta = nuevoCliente.id
+            // Actualizar estado local para que se refleje en la UI
+            setClientes((prev) => [...prev, nuevoCliente])
+            setSelectedClienteId(String(nuevoCliente.id))
+            toast({
+              title: "Cliente registrado",
+              description: `Se creó el cliente ${nuevoCliente.nombre} automáticamente.`,
+            })
+          } else {
+            toast({
+              title: "Error al crear cliente",
+              description: "No se pudo registrar el cliente con los datos proporcionados.",
+              variant: "destructive",
+            })
+            return
+          }
+        } catch (error) {
+          console.error("Error creando cliente desde venta", error)
+          toast({
+            title: "Error al crear cliente",
+            description: "Verifica que el documento no esté ya registrado.",
+            variant: "destructive",
+          })
+          return
+        }
+      } else {
+        toast({
+          title: "Cliente requerido",
+          description: "Para ventas a crédito debes seleccionar un cliente o llenar los Datos de Compra (Nombre e ID).",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     const interesValido = typeof interesPorcentaje === 'number' ? interesPorcentaje : 0
@@ -670,7 +723,7 @@ export function SalesWorkspace({
         usuarioId: selectedEmpleadoId,
         metodoPagoId: isCredito ? undefined : (selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined),
         cajaSesionId: sesionActual?.id,
-        clienteId: selectedClienteId ? Number(selectedClienteId) : null,
+        clienteId: clienteIdParaVenta,
         tipoVenta: isCredito ? 'credito' : 'contado',
         numeroCuotas: isCredito ? cuotasValidas : undefined,
         interesPorcentaje: isCredito ? interesValido : undefined,
@@ -800,7 +853,7 @@ export function SalesWorkspace({
                           onClick={() => actualizarCantidad(linea.stockId, linea.cantidad - 1)}
                           disabled={linea.cantidad <= 1}
                         >
-                          <LucideIcons.Minus className="h-3 w-3" />
+                          <Minus className="h-3 w-3" />
                         </Button>
                         <span className="w-8 text-center font-medium">{linea.cantidad}</span>
                         <Button
@@ -810,7 +863,7 @@ export function SalesWorkspace({
                           onClick={() => actualizarCantidad(linea.stockId, linea.cantidad + 1)}
                           disabled={linea.cantidad >= linea.disponible}
                         >
-                          <LucideIcons.Plus className="h-3 w-3" />
+                          <Plus className="h-3 w-3" />
                         </Button>
                       </div>
                       <p className="mt-1 text-center text-[10px] text-muted-foreground">Max: {linea.disponible}</p>
@@ -920,92 +973,120 @@ export function SalesWorkspace({
                     </SheetDescription>
                   </SheetHeader>
                   <div className="flex-1 overflow-hidden px-6 py-4">
-                    {lineas.length ? (
-                      <ScrollArea className="h-full pr-3">
-                        {renderCartContent({
+                    <ScrollArea className="h-full pr-3">
+                      {lineas.length ? (
+                        renderCartContent({
                           emptyMessageClass:
                             "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
                           showTotals: false,
-                        })}
-                      </ScrollArea>
-                    ) : (
-                      renderCartContent({
-                        emptyMessageClass:
-                          "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
-                        showTotals: false,
-                      })
-                    )}
+                        })
+                      ) : (
+                        renderCartContent({
+                          emptyMessageClass:
+                            "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
+                          showTotals: false,
+                        })
+                      )}
+
+                      <div className="mt-6 space-y-4 border-t pt-6">
+                        {/* Configuration Section */}
+                        <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                          <button
+                            onClick={() => setIsConfigOpen(!isConfigOpen)}
+                            className="flex w-full items-center justify-between p-4 text-sm font-medium hover:bg-muted/50 transition-colors"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Settings2 className="h-4 w-4" />
+                              Configuración de Venta
+                            </span>
+                            <ChevronRight
+                              className={`h-4 w-4 transition-transform duration-200 ${isConfigOpen ? "rotate-90" : ""}`}
+                            />
+                          </button>
+                          {isConfigOpen && (
+                            <div className="border-t p-4 animate-in slide-in-from-top-2 duration-200">
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                {renderEmpleadoSelector("venta-empleado-sheet")}
+                                {renderClienteSelector("venta-cliente-sheet")}
+                                <div className="sm:col-span-2">
+                                  {renderMetodoPagoSelector("venta-metodo-sheet")}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Customer Data Form */}
+                        <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                          <button
+                            onClick={() => setIsFormOpen(!isFormOpen)}
+                            className="flex w-full items-center justify-between p-4 text-sm font-medium hover:bg-muted/50 transition-colors"
+                          >
+                            <span className="flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              Datos de compra (Opcional)
+                            </span>
+                            <ChevronRight
+                              className={`h-4 w-4 transition-transform duration-200 ${isFormOpen ? "rotate-90" : ""}`}
+                            />
+                          </button>
+                          {isFormOpen && (
+                            <div className="border-t p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+                              <div className="space-y-1">
+                                <Label htmlFor="name" className="text-xs">Nombre completo</Label>
+                                <Input
+                                  id="name"
+                                  name="name"
+                                  value={formData.name}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: Juan Pérez"
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="identification" className="text-xs">Identificación (CC/NIT)</Label>
+                                <Input
+                                  id="identification"
+                                  name="identification"
+                                  value={formData.identification}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: 123456789"
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="phone" className="text-xs">Teléfono de contacto</Label>
+                                <Input
+                                  id="phone"
+                                  name="phone"
+                                  value={formData.phone}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: 3001234567"
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="address" className="text-xs">Dirección de envío</Label>
+                                <Input
+                                  id="address"
+                                  name="address"
+                                  value={formData.address}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: Calle 123 # 45-67"
+                                  className="h-8"
+                                />
+                              </div>
+                              <p className="text-[10px] text-muted-foreground italic">
+                                * Estos datos son informativos y no se guardarán en la base de datos por ahora.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </ScrollArea>
                   </div>
                   <SheetFooter className="border-t px-6 py-5">
-                    <div className="flex w-full flex-col gap-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        {renderEmpleadoSelector("venta-empleado-sheet")}
-                        {renderClienteSelector("venta-cliente-sheet")}
-                        {renderMetodoPagoSelector("venta-metodo-sheet")}
-                      </div>
-
-                      <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-                        <button
-                          onClick={() => setIsFormOpen(!isFormOpen)}
-                          className="flex w-full items-center justify-between p-4 text-sm font-medium hover:bg-muted/50 transition-colors"
-                        >
-                          <span>Datos de compra</span>
-                          <ChevronRight
-                            className={`h-4 w-4 transition-transform duration-200 ${isFormOpen ? "rotate-90" : ""}`}
-                          />
-                        </button>
-                        {isFormOpen && (
-                          <div className="border-t p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
-                            <div className="space-y-1">
-                              <Label htmlFor="name" className="text-xs">Nombre completo</Label>
-                              <Input
-                                id="name"
-                                name="name"
-                                value={formData.name}
-                                onChange={handleInputChange}
-                                placeholder="Ej: Juan Pérez"
-                                className="h-8"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="identification" className="text-xs">Identificación (CC/NIT)</Label>
-                              <Input
-                                id="identification"
-                                name="identification"
-                                value={formData.identification}
-                                onChange={handleInputChange}
-                                placeholder="Ej: 123456789"
-                                className="h-8"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="phone" className="text-xs">Teléfono de contacto</Label>
-                              <Input
-                                id="phone"
-                                name="phone"
-                                value={formData.phone}
-                                onChange={handleInputChange}
-                                placeholder="Ej: 3001234567"
-                                className="h-8"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="address" className="text-xs">Dirección de envío</Label>
-                              <Input
-                                id="address"
-                                name="address"
-                                value={formData.address}
-                                onChange={handleInputChange}
-                                placeholder="Ej: Calle 123 # 45-67"
-                                className="h-8"
-                              />
-                            </div>
-                            <p className="text-[10px] text-muted-foreground italic">
-                              * Estos datos son informativos y no se guardarán en la base de datos por ahora.
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                    <div className="w-full space-y-4">
                       <div className="space-y-1 text-right">
                         <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
                         <p className="text-lg font-semibold text-foreground">

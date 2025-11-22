@@ -52,15 +52,15 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
   const hasStock = stockBySize.length > 0
 
   return (
-    <div className="group flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm transition-all hover:border-border hover:shadow-md">
-      <div className="relative h-56 w-full overflow-hidden rounded-xl border border-border/40 bg-card">
+    <div className="group flex flex-col h-full gap-2 sm:gap-3 rounded-2xl border border-border/60 bg-background/80 p-3 sm:p-4 shadow-sm transition-all hover:border-border hover:shadow-md">
+      <div className="relative w-full h-32 sm:h-56 overflow-hidden rounded-xl border border-border/40 bg-card">
         {product.imagen ? (
           <Image
             src={product.imagen}
             alt={product.nombre ?? product.codigo ?? "Producto"}
             fill
             className="object-contain p-2 transition-transform duration-500 group-hover:scale-105"
-            sizes="(min-width: 1280px) 240px, (min-width: 768px) 220px, 200px"
+            sizes="(min-width: 1280px) 240px, (min-width: 768px) 220px, 160px"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-muted-foreground">
@@ -69,35 +69,35 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
         )}
         {product.stockTotal <= 5 && product.stockTotal > 0 && (
           <div className="absolute bottom-2 right-2 rounded-full bg-red-500/90 px-2 py-0.5 text-[0.65rem] font-bold text-white backdrop-blur-sm">
-            ¡Últimos pares!
+            ¡Últimos!
           </div>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col justify-between gap-3">
-        <div className="space-y-1.5">
+      <div className="flex flex-1 flex-col justify-between gap-2 sm:gap-3">
+        <div className="space-y-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-base font-semibold text-foreground line-clamp-2 leading-tight" title={product.nombre ?? product.codigo ?? "Producto"}>
+            <p className="text-sm sm:text-base font-semibold text-foreground line-clamp-2 leading-tight" title={product.nombre ?? product.codigo ?? "Producto"}>
               {product.nombre ?? product.codigo ?? "Producto"}
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">{product.categoria || "General"}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground">{product.categoria || "General"}</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           <div className="flex items-end justify-between gap-2">
-            <p className="text-lg font-bold text-foreground">{formatCurrency(product.precio ?? 0)}</p>
+            <p className="text-base sm:text-lg font-bold text-foreground">{formatCurrency(product.precio ?? 0)}</p>
           </div>
 
-          <div className="min-h-[44px]">
+          <div className="min-h-[36px] sm:min-h-[44px]">
             {hasStock ? (
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-1.5">
                 {stockBySize.map(([size]) => (
                   <Button
                     key={size}
                     variant="outline"
                     size="sm"
-                    className="h-9 w-full p-0 text-xs font-medium hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                    className="h-8 sm:h-9 w-full p-0 text-[10px] sm:text-xs font-medium hover:border-primary hover:bg-primary hover:text-primary-foreground"
                     onClick={() => onAdd(size)}
                   >
                     {size}
@@ -106,7 +106,7 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
               </div>
             ) : (
               <Button
-                className="w-full rounded-xl font-medium shadow-sm"
+                className="w-full h-8 sm:h-9 rounded-xl font-medium shadow-sm text-[10px] sm:text-xs"
                 variant="secondary"
                 disabled
               >

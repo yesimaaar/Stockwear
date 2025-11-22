@@ -173,3 +173,9 @@
     font-family: var(--font-mono);
   }
 }
+
+/* Hide native password reveal button in Edge/IE */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}

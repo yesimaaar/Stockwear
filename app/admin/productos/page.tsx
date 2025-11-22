@@ -4,8 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Fragment, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
-import * as LucideIcons from "lucide-react"
-const {
+import {
   Package,
   Plus,
   ArrowLeft,
@@ -15,7 +14,7 @@ const {
   Edit,
   Trash2,
   X,
-} = LucideIcons
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"

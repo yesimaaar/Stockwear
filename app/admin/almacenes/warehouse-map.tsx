@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { GoogleMap, InfoWindowF, MarkerF, useLoadScript } from "@react-google-maps/api"
+import { GoogleMap, InfoWindowF, MarkerF, useJsApiLoader } from "@react-google-maps/api"
 
 import type { AlmacenResumen } from "@/lib/services/inventario-service"
 import { getWarehouseCoordinate } from "@/lib/config/warehouse-locations"
@@ -41,7 +41,7 @@ export function WarehouseMap({ almacenes }: WarehouseMapProps) {
   }, [markers])
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-  const { isLoaded, loadError } = useLoadScript({
+  const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey ?? "",
     id: "warehouse-map-script",
   })

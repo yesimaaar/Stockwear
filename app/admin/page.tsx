@@ -3,8 +3,7 @@
 import dynamic from "next/dynamic"
 import { useEffect, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import * as LucideIcons from "lucide-react"
-const { MonitorSmartphone, X, Paperclip, Copy, ExternalLink } = LucideIcons
+import { MonitorSmartphone, X, Paperclip, Copy, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,

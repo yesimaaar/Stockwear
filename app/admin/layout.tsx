@@ -5,8 +5,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import * as LucideIcons from "lucide-react";
-const { LogOut, AlertTriangle, Bell, Loader2, RefreshCcw, Moon, PanelLeft, ShoppingCart } = LucideIcons;
+import { LogOut, AlertTriangle, Bell, Loader2, RefreshCcw, Moon, PanelLeft, ShoppingCart } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -42,7 +41,7 @@ type InventoryNotification = {
 };
 
 const SEARCHABLE_MODULES = ADMIN_NAV_ITEMS.filter((module) =>
-	["/admin", "/admin/productos", "/admin/historial"].includes(module.href)
+	["/admin", "/admin/productos", "/admin/historial", "/admin/movimientos"].includes(module.href)
 );
 
 const DEFAULT_SEARCH_MODULE = "/admin"

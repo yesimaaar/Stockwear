@@ -6,8 +6,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { useTheme } from "next-themes"
-import * as LucideIcons from "lucide-react"
-const {
+import {
   Camera,
   Package,
   Search,
@@ -21,11 +20,11 @@ const {
   Sparkles,
   Gauge,
   Upload,
-  Image: ImageIcon,
+  Image as ImageIcon,
   Sun,
   Moon,
   RefreshCw,
-} = LucideIcons
+} from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
