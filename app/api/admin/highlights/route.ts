@@ -147,6 +147,7 @@ export async function GET() {
                     `id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`
                 )
                 .eq("tienda_id", tiendaId)
+                .order("createdAt", { ascending: false })
                 .limit(PRODUCTOS_LIMIT),
             supabase
                 .from("historialStock")

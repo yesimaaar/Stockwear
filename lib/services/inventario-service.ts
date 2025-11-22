@@ -23,7 +23,7 @@ type CategoriaUpsertPayload = {
 
 type AlmacenUpsertPayload = {
   nombre: string
-  abreviatura?: string | null
+  abreviatura: string
   direccion: string | null
   tipo: Almacen['tipo']
   estado: EstadoRegistro

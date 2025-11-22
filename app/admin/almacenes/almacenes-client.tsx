@@ -87,11 +87,10 @@ const almacenSchema = z.object({
 		.min(2, "Usa al menos 2 caracteres")
 		.max(100, "Máximo 100 caracteres"),
 	abreviatura: z
-		.string()
+		.string({ required_error: "La abreviatura es obligatoria" })
 		.trim()
-		.max(10, "Máximo 10 caracteres")
-		.optional()
-		.transform((value) => value ?? ""),
+		.min(1, "La abreviatura es obligatoria")
+		.max(10, "Máximo 10 caracteres"),
 	direccion: z
 		.string()
 		.trim()
@@ -231,7 +230,7 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 		setIsSaving(true)
 		const payload = {
 			nombre: values.nombre.trim(),
-			abreviatura: values.abreviatura?.trim() ? values.abreviatura.trim() : null,
+			abreviatura: values.abreviatura,
 			direccion: values.direccion.trim() ? values.direccion.trim() : null,
 			tipo: values.tipo,
 			estado: values.estado as EstadoRegistro
@@ -418,11 +417,9 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 											<div>
 												<h3 className="text-xl font-semibold">
 													{almacen.nombre}
-													{almacen.abreviatura && (
-														<span className="ml-2 text-sm font-normal text-muted-foreground">
-															({almacen.abreviatura})
-														</span>
-													)}
+													<span className="ml-2 text-sm font-normal text-muted-foreground">
+														({almacen.abreviatura})
+													</span>
 												</h3>
 												<div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
 													<MapPin className="h-4 w-4" />
@@ -525,7 +522,7 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 								name="abreviatura"
 								render={({ field }) => (
 									<FormItem>
-										<FormLabel>Abreviatura (Opcional)</FormLabel>
+										<FormLabel>Abreviatura</FormLabel>
 										<FormControl>
 											<Input placeholder="Ej: DS7" {...field} />
 										</FormControl>

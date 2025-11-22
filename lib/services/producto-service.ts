@@ -109,7 +109,8 @@ export const PRODUCTO_SELECT = `
     ),
     almacen:almacenes!stock_almacenId_fkey (
       id,
-      nombre
+      nombre,
+      abreviatura
     )
   ),
   embeddings:producto_embeddings(

@@ -470,13 +470,12 @@ export function SalesWorkspace({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[40%]">Producto</TableHead>
-                <TableHead>Almacén</TableHead>
+                <TableHead className="w-[20%]">Producto</TableHead>
                 <TableHead className="text-center">Cantidad</TableHead>
-                <TableHead className="text-right">Precio</TableHead>
-                <TableHead className="text-right">Desc %</TableHead>
-                <TableHead className="text-right">Subtotal</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                <TableHead className="text-right w-[150px]">Precio</TableHead>
+                <TableHead className="text-right w-[100px]">Desc %</TableHead>
+                <TableHead className="text-right w-[100px]">Subtotal</TableHead>
+                <TableHead className="w-[20px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -490,11 +489,7 @@ export function SalesWorkspace({
                         <span className="text-xs text-muted-foreground">Talla {linea.talla || "N/A"}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {linea.almacenAbreviatura || "Sin almacén"}
-                      </span>
-                    </TableCell>
+
                     <TableCell>
                       <div className="flex items-center justify-center gap-2">
                         <Button
@@ -633,10 +628,20 @@ export function SalesWorkspace({
                           Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
                         </p>
                       </div>
-                      <Button onClick={registrarVenta} disabled={registerDisabled} className="self-end">
-                        <Receipt className="mr-2 h-4 w-4" />
-                        {registrando ? "Registrando..." : "Registrar venta"}
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setLineas([])}
+                          disabled={lineas.length === 0 || registrando}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Vaciar
+                        </Button>
+                        <Button onClick={registrarVenta} disabled={registerDisabled}>
+                          <Receipt className="mr-2 h-4 w-4" />
+                          {registrando ? "Registrando..." : "Registrar venta"}
+                        </Button>
+                      </div>
                     </div>
                   </SheetFooter>
                 </SheetContent>
@@ -886,13 +891,13 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
 
   return (
     <div className="group flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm">
-      <div className="relative h-40 w-full overflow-hidden rounded-xl border border-border/50 bg-secondary/20">
+      <div className="relative h-60 w-full overflow-hidden rounded-xl border border-border/50 bg-secondary/20">
         {hasImage ? (
           <Image
             src={producto.imagen as string}
             alt={producto.nombre}
             fill
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            className="object-contain transition-transform duration-300 group-hover:scale-105"
             sizes="(min-width: 1280px) 240px, (min-width: 768px) 200px, 160px"
           />
         ) : (

@@ -85,7 +85,7 @@ export interface Almacen {
   estado: EstadoRegistro
   latitud?: number | null
   longitud?: number | null
-  abreviatura?: string | null
+  abreviatura: string
 }
 
 export interface Stock {
