@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentTiendaId } from '@/lib/services/tenant-service'
 import type { Venta, VentaDetalle } from '@/lib/types'
 
 interface StockRow {
@@ -38,7 +39,11 @@ export class VentaService {
     usuarioId?: string | null
     folio?: string
     items: VentaDraftItem[]
+    metodoPagoId?: number
+    cajaSesionId?: number
   }): Promise<VentaConDetalles | null> {
+    console.log("Creating Sale with Payload:", payload)
+    const tiendaId = await getCurrentTiendaId()
     if (!payload.items.length) {
       throw new Error('Debes añadir al menos un producto a la venta')
     }
@@ -47,6 +52,7 @@ export class VentaService {
     const { data: stockData, error: stockError } = await supabase
       .from('stock')
       .select('id,productoId,tallaId,almacenId,cantidad')
+      .eq('tienda_id', tiendaId)
       .in('id', stockIds)
 
     if (stockError) {
@@ -116,6 +122,7 @@ export class VentaService {
         precioUnitario,
         descuento,
         subtotal,
+        tiendaId,
       })
 
       movimientosHistorial.push({
@@ -142,7 +149,15 @@ export class VentaService {
 
     const { data: ventaData, error: ventaError } = await supabase
       .from('ventas')
-      .insert({ folio, total: totalVenta, usuarioId, createdAt: new Date().toISOString() })
+      .insert({
+        folio,
+        total: totalVenta,
+        usuarioId,
+        createdAt: new Date().toISOString(),
+        tienda_id: tiendaId,
+        metodo_pago_id: payload.metodoPagoId ?? null,
+        caja_sesion_id: payload.cajaSesionId ?? null,
+      })
       .select()
       .single()
 
@@ -153,9 +168,10 @@ export class VentaService {
 
     const venta = ventaData as Venta
 
-    const detallesInsert = detallesParaInsertar.map((detalle) => ({
+    const detallesInsert = detallesParaInsertar.map(({ tiendaId: _, ...detalle }) => ({
       ...detalle,
       ventaId: venta.id,
+      tienda_id: tiendaId,
       precioUnitario: Number(detalle.precioUnitario.toFixed(2)),
       subtotal: Number(detalle.subtotal.toFixed(2)),
     }))
@@ -195,6 +211,7 @@ export class VentaService {
         motivo: `${movimiento.motivo} (${folio})`,
         costoUnitario: movimiento.costoUnitario,
         createdAt: new Date().toISOString(),
+        tienda_id: tiendaId,
       })
 
       if (historialError) {
@@ -209,7 +226,12 @@ export class VentaService {
   }
 
   static async getAll(): Promise<VentaConDetalles[]> {
-    const { data: ventasData, error: ventasError } = await supabase.from('ventas').select('*').order('createdAt', { ascending: false })
+    const tiendaId = await getCurrentTiendaId()
+    const { data: ventasData, error: ventasError } = await supabase
+      .from('ventas')
+      .select('*')
+      .eq('tienda_id', tiendaId)
+      .order('createdAt', { ascending: false })
 
     if (ventasError || !ventasData) {
       console.error('Error al obtener ventas', ventasError)
@@ -226,6 +248,7 @@ export class VentaService {
     const { data: detallesData, error: detallesError } = await supabase
       .from('ventasDetalle')
       .select('*')
+      .eq('tienda_id', tiendaId)
       .in('ventaId', ventaIds)
 
     if (detallesError) {

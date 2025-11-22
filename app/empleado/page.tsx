@@ -24,6 +24,7 @@ const {
   Image: ImageIcon,
   Sun,
   Moon,
+  RefreshCw,
 } = LucideIcons
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -60,8 +61,7 @@ export default function EmpleadoDashboard() {
   const [cameraLoading, setCameraLoading] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [captureCountdown, setCaptureCountdown] = useState<number | null>(null)
-  const timerSteps = [0, 3, 5] as const
-  const [timerDuration, setTimerDuration] = useState<(typeof timerSteps)[number]>(0)
+  const [timerDuration, setTimerDuration] = useState<0 | 3 | 5>(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -82,6 +82,7 @@ export default function EmpleadoDashboard() {
     loading: false,
     error: null as string | null,
   })
+  const [cameraFacingMode, setCameraFacingMode] = useState<"environment" | "user">("environment")
   const isDarkMode = resolvedTheme === "dark"
   const userInitial = user?.nombre?.charAt(0)?.toUpperCase() ?? "U"
 
@@ -351,7 +352,7 @@ export default function EmpleadoDashboard() {
     }
   }, [user])
 
-  const startCamera = async () => {
+  const startCamera = async (facing: "environment" | "user" = cameraFacingMode) => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setCameraError("Tu navegador no permite usar la cámara.")
       return
@@ -364,7 +365,7 @@ export default function EmpleadoDashboard() {
       setResultado(null)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: "environment" },
+          facingMode: { ideal: facing },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -377,12 +378,18 @@ export default function EmpleadoDashboard() {
 
       streamRef.current = stream
       setCameraActive(true)
+      setCameraFacingMode(facing)
     } catch (error) {
       console.error("Error al acceder a la cámara:", error)
       setCameraError("No se pudo acceder a la cámara. Verifica los permisos.")
     } finally {
       setCameraLoading(false)
     }
+  }
+
+  const toggleCameraFacing = () => {
+    const nextMode = cameraFacingMode === "environment" ? "user" : "environment"
+    void startCamera(nextMode)
   }
 
   const stopCamera = () => {
@@ -402,6 +409,17 @@ export default function EmpleadoDashboard() {
     setCameraError(null)
     setCameraLoading(false)
   }
+
+  const HiddenFileInput = () => (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*"
+      onChange={handleFileUpload}
+      className="sr-only"
+      tabIndex={-1}
+    />
+  )
 
   const toggleProductAvailability = (productId: number) => {
     setExpandedProductId((current) => (current === productId ? null : productId))
@@ -446,6 +464,7 @@ export default function EmpleadoDashboard() {
         embedding,
         empleadoId: user.id,
         umbral: threshold,
+        tiendaId: user.tiendaId,
       })
 
       setResultado(result)
@@ -460,9 +479,9 @@ export default function EmpleadoDashboard() {
 
   const handleTimerToggle = () => {
     setTimerDuration((current) => {
-      const index = timerSteps.indexOf(current)
-      const nextIndex = (index + 1) % timerSteps.length
-      return timerSteps[nextIndex]
+      if (current === 0) return 3
+      if (current === 3) return 5
+      return 0
     })
   }
 
@@ -537,6 +556,7 @@ export default function EmpleadoDashboard() {
         embedding,
         empleadoId: user?.id ?? null,
         umbral: threshold,
+        tiendaId: user?.tiendaId,
       })
 
       setResultado(result)
@@ -561,6 +581,7 @@ export default function EmpleadoDashboard() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
           <p className="text-muted-foreground">Cargando...</p>
         </div>
+        <HiddenFileInput />
       </div>
     )
   }
@@ -646,15 +667,27 @@ export default function EmpleadoDashboard() {
 
           <div className="px-4 pb-8">
             <div className="rounded-3xl border border-white/10 bg-black/60 p-4 backdrop-blur">
-              <div className="flex items-center justify-between">
+              <div className="mb-3 flex justify-center">
                 <Button
                   type="button"
                   onClick={handleTimerToggle}
-                  className="flex h-14 w-14 flex-col items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/15"
                 >
-                  <Clock className="h-5 w-5" />
+                  <Clock className="h-4 w-4" />
+                  <span>{timerDuration === 0 ? "Temporizador apagado" : `Temporizador ${timerDuration}s`}</span>
+                </Button>
+              </div>
+              <div className="flex items-center justify-between">
+                <Button
+                  type="button"
+                  onClick={toggleCameraFacing}
+                  className="flex h-14 w-14 flex-col items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                  aria-label="Cambiar cámara"
+                  disabled={cameraLoading}
+                >
+                  <RefreshCw className="h-5 w-5" />
                   <span className="text-[10px] font-semibold tracking-wide">
-                    {timerDuration === 0 ? "OFF" : `${timerDuration}s`}
+                    {cameraFacingMode === "environment" ? "Trasera" : "Frontal"}
                   </span>
                 </Button>
 
@@ -680,6 +713,7 @@ export default function EmpleadoDashboard() {
                   className="flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
                 >
                   <ImageIcon className="h-5 w-5" />
+                  <span className="sr-only">Subir imagen desde galería</span>
                 </Button>
               </div>
 
@@ -694,8 +728,8 @@ export default function EmpleadoDashboard() {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <header className="relative overflow-hidden bg-gradient-to-b from-gray-950 via-gray-900 to-background pb-10 pt-12 text-white">
-          <div className="absolute inset-x-0 top-0 h-24 bg-primary/40 blur-3xl opacity-60" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_rgba(15,15,15,0)_60%)] opacity-70" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-primary/40 blur-3xl opacity-60" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_rgba(15,15,15,0)_60%)] opacity-70" />
           <div className="relative mx-4 rounded-3xl border border-white/10 bg-black/40 px-4 py-3 shadow-[0_15px_45px_rgba(0,0,0,0.45)] backdrop-blur">
             <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1160,7 +1194,7 @@ export default function EmpleadoDashboard() {
           </Card>
         </main>
 
-        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+        <HiddenFileInput />
       </div>
     )
   }
@@ -1590,7 +1624,7 @@ export default function EmpleadoDashboard() {
       </main>
 
       {/* Input oculto para subir archivos */}
-      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+      <HiddenFileInput />
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { ProductoService, type ProductoConStock } from './producto-service'
 import { ProductoEmbeddingService } from './producto-embedding-service'
 import { cosineSimilarity } from '@/lib/ai/embedding-utils'
 import type { Consulta } from '@/lib/types'
+import { getCurrentTiendaId } from '@/lib/services/tenant-service'
 
 type NivelConfianza = 'alto' | 'medio' | 'bajo'
 
@@ -24,6 +25,7 @@ export interface ProcesarEmbeddingParams {
   embedding: Float32Array
   empleadoId?: string | null
   umbral: number
+  tiendaId?: number
 }
 
 function calcularNivelConfianza(similitud: number, umbral: number): NivelConfianza {
@@ -37,24 +39,26 @@ async function registrarConsulta(options: {
   empleadoId?: string | null
   nivelConfianza: NivelConfianza
   resultado: 'exitoso' | 'fallido'
+  tiendaId?: number
 }) {
-  const payload: Partial<Consulta> = {
+  const tiendaId = options.tiendaId ?? (await getCurrentTiendaId())
+  await supabase.from('consultas').insert({
     tipo: 'reconocimiento_visual',
     productoId: options.productoId,
     empleadoId: options.empleadoId ?? null,
     nivelConfianza: options.nivelConfianza,
     resultado: options.resultado,
     createdAt: new Date().toISOString(),
-  }
-
-  await supabase.from('consultas').insert(payload)
+    tienda_id: tiendaId,
+  })
 }
 
 export class ReconocimientoService {
   static async procesarEmbedding(params: ProcesarEmbeddingParams): Promise<ReconocimientoResult> {
     const { embedding, empleadoId, umbral } = params
+    const tiendaId = params.tiendaId ?? (await getCurrentTiendaId())
 
-    const catalogo = await ProductoEmbeddingService.getCatalogEmbeddings()
+    const catalogo = await ProductoEmbeddingService.getCatalogEmbeddings({ tiendaId })
     if (catalogo.length === 0) {
       return {
         success: false,
@@ -99,6 +103,7 @@ export class ReconocimientoService {
         empleadoId,
         nivelConfianza,
         resultado: 'fallido',
+        tiendaId,
       })
 
       return {
@@ -118,6 +123,7 @@ export class ReconocimientoService {
       empleadoId,
       nivelConfianza,
       resultado: 'exitoso',
+      tiendaId,
     })
 
     return {
@@ -134,14 +140,25 @@ export class ReconocimientoService {
     }
   }
 
-  static async getConsultasMasRecientes(limit = 10): Promise<Consulta[]> {
-    const { data } = await supabase.from('consultas').select('*').order('createdAt', { ascending: false }).limit(limit)
+  static async getConsultasMasRecientes(limit = 10, options?: { tiendaId?: number }): Promise<Consulta[]> {
+    const tiendaId = options?.tiendaId ?? (await getCurrentTiendaId())
+    const { data } = await supabase
+      .from('consultas')
+      .select('*')
+      .eq('tienda_id', tiendaId)
+      .order('createdAt', { ascending: false })
+      .limit(limit)
     return (data as Consulta[]) || []
   }
 
-  static async getProductosMasConsultados(limit = 10) {
+  static async getProductosMasConsultados(limit = 10, options?: { tiendaId?: number }) {
+    const tiendaId = options?.tiendaId ?? (await getCurrentTiendaId())
     // Traer consultas exitosas y agregar conteo por producto
-    const { data: consultas } = await supabase.from('consultas').select('*').eq('resultado', 'exitoso')
+    const { data: consultas } = await supabase
+      .from('consultas')
+      .select('*')
+      .eq('resultado', 'exitoso')
+      .eq('tienda_id', tiendaId)
     const conteo = (consultas || []).reduce((acc: Record<number, number>, c) => {
       if (c.productoId == null) {
         return acc

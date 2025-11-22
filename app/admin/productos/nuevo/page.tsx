@@ -248,7 +248,7 @@ export default function NuevoProductoPage() {
         </div>
       </header>
 
-      <main className="container mx-auto max-w-4xl px-4 py-8">
+      <main className="container mx-auto max-w-6xl px-4 py-8">
         <form onSubmit={handleSubmit}>
           <div className="grid gap-6">
             <Card>

@@ -2,6 +2,9 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
+import { CartProvider } from "@/hooks/useCart"
+import { StoreGuard } from "@/components/auth/StoreGuard"
+import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -31,10 +34,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-  <body className={`min-h-screen bg-background text-foreground antialiased`}>
+      <body className={`min-h-screen bg-background text-foreground antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
-          <Analytics />
+          <CartProvider>
+            <StoreGuard>
+              {children}
+            </StoreGuard>
+            <Analytics />
+            <Toaster />
+          </CartProvider>
         </ThemeProvider>
       </body>
     </html>

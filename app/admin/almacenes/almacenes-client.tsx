@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import dynamic from "next/dynamic"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -60,6 +61,17 @@ import {
 	type AlmacenResumen
 } from "@/lib/services/inventario-service"
 import type { EstadoRegistro } from "@/lib/types"
+import { getWarehouseCoordinate } from "@/lib/config/warehouse-locations"
+import type { WarehouseMapProps } from "./warehouse-map"
+
+const WarehouseMap = dynamic<WarehouseMapProps>(() => import("./warehouse-map").then((mod) => mod.WarehouseMap), {
+	ssr: false,
+	loading: () => (
+		<div className="flex h-[420px] items-center justify-center rounded-3xl border border-border bg-card text-sm text-muted-foreground">
+			Cargando mapa…
+		</div>
+	)
+})
 
 const { Boxes, Edit, MapPin, Plus, Trash2, Warehouse } = LucideIcons
 
@@ -74,6 +86,11 @@ const almacenSchema = z.object({
 		.trim()
 		.min(2, "Usa al menos 2 caracteres")
 		.max(100, "Máximo 100 caracteres"),
+	abreviatura: z
+		.string({ required_error: "La abreviatura es obligatoria" })
+		.trim()
+		.min(1, "La abreviatura es obligatoria")
+		.max(10, "Máximo 10 caracteres"),
 	direccion: z
 		.string()
 		.trim()
@@ -89,6 +106,7 @@ type AlmacenFormValues = z.infer<typeof almacenSchema>
 function getDefaultValues(): AlmacenFormValues {
 	return {
 		nombre: "",
+		abreviatura: "",
 		direccion: "",
 		tipo: "principal",
 		estado: "activo"
@@ -186,6 +204,10 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 		return { activos, inactivos, stockTotal }
 	}, [almacenes])
 
+	const almacenesConCoordenadas = useMemo(() => {
+		return almacenes.filter((almacen) => Boolean(getWarehouseCoordinate(almacen))).length
+	}, [almacenes])
+
 	const handleCreateClick = () => {
 		setEditingAlmacen(null)
 		form.reset(getDefaultValues())
@@ -196,6 +218,7 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 		setEditingAlmacen(almacen)
 		form.reset({
 			nombre: almacen.nombre,
+			abreviatura: almacen.abreviatura ?? "",
 			direccion: almacen.direccion ?? "",
 			tipo: almacen.tipo,
 			estado: almacen.estado as EstadoRegistro
@@ -207,6 +230,7 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 		setIsSaving(true)
 		const payload = {
 			nombre: values.nombre.trim(),
+			abreviatura: values.abreviatura,
 			direccion: values.direccion.trim() ? values.direccion.trim() : null,
 			tipo: values.tipo,
 			estado: values.estado as EstadoRegistro
@@ -350,6 +374,22 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 					</div>
 				}
 			>
+				<div className="space-y-6">
+					<section className="space-y-3">
+						<div className="flex items-center justify-between gap-4">
+							<div>
+								<h3 className="text-lg font-semibold text-foreground">Mapa de almacenes</h3>
+								<p className="text-sm text-muted-foreground">Visualiza la red y detecta huecos logísticos con un vistazo.</p>
+							</div>
+							<div className="text-right text-sm text-muted-foreground">
+								<p>
+									Coordenadas registradas: <span className="font-semibold text-foreground">{almacenesConCoordenadas}</span>
+								</p>
+							</div>
+						</div>
+						<WarehouseMap almacenes={almacenes} />
+					</section>
+				</div>
 				{loading ? (
 					<div className="grid gap-4 md:grid-cols-2">
 						{Array.from({ length: 4 }).map((_, index) => (
@@ -375,7 +415,12 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 												<Warehouse className="h-6 w-6" />
 											</div>
 											<div>
-												<h3 className="text-xl font-semibold">{almacen.nombre}</h3>
+												<h3 className="text-xl font-semibold">
+													{almacen.nombre}
+													<span className="ml-2 text-sm font-normal text-muted-foreground">
+														({almacen.abreviatura})
+													</span>
+												</h3>
 												<div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
 													<MapPin className="h-4 w-4" />
 													{almacen.direccion || "Sin dirección"}
@@ -467,6 +512,19 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 										<FormLabel>Nombre</FormLabel>
 										<FormControl>
 											<Input placeholder="Bodega Central" {...field} />
+										</FormControl>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+							<FormField
+								control={form.control}
+								name="abreviatura"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Abreviatura</FormLabel>
+										<FormControl>
+											<Input placeholder="Ej: DS7" {...field} />
 										</FormControl>
 										<FormMessage />
 									</FormItem>

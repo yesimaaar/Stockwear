@@ -2,10 +2,21 @@
 
 import dynamic from "next/dynamic"
 import { useEffect, useState, useTransition } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import * as LucideIcons from "lucide-react"
-const { MonitorSmartphone, X } = LucideIcons
+const { MonitorSmartphone, X, Paperclip, Copy, ExternalLink } = LucideIcons
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ProductoService } from "@/lib/services/producto-service"
 import { supabase } from "@/lib/supabase"
+import { getCurrentTiendaId } from "@/lib/services/tenant-service"
+import { useToast } from "@/hooks/use-toast"
 
 const SalesWorkspace = dynamic(
   () => import("@/components/facturacion/sales-workspace").then((mod) => mod.SalesWorkspace),
@@ -38,8 +49,7 @@ interface HighlightProduct {
 }
 
 interface HighlightsResponse {
-  topProducts?: HighlightProduct[]
-  newProducts?: HighlightProduct[]
+  destacados?: HighlightProduct[]
   generatedAt?: string
 }
 
@@ -48,6 +58,7 @@ type HighlightsCache = HighlightsResponse
 const HIGHLIGHT_CACHE_KEY = "stockwear.admin.highlights"
 const MOBILE_NOTICE_DISMISSED_KEY = "stockwear.admin.mobile-notice.dismissed"
 const SHOULD_USE_CACHE = true
+const CATALOG_BASE_PATH = "/catalog"
 
 type BrowserWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
@@ -140,33 +151,50 @@ function formatRecent(producto: ProductoRow, index: number): HighlightProduct {
     precio: producto.precio ?? null,
     imagen: producto.imagen ?? null,
     etiqueta: producto.createdAt ? fechaRecienteFormatter.format(new Date(producto.createdAt)) : null,
-    tag: index === 0 ? "Mas reciente" : "Nuevo",
+    tag: "Nuevo",
   }
 }
 
 async function loadHighlightsFallback(): Promise<HighlightsResponse> {
+  const tiendaId = await getCurrentTiendaId().catch(() => null)
+
+  if (!tiendaId) {
+    throw new Error("No se pudo determinar la tienda actual")
+  }
+
+  const scopedVentas = supabase
+    .from("ventas")
+    .select("id,total,\"createdAt\"")
+    .eq("tienda_id", tiendaId)
+    .order("createdAt", { ascending: false })
+    .limit(VENTAS_LIMIT)
+
+  const scopedDetalles = supabase
+    .from("ventasDetalle")
+    .select("\"ventaId\",\"productoId\",cantidad,\"precioUnitario\",descuento,subtotal")
+    .eq("tienda_id", tiendaId)
+    .limit(DETALLE_LIMIT)
+
+  const scopedProductos = supabase
+    .from("productos")
+    .select(`id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`)
+    .eq("tienda_id", tiendaId)
+    .order("createdAt", { ascending: false })
+    .limit(PRODUCTOS_LIMIT)
+
+  const scopedHistorial = supabase
+    .from("historialStock")
+    .select("tipo,\"productoId\",cantidad,\"costoUnitario\",\"createdAt\"")
+    .eq("tipo", "venta")
+    .eq("tienda_id", tiendaId)
+    .order("createdAt", { ascending: false })
+    .limit(HISTORIAL_LIMIT)
+
   const [ventasResp, detallesResp, productosResp, historialResp] = await Promise.all([
-    supabase
-      .from("ventas")
-      .select("id,total,\"createdAt\"")
-      .order("createdAt", { ascending: false })
-      .limit(VENTAS_LIMIT),
-    supabase
-      .from("ventasDetalle")
-      .select("\"ventaId\",\"productoId\",cantidad,\"precioUnitario\",descuento,subtotal")
-      .limit(DETALLE_LIMIT),
-    supabase
-      .from("productos")
-      .select(
-        `id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`,
-      )
-      .limit(PRODUCTOS_LIMIT),
-    supabase
-      .from("historialStock")
-      .select("tipo,\"productoId\",cantidad,\"costoUnitario\",\"createdAt\"")
-      .eq("tipo", "venta")
-      .order("createdAt", { ascending: false })
-      .limit(HISTORIAL_LIMIT),
+    scopedVentas,
+    scopedDetalles,
+    scopedProductos,
+    scopedHistorial,
   ])
 
   if (ventasResp.error || detallesResp.error || productosResp.error || historialResp.error) {
@@ -274,32 +302,172 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
         imagen: productInfo?.imagen ?? null,
         totalVendidas: stats.cantidad,
         ingresos: stats.total,
-        tag: index === 0 ? "Mas vendido" : `Top ${index + 1}`,
+        tag: `Top ${index + 1}`,
       }
     })
+
+  const topProductIds = new Set(topProducts.map(p => p.id))
 
   const activos = productos.filter((producto) => producto.estado === "activo")
   const baseRecientes = activos.length ? activos : productos
   const newProducts = baseRecientes
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .filter(p => !topProductIds.has(p.id))
     .slice(0, 4)
     .map((producto, index) => formatRecent(producto, index))
 
+  const destacados = [...topProducts, ...newProducts]
+
   return {
-    topProducts,
-    newProducts,
+    destacados,
     generatedAt: new Date().toISOString(),
   }
 }
 
+import { updateStoreWhatsApp, getStoreSettings } from "@/app/actions/store-actions"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+
 export default function AdminHomePage() {
-  const [topProducts, setTopProducts] = useState<HighlightProduct[]>([])
-  const [newProducts, setNewProducts] = useState<HighlightProduct[]>([])
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const searchQuery = searchParams.get("q") ?? ""
+  const [destacados, setDestacados] = useState<HighlightProduct[]>([])
   const [loadingHighlights, setLoadingHighlights] = useState(true)
   const [isHydratingHighlights, startHighlightsTransition] = useTransition()
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [showMobileNotice, setShowMobileNotice] = useState(false)
+  const [whatsappNumber, setWhatsappNumber] = useState("")
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false)
+  const [storeSlug, setStoreSlug] = useState<string | null>(null)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    let active = true
+    const loadSettings = async () => {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+
+      if (!accessToken) {
+        console.warn("No hay sesión activa para cargar la tienda")
+        return
+      }
+
+      const res = await getStoreSettings(accessToken)
+      if (!active) return
+
+      if (res.success && res.data) {
+        setStoreSlug(res.data.slug ?? null)
+        if (res.data.whatsapp) {
+          setWhatsappNumber(res.data.whatsapp)
+        }
+      } else if (!res.success && res.message) {
+        toast({ title: "Error", description: res.message, variant: "destructive" })
+      }
+    }
+
+    void loadSettings()
+
+    return () => {
+      active = false
+    }
+  }, [toast])
+
+  const handleSaveWhatsapp = async () => {
+    setSavingWhatsapp(true)
+    try {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+
+      if (!accessToken) {
+        toast({ title: "Sesión requerida", description: "Inicia sesión para actualizar el WhatsApp", variant: "destructive" })
+        return
+      }
+
+      const res = await updateStoreWhatsApp(whatsappNumber, accessToken)
+      if (res.success) {
+        toast({ title: "Guardado", description: "Número de WhatsApp actualizado" })
+      } else {
+        toast({ title: "Error", description: res.message, variant: "destructive" })
+      }
+    } catch (_error) {
+      toast({ title: "Error", description: "No se pudo guardar", variant: "destructive" })
+    } finally {
+      setSavingWhatsapp(false)
+    }
+  }
+
+  const resolveCatalogUrl = () => {
+    if (!storeSlug) {
+      return null
+    }
+    const catalogPath = `${CATALOG_BASE_PATH}/${storeSlug}`
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return `${window.location.origin}${catalogPath}`
+    }
+
+    const fallbackOrigin =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : "")
+
+    if (fallbackOrigin) {
+      return `${fallbackOrigin}${catalogPath}`
+    }
+
+    return catalogPath
+  }
+
+  const copyCatalogLink = async () => {
+    const catalogUrl = resolveCatalogUrl()
+    if (!catalogUrl) {
+      toast({
+        title: "Configura el slug",
+        description: "Asigna un slug a tu tienda para compartir el catálogo.",
+        variant: "destructive",
+      })
+      return
+    }
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(catalogUrl)
+      } else if (typeof document !== "undefined") {
+        const textarea = document.createElement("textarea")
+        textarea.value = catalogUrl
+        textarea.setAttribute("readonly", "")
+        textarea.style.position = "absolute"
+        textarea.style.left = "-9999px"
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textarea)
+      }
+
+      toast({
+        title: "Link copiado",
+        description: "El enlace al catálogo está listo para compartir.",
+      })
+    } catch (error) {
+      console.error("No se pudo copiar el link del catálogo", error)
+      toast({
+        title: "No se pudo copiar",
+        description: "Intenta de nuevo o comparte el enlace manualmente.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const openCatalog = () => {
+    if (!storeSlug) {
+      toast({
+        title: "Slug requerido",
+        description: "No se encontró el slug de la tienda para abrir el catálogo.",
+        variant: "destructive",
+      })
+      return
+    }
+    router.push(`${CATALOG_BASE_PATH}/${storeSlug}`)
+  }
 
   useEffect(() => {
     if (typeof window === "undefined" || !SHOULD_USE_CACHE) return
@@ -311,11 +479,10 @@ export default function AdminHomePage() {
       const cached = JSON.parse(cachedRaw) as HighlightsCache | null
       if (!cached) return
 
-      const hasData = Boolean((cached.topProducts?.length ?? 0) || (cached.newProducts?.length ?? 0))
+      const hasData = Boolean(cached.destacados?.length ?? 0)
 
       startHighlightsTransition(() => {
-        setTopProducts(cached.topProducts ?? [])
-        setNewProducts(cached.newProducts ?? [])
+        setDestacados(cached.destacados ?? [])
       })
 
       if (hasData) {
@@ -381,18 +548,19 @@ export default function AdminHomePage() {
         })
 
         if (!response.ok) {
+          // Si falla la API (incluso por auth/403), lanzamos error para que el catch
+          // intente cargar los datos usando el cliente de Supabase del lado del cliente (fallback).
           throw new Error(`No se pudieron cargar los destacados (${response.status})`)
         }
 
         let payload = (await response.json()) as HighlightsResponse
-        if ((!payload.topProducts || payload.topProducts.length === 0) && (!payload.newProducts || payload.newProducts.length === 0)) {
+        if (!payload.destacados || payload.destacados.length === 0) {
           payload = await loadHighlightsFallback()
         }
         if (canceled) return
 
         startHighlightsTransition(() => {
-          setTopProducts(payload.topProducts ?? [])
-          setNewProducts(payload.newProducts ?? [])
+          setDestacados(payload.destacados ?? [])
         })
 
         if (SHOULD_USE_CACHE && typeof window !== "undefined") {
@@ -402,13 +570,17 @@ export default function AdminHomePage() {
         if ((error as Error).name === "AbortError") {
           return
         }
-        console.error("Error al obtener los productos destacados", error)
+        // Si el error es 403, es esperado en algunos entornos (auth), así que no lo logueamos como error
+        // para no alarmar al usuario, ya que el fallback se encargará.
+        const isAuthError = (error as Error).message.includes("403")
+        if (!isAuthError) {
+          console.error("Error al obtener los productos destacados", error)
+        }
         try {
           const fallback = await loadHighlightsFallback()
           if (!canceled) {
             startHighlightsTransition(() => {
-              setTopProducts(fallback.topProducts ?? [])
-              setNewProducts(fallback.newProducts ?? [])
+              setDestacados(fallback.destacados ?? [])
             })
 
             if (SHOULD_USE_CACHE && typeof window !== "undefined") {
@@ -419,8 +591,7 @@ export default function AdminHomePage() {
           console.error("Error al generar destacados locales", fallbackError)
           if (!canceled) {
             startHighlightsTransition(() => {
-              setTopProducts([])
-              setNewProducts([])
+              setDestacados([])
             })
           }
         }
@@ -495,7 +666,7 @@ export default function AdminHomePage() {
         </div>
       )}
 
-      {(loadingHighlights || isHydratingHighlights) && topProducts.length === 0 && newProducts.length === 0 ? (
+      {(loadingHighlights || isHydratingHighlights) && destacados.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
           Calculando recomendaciones de productos
         </div>
@@ -503,8 +674,63 @@ export default function AdminHomePage() {
 
       <SalesWorkspace
         variant="dashboard"
-        highlights={{ top: topProducts, recent: newProducts }}
+        highlights={{ destacados }}
         onSaleRegistered={handleSaleRegistered}
+        hideCartTrigger
+        searchPlaceholder="Busca un producto para realizar una venta"
+        initialPreviewState={{ searchTerm: searchQuery }}
+        key={searchQuery}
+        headerActions={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Paperclip className="size-4" />
+                Compartir catálogo
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72 p-4">
+              <DropdownMenuLabel>Acciones rápidas</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => void copyCatalogLink()} className="cursor-pointer">
+                <Copy className="mr-2 size-4" />
+                Copiar link
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={openCatalog} className="cursor-pointer">
+                <ExternalLink className="mr-2 size-4" />
+                Abrir catálogo
+              </DropdownMenuItem>
+
+              <div className="my-2 border-t border-border" />
+
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="whatsapp-config" className="text-xs font-medium">WhatsApp de Pedidos</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="whatsapp-config"
+                      placeholder="Ej: 573001234567"
+                      className="h-8 text-xs"
+                      value={whatsappNumber}
+                      onChange={(e) => setWhatsappNumber(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 px-3"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleSaveWhatsapp()
+                      }}
+                      disabled={savingWhatsapp}
+                    >
+                      {savingWhatsapp ? "..." : "OK"}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Este número recibirá los pedidos del catálogo.</p>
+                </div>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
       />
     </div>
   )

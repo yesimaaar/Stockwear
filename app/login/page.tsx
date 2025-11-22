@@ -1,7 +1,7 @@
 ﻿"use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
@@ -27,7 +27,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { GoogleIcon } from "@/components/icons/google-icon"
 import { AuthService } from "@/lib/services/auth-service"
+import { supabase } from "@/lib/supabase"
+import type { Usuario } from "@/lib/types"
 
 const previewQuickStats = [
   { label: "Ventas del día", value: "$128K", trend: "+12%", icon: BarChart3 },
@@ -129,6 +132,51 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+
+
+  const navigateByRole = useCallback((user?: Usuario) => {
+    if (!user) return
+
+    if (user.rol === "admin") {
+      if (!user.tiendaId) {
+        router.push("/register-store")
+      } else {
+        router.push("/admin")
+      }
+    } else if (user.rol === "empleado") {
+      router.push("/empleado")
+    } else {
+      router.push("/")
+    }
+  }, [router])
+
+  const syncSession = useCallback(async () => {
+    const currentUser = await AuthService.getCurrentUser()
+    if (currentUser) {
+      navigateByRole(currentUser)
+      setCheckingSession(false)
+      return
+    }
+    setCheckingSession(false)
+  }, [navigateByRole])
+
+  useEffect(() => {
+    void syncSession()
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setCheckingSession(true)
+        void syncSession()
+      }
+    })
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [syncSession])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -137,6 +185,7 @@ export default function LoginPage() {
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 800))
+
       const result = await AuthService.login(email.trim(), password)
 
       if (!result.success) {
@@ -144,14 +193,7 @@ export default function LoginPage() {
         return
       }
 
-      const role = result.user?.rol
-      if (role === "admin") {
-        router.push("/admin")
-      } else if (role === "empleado") {
-        router.push("/empleado")
-      } else {
-        router.push("/")
-      }
+      navigateByRole(result.user)
     } catch (_error) {
       setError("Ocurrió un problema al iniciar sesión")
     } finally {
@@ -159,12 +201,34 @@ export default function LoginPage() {
     }
   }
 
+  const handleGoogleLogin = async () => {
+    if (googleLoading) return
+    setError("")
+    setGoogleLoading(true)
+    const result = await AuthService.signInWithGoogle()
+    if (!result.success) {
+      setError(result.message || "No se pudo iniciar sesión con Google")
+      setGoogleLoading(false)
+    }
+  }
+
+  if (checkingSession) {
+    return (
+      <div className="force-light flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f8faff] via-[#f2f4fb] to-[#edf0f7]">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-900/30 border-t-slate-900" />
+          <p className="text-sm font-medium text-slate-600">Verificando tu sesión…</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="force-light relative flex min-h-screen items-center overflow-hidden bg-gradient-to-br from-[#f8faff] via-[#f2f4fb] to-[#edf0f7]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(118,131,173,0.25),_transparent_55%)]" />
 
-      <div className="relative ml-auto grid w-full max-w-[1350px] items-start gap-10 px-6 py-8 lg:grid-cols-[minmax(0,0.5fr)_minmax(0,1.4fr)] lg:py-0 lg:pl-12 lg:pr-4">
-        <section className="flex w-full max-w-md flex-col justify-center gap-8 text-slate-900 lg:self-center lg:-ml-8 xl:-ml-12">
+      <div className="relative mx-auto grid w-full max-w-[1420px] items-center justify-center gap-12 px-6 py-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.2fr)] lg:px-12">
+        <section className="mx-auto flex w-full max-w-md flex-col justify-center gap-8 text-slate-900 lg:ml-0">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50">
               <Image src="/stockwear-icon.png" alt="StockWear" width={40} height={40} priority />
@@ -222,18 +286,29 @@ export default function LoginPage() {
                 />
                 Recordar sesión
               </label>
-              <button type="button" className="font-medium text-slate-900 hover:underline">
+              <Link href="/forgot-password" className="font-medium text-slate-900 hover:underline">
                 ¿Olvidaste tu contraseña?
-              </button>
+              </Link>
             </div>
 
             <Button
               type="submit"
               className="h-12 w-full rounded-full bg-slate-900 text-base font-semibold text-white shadow-[0_18px_35px_rgba(15,18,30,0.25)]"
-              disabled={loading}
+              disabled={loading || googleLoading}
             >
               {loading ? "Iniciando sesión..." : "Iniciar sesión"}
               {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleLogin}
+              disabled={loading || googleLoading}
+              className="mt-3 h-12 w-full rounded-full border-slate-200 bg-white/80 text-base font-semibold text-slate-700 hover:bg-white"
+            >
+              <GoogleIcon className="mr-2 h-5 w-5" />
+              {googleLoading ? "Conectando con Google..." : "Continuar con Google"}
             </Button>
           </form>
 
@@ -272,9 +347,8 @@ export default function LoginPage() {
                   <button
                     key={label}
                     type="button"
-                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                      active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-                    }`}
+                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                      }`}
                   >
                     <Icon className={`h-5 w-5 ${active ? "text-white" : "text-slate-500"}`} />
                     <span>{label}</span>
@@ -338,8 +412,8 @@ export default function LoginPage() {
                     <div className="mt-5 space-y-4">
                       {quickBillingTopSellers.map((product) => (
                         <div key={product.id} className="flex flex-wrap items-center gap-5 rounded-[28px] border border-slate-100 bg-white/80 p-5 shadow-sm">
-                          <div className="h-28 w-28 flex-shrink-0 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
-                            <img src={product.image} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
+                          <div className="relative aspect-square w-full min-w-[88px] max-w-[7.5rem] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+                            <img src={product.image} alt={product.name} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                           </div>
                           <div className="flex flex-1 flex-col gap-1 text-slate-900">
                             <p className="text-base font-semibold">{product.name}</p>
@@ -367,8 +441,8 @@ export default function LoginPage() {
                     <div className="mt-5 space-y-4">
                       {quickBillingNewArrivals.map((product) => (
                         <div key={product.id} className="flex flex-wrap items-center gap-5 rounded-[28px] border border-dashed border-slate-200 bg-slate-50/80 p-5">
-                          <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-2xl border border-slate-100 bg-white">
-                            <img src={product.image} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
+                          <div className="relative aspect-[4/3] w-full min-w-[80px] max-w-[6.5rem] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                            <img src={product.image} alt={product.name} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                           </div>
                           <div className="flex flex-1 flex-col gap-1">
                             <p className="text-base font-semibold text-slate-900">{product.name}</p>
