@@ -26,9 +26,10 @@ import { useToast } from "@/hooks/use-toast"
 import { ProductoService, type ProductoConStock } from "@/lib/services/producto-service"
 import { type VentaConDetalles, VentaService } from "@/lib/services/venta-service"
 import { AuthService } from "@/lib/services/auth-service"
-import type { Usuario } from "@/lib/types"
+import { CajaService } from "@/lib/services/caja-service"
+import type { Usuario, MetodoPago, CajaSesion } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { OPEN_QUICK_CART_EVENT } from "@/lib/events"
+import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED } from "@/lib/events"
 
 export interface LineaVentaForm {
   stockId: number
@@ -118,6 +119,11 @@ export function SalesWorkspace({
   const [empleadosError, setEmpleadosError] = useState<string | null>(null)
   const [selectedEmpleadoId, setSelectedEmpleadoId] = useState<string | null>(initialEmpleados[0]?.id ?? null)
 
+  // Cash Register State
+  const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([])
+  const [selectedMetodoPagoId, setSelectedMetodoPagoId] = useState<string | null>(null)
+  const [sesionActual, setSesionActual] = useState<CajaSesion | null>(null)
+
   const dashboardTitle = title ?? "Facturación rápida"
   const dashboardDescription = description ?? "Añade productos destacados rápidamente a tu carrito de facturación."
   const inputPlaceholder = searchPlaceholder ?? "Código o nombre del producto"
@@ -181,6 +187,51 @@ export function SalesWorkspace({
     window.addEventListener(OPEN_QUICK_CART_EVENT, handleOpenCart)
     return () => {
       window.removeEventListener(OPEN_QUICK_CART_EVENT, handleOpenCart)
+    }
+    return () => {
+      window.removeEventListener(OPEN_QUICK_CART_EVENT, handleOpenCart)
+    }
+  }, [])
+
+  // Load Payment Methods and Session
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [metodos, user] = await Promise.all([
+          CajaService.getMetodosPago(),
+          AuthService.getCurrentUser()
+        ])
+        setMetodosPago(metodos)
+        if (metodos.length > 0) {
+          const efectivo = metodos.find(m => m.tipo === 'efectivo')
+          setSelectedMetodoPagoId(String(efectivo?.id || metodos[0].id))
+        }
+
+        if (user) {
+          const sesion = await CajaService.getSesionActual(user.id)
+          setSesionActual(sesion)
+        }
+      } catch (error) {
+        console.error("Error loading sales data", error)
+      }
+    }
+
+    loadData()
+
+    const handleSessionUpdate = () => {
+      loadData()
+    }
+
+    const handleFocus = () => {
+      loadData()
+    }
+
+    window.addEventListener(CAJA_SESSION_UPDATED, handleSessionUpdate)
+    window.addEventListener("focus", handleFocus)
+
+    return () => {
+      window.removeEventListener(CAJA_SESSION_UPDATED, handleSessionUpdate)
+      window.removeEventListener("focus", handleFocus)
     }
   }, [])
 
@@ -350,9 +401,47 @@ export function SalesWorkspace({
         </p>
       )}
     </div>
+
+  )
+
+  const renderMetodoPagoSelector = (id: string) => (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-sm font-medium text-foreground">
+        Método de pago
+      </Label>
+      <Select
+        value={selectedMetodoPagoId ?? ""}
+        onValueChange={(value) => setSelectedMetodoPagoId(value)}
+      >
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Selecciona método de pago" />
+        </SelectTrigger>
+        <SelectContent>
+          {metodosPago.map((metodo) => (
+            <SelectItem key={metodo.id} value={String(metodo.id)}>
+              {metodo.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {!sesionActual && (
+        <p className="text-xs text-amber-600 font-medium">
+          ⚠️ No tienes una caja abierta.
+        </p>
+      )}
+    </div>
   )
 
   const registrarVenta = async () => {
+    if (!sesionActual) {
+      toast({
+        title: "Caja cerrada",
+        description: "Debes abrir la caja antes de registrar una venta.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!lineas.length) {
       toast({
         title: "Agrega productos",
@@ -375,6 +464,8 @@ export function SalesWorkspace({
     try {
       const venta = await VentaService.create({
         usuarioId: selectedEmpleadoId,
+        metodoPagoId: selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined,
+        cajaSesionId: sesionActual?.id,
         items: lineas.map((linea) => ({
           stockId: linea.stockId,
           cantidad: linea.cantidad,
@@ -580,6 +671,17 @@ export function SalesWorkspace({
             </div>
 
             <div className="flex items-center gap-2">
+              {sesionActual ? (
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Caja Abierta #{sesionActual.id}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
+                  <div className="h-2 w-2 rounded-full bg-amber-500" />
+                  Caja Cerrada
+                </Badge>
+              )}
               {headerActions}
               <Sheet open={cartOpen} onOpenChange={setCartOpen}>
                 {hideCartTrigger ? null : (
@@ -621,7 +723,10 @@ export function SalesWorkspace({
                   </div>
                   <SheetFooter className="border-t px-6 py-5">
                     <div className="flex w-full flex-col gap-4">
-                      {renderEmpleadoSelector("venta-empleado-sheet")}
+                      <div className="grid grid-cols-2 gap-4">
+                        {renderEmpleadoSelector("venta-empleado-sheet")}
+                        {renderMetodoPagoSelector("venta-metodo-sheet")}
+                      </div>
                       <div className="space-y-1 text-right">
                         <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
                         <p className="text-lg font-semibold text-foreground">
@@ -783,7 +888,10 @@ export function SalesWorkspace({
         </CardHeader>
         <CardContent className="space-y-4">
           {renderCartContent()}
-          {renderEmpleadoSelector("venta-empleado-card")}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {renderEmpleadoSelector("venta-empleado-card")}
+            {renderMetodoPagoSelector("venta-metodo-card")}
+          </div>
         </CardContent>
       </Card>
     </div>

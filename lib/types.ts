@@ -125,12 +125,35 @@ export interface Consulta {
   createdAt: string
 }
 
+export interface MetodoPago {
+  id: number
+  tiendaId: number
+  nombre: string
+  tipo: 'efectivo' | 'digital' | 'banco' | 'otro'
+  estado: EstadoRegistro
+}
+
+export interface CajaSesion {
+  id: number
+  tiendaId: number
+  usuarioId: string
+  fechaApertura: string
+  fechaCierre?: string | null
+  montoInicial: number
+  montoFinalEsperado?: number | null
+  montoFinalReal?: number | null
+  diferencia?: number | null
+  estado: 'abierta' | 'cerrada'
+}
+
 export interface Venta {
   id: number
   tiendaId: number
   folio: string
   total: number
   usuarioId: string | null
+  metodoPagoId?: number | null
+  cajaSesionId?: number | null
   createdAt: string
 }
 

@@ -29,6 +29,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -44,6 +45,10 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { getCurrentTiendaId } from "@/lib/services/tenant-service"
+import { CajaService } from "@/lib/services/caja-service"
+import { AuthService } from "@/lib/services/auth-service"
+import type { CajaSesion } from "@/lib/types"
+import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED } from "@/lib/events"
 
 // --- Schemas (Existing) ---
 
@@ -161,6 +166,15 @@ export default function MovimientosPage() {
   const [loadingHistorial, setLoadingHistorial] = useState(true)
   const [filterTerm, setFilterTerm] = useState("")
 
+  // Cash Register State
+  const [sesionActual, setSesionActual] = useState<CajaSesion | null>(null)
+  const [loadingSesion, setLoadingSesion] = useState(true)
+  const [openCajaDialog, setOpenCajaDialog] = useState(false)
+  const [openCierreDialog, setOpenCierreDialog] = useState(false)
+  const [montoInicial, setMontoInicial] = useState("")
+  const [montoFinal, setMontoFinal] = useState("")
+  const [resumenCierre, setResumenCierre] = useState<{ totalVentas: number, totalGastos: number } | null>(null)
+
   const entradaForm = useForm<EntradaFormValues>({
     resolver: zodResolver(entradaSchema),
     defaultValues: DEFAULT_ENTRADA_VALUES,
@@ -239,6 +253,25 @@ export default function MovimientosPage() {
       }
     }
     loadHistorial()
+  }, [])
+
+  // Load Session
+  useEffect(() => {
+    const loadSesion = async () => {
+      setLoadingSesion(true)
+      try {
+        const user = await AuthService.getCurrentUser()
+        if (user) {
+          const sesion = await CajaService.getSesionActual(user.id)
+          setSesionActual(sesion)
+        }
+      } catch (error) {
+        console.error("Error loading session", error)
+      } finally {
+        setLoadingSesion(false)
+      }
+    }
+    loadSesion()
   }, [])
 
   const filteredHistorial = useMemo(() => {
@@ -416,6 +449,51 @@ export default function MovimientosPage() {
     }
   }
 
+
+  const handleAbrirCaja = async () => {
+    try {
+      const user = await AuthService.getCurrentUser()
+      if (!user) return
+      const monto = parseFloat(montoInicial) || 0
+      const sesion = await CajaService.abrirCaja(user.id, monto)
+      setSesionActual(sesion)
+      setOpenCajaDialog(false)
+      setMontoInicial("")
+      toast({ title: "Caja abierta", description: "Has iniciado turno correctamente." })
+      window.dispatchEvent(new CustomEvent(CAJA_SESSION_UPDATED))
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "No se pudo abrir la caja", variant: "destructive" })
+    }
+  }
+
+  const prepareCierre = async () => {
+    if (!sesionActual) return
+    try {
+      const resumen = await CajaService.getResumenSesion(sesionActual.id)
+      setResumenCierre(resumen)
+      setOpenCierreDialog(true)
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo cargar el resumen", variant: "destructive" })
+    }
+  }
+
+  const handleCerrarCaja = async () => {
+    if (!sesionActual || !resumenCierre) return
+    try {
+      const montoReal = parseFloat(montoFinal) || 0
+      const montoEsperado = sesionActual.montoInicial + resumenCierre.totalVentas - resumenCierre.totalGastos
+      await CajaService.cerrarCaja(sesionActual.id, montoEsperado, montoReal)
+      setSesionActual(null)
+      setOpenCierreDialog(false)
+      setMontoFinal("")
+      setResumenCierre(null)
+      toast({ title: "Caja cerrada", description: "Turno finalizado." })
+      window.dispatchEvent(new CustomEvent(CAJA_SESSION_UPDATED))
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo cerrar la caja", variant: "destructive" })
+    }
+  }
+
   const accionesDeshabilitadas = loadingCatalogos || productos.length === 0 || almacenes.length === 0
 
   const renderProductoOptions = () =>
@@ -448,9 +526,14 @@ export default function MovimientosPage() {
       title="Movimientos"
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="gap-2 bg-background">
-            <Store className="h-4 w-4 text-amber-500" />
-            Abrir caja
+          <Button
+            variant="outline"
+            className={cn("gap-2 bg-background", sesionActual ? "border-rose-200 hover:bg-rose-50 text-rose-700" : "")}
+            onClick={() => sesionActual ? prepareCierre() : setOpenCajaDialog(true)}
+            disabled={loadingSesion}
+          >
+            <Store className={cn("h-4 w-4", sesionActual ? "text-rose-500" : "text-amber-500")} />
+            {loadingSesion ? "Cargando..." : sesionActual ? "Cerrar caja" : "Abrir caja"}
           </Button>
           <Button variant="outline" className="gap-2 bg-background">
             <Download className="h-4 w-4 text-amber-500" />
@@ -460,6 +543,78 @@ export default function MovimientosPage() {
       }
     >
       <div className="space-y-6 p-6">
+
+        {/* Dialogs for Cash Register */}
+        <Dialog open={openCajaDialog} onOpenChange={setOpenCajaDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Abrir caja</DialogTitle>
+              <DialogDescription>Inicia tu turno registrando el dinero base.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>¿Con cuánto dinero empiezas el turno?</Label>
+                <Input
+                  type="number"
+                  placeholder="$ 0"
+                  value={montoInicial}
+                  onChange={(e) => setMontoInicial(e.target.value)}
+                />
+              </div>
+              <Button className="w-full" onClick={handleAbrirCaja}>Empezar turno</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={openCierreDialog} onOpenChange={setOpenCierreDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cerrar Caja</DialogTitle>
+              <DialogDescription>Resumen del turno y arqueo final.</DialogDescription>
+            </DialogHeader>
+            {resumenCierre && sesionActual && (
+              <div className="space-y-4 py-2">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Dinero base</span>
+                    <span>{currencyFormatter.format(sesionActual.montoInicial)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Ventas</span>
+                    <span>{currencyFormatter.format(resumenCierre.totalVentas)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2 font-medium">
+                    <span>Balance total esperado</span>
+                    <span>{currencyFormatter.format(sesionActual.montoInicial + resumenCierre.totalVentas)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-4">
+                  <Label>¿Cuánto dinero tienes en efectivo?</Label>
+                  <Input
+                    type="number"
+                    placeholder="$ 0"
+                    value={montoFinal}
+                    onChange={(e) => setMontoFinal(e.target.value)}
+                  />
+                </div>
+
+                {montoFinal && (
+                  <div className={cn(
+                    "rounded-lg p-3 text-sm font-medium",
+                    (parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalVentas)) < 0
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-emerald-100 text-emerald-800"
+                  )}>
+                    Diferencia: {currencyFormatter.format(parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalVentas))}
+                  </div>
+                )}
+
+                <Button className="w-full" onClick={handleCerrarCaja}>Confirmar cierre</Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Main Content */}
         <Tabs defaultValue="transacciones" className="space-y-6">

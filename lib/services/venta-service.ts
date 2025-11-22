@@ -39,7 +39,10 @@ export class VentaService {
     usuarioId?: string | null
     folio?: string
     items: VentaDraftItem[]
+    metodoPagoId?: number
+    cajaSesionId?: number
   }): Promise<VentaConDetalles | null> {
+    console.log("Creating Sale with Payload:", payload)
     const tiendaId = await getCurrentTiendaId()
     if (!payload.items.length) {
       throw new Error('Debes añadir al menos un producto a la venta')
@@ -146,7 +149,15 @@ export class VentaService {
 
     const { data: ventaData, error: ventaError } = await supabase
       .from('ventas')
-      .insert({ folio, total: totalVenta, usuarioId, createdAt: new Date().toISOString(), tienda_id: tiendaId })
+      .insert({
+        folio,
+        total: totalVenta,
+        usuarioId,
+        createdAt: new Date().toISOString(),
+        tienda_id: tiendaId,
+        metodo_pago_id: payload.metodoPagoId ?? null,
+        caja_sesion_id: payload.cajaSesionId ?? null,
+      })
       .select()
       .single()
 
