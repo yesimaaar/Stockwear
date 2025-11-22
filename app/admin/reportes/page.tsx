@@ -36,6 +36,7 @@ import { ReconocimientoService } from "@/lib/services/reconocimiento-service"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format, endOfDay, startOfDay, subDays, startOfHour, eachHourOfInterval, isSameHour } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import type { WorkSheet } from "xlsx"
@@ -1409,187 +1410,347 @@ export default function ReportesPage() {
         </div>
       )}
 
-      <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4">
-        {metrics.map((metric) => {
-          const TrendIcon = metric.trend === "up" ? TrendingUp : metric.trend === "down" ? TrendingDown : null
-          const trendLabel =
-            metric.trend === "up"
-              ? "Tendencia al alza"
-              : metric.trend === "down"
-                ? "Tendencia a la baja"
-                : "Actividad estable"
+      <Tabs defaultValue="general" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="empleado">Empleado</TabsTrigger>
+        </TabsList>
 
-          return (
-            <Card key={metric.title} className="@container/card border-none" data-slot="card">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <CardDescription className="text-xs text-muted-foreground">Últimos 30 días</CardDescription>
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-sm font-medium text-foreground">{metric.title}</CardTitle>
-                      <span className={`rounded-full p-1.5 ${metric.bgColor}`}>
-                        <metric.icon className={`h-4 w-4 ${metric.iconColor}`} />
-                      </span>
+        <TabsContent value="general" className="space-y-4">
+          <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4">
+            {metrics.map((metric) => {
+              const TrendIcon = metric.trend === "up" ? TrendingUp : metric.trend === "down" ? TrendingDown : null
+              const trendLabel =
+                metric.trend === "up"
+                  ? "Tendencia al alza"
+                  : metric.trend === "down"
+                    ? "Tendencia a la baja"
+                    : "Actividad estable"
+
+              return (
+                <Card key={metric.title} className="@container/card border-none" data-slot="card">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <CardDescription className="text-xs text-muted-foreground">Últimos 30 días</CardDescription>
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-sm font-medium text-foreground">{metric.title}</CardTitle>
+                          <span className={`rounded-full p-1.5 ${metric.bgColor}`}>
+                            <metric.icon className={`h-4 w-4 ${metric.iconColor}`} />
+                          </span>
+                        </div>
+                        <div className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{metric.value}</div>
+                      </div>
+                      <CardAction>
+                        <Badge variant="outline" className="flex items-center gap-1 text-xs font-semibold">
+                          {TrendIcon ? <TrendIcon className="h-3.5 w-3.5" /> : null}
+                          {metric.change}
+                        </Badge>
+                      </CardAction>
                     </div>
-                    <div className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{metric.value}</div>
+                  </CardHeader>
+                  <CardFooter className="flex-col items-start gap-1.5 text-sm">
+                    <div className="line-clamp-1 flex gap-2 font-medium">
+                      {trendLabel}
+                      {TrendIcon ? <TrendIcon className="size-4" /> : null}
+                    </div>
+                    <div className="text-muted-foreground">{metric.description}</div>
+                  </CardFooter>
+                </Card>
+              )
+            })}
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <SalesPerformanceChart
+              key={chartRange}
+              className="border-none shadow-sm lg:col-span-2"
+              data={salesSeries}
+              formatter={(value) => currencyFormatter.format(value)}
+              title="Ventas recientes"
+              description="Filtra la tendencia y compara el ingreso acumulado por rango de fecha"
+              timeRange={chartRange}
+              onTimeRangeChange={setChartRange}
+            />
+
+            <Card className="border-none bg-gradient-to-b from-card via-muted/40 to-muted text-foreground shadow-sm dark:from-[#161616] dark:via-[#111] dark:to-[#0e0e0e] dark:text-white">
+              <CardHeader className="space-y-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <CardDescription className="text-sm text-muted-foreground">Objetivo de ventas</CardDescription>
+                    <CardTitle className="text-2xl font-semibold text-foreground dark:text-white">
+                      Seguimiento {trackingGoalMetadata.title.replace("Objetivo ", "").toLowerCase()}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">Compara tu progreso vs. la meta definida</p>
                   </div>
-                  <CardAction>
-                    <Badge variant="outline" className="flex items-center gap-1 text-xs font-semibold">
-                      {TrendIcon ? <TrendIcon className="h-3.5 w-3.5" /> : null}
-                      {metric.change}
-                    </Badge>
-                  </CardAction>
+                  <div className="w-full max-w-[180px]">
+                    <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Periodo
+                    </Label>
+                    <Select
+                      value={selectedTrackingPeriod}
+                      onValueChange={(value) => setSelectedTrackingPeriod(value as GoalPeriod)}
+                    >
+                      <SelectTrigger className="bg-background/60">
+                        <SelectValue placeholder="Selecciona periodo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GOAL_ORDER.map((period) => (
+                          <SelectItem key={`tracking-${period}`} value={period}>
+                            {GOAL_METADATA[period].title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardHeader>
-              <CardFooter className="flex-col items-start gap-1.5 text-sm">
-                <div className="line-clamp-1 flex gap-2 font-medium">
-                  {trendLabel}
-                  {TrendIcon ? <TrendIcon className="size-4" /> : null}
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Últimos 6 registros</span>
+                  <span>{trackingStatusText}</span>
                 </div>
-                <div className="text-muted-foreground">{metric.description}</div>
-              </CardFooter>
-            </Card>
-          )
-        })}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <SalesPerformanceChart
-          key={chartRange}
-          className="border-none shadow-sm lg:col-span-2"
-          data={salesSeries}
-          formatter={(value) => currencyFormatter.format(value)}
-          title="Ventas recientes"
-          description="Filtra la tendencia y compara el ingreso acumulado por rango de fecha"
-          timeRange={chartRange}
-          onTimeRangeChange={setChartRange}
-        />
-
-        <Card className="border-none bg-gradient-to-b from-card via-muted/40 to-muted text-foreground shadow-sm dark:from-[#161616] dark:via-[#111] dark:to-[#0e0e0e] dark:text-white">
-          <CardHeader className="space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardDescription className="text-sm text-muted-foreground">Objetivo de ventas</CardDescription>
-                <CardTitle className="text-2xl font-semibold text-foreground dark:text-white">
-                  Seguimiento {trackingGoalMetadata.title.replace("Objetivo ", "").toLowerCase()}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">Compara tu progreso vs. la meta definida</p>
-              </div>
-              <div className="w-full max-w-[180px]">
-                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Periodo
-                </Label>
-                <Select
-                  value={selectedTrackingPeriod}
-                  onValueChange={(value) => setSelectedTrackingPeriod(value as GoalPeriod)}
-                >
-                  <SelectTrigger className="bg-background/60">
-                    <SelectValue placeholder="Selecciona periodo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GOAL_ORDER.map((period) => (
-                      <SelectItem key={`tracking-${period}`} value={period}>
-                        {GOAL_METADATA[period].title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Últimos 6 registros</span>
-              <span>{trackingStatusText}</span>
-            </div>
-            <div className="flex h-24 items-end gap-2 rounded-2xl bg-[hsl(var(--foreground)/0.08)] p-4 dark:bg-white/5">
-              {salesTargetSparkline.map((value, index) => (
-                <div
-                  key={`spark-${index}`}
-                  className="flex-1 h-full overflow-hidden rounded-full bg-[hsl(var(--foreground)/0.12)] dark:bg-white/10"
-                >
-                  <div
-                    className="w-full rounded-full bg-emerald-600/80 dark:bg-emerald-300/90"
-                    style={{ height: `${Math.max(value * 100, 8)}%` }}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-col gap-4 text-foreground sm:flex-row sm:items-end sm:justify-between dark:text-white">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Progreso actual</p>
-                <p className="text-3xl font-semibold text-foreground dark:text-white">
-                  {currencyFormatter.format(trackingGoal.progress)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Meta {trackingGoalMetadata.title.replace("Objetivo ", "").toLowerCase()}: {currencyFormatter.format(trackingGoal.target)}
-                </p>
-              </div>
-              <div className="text-left sm:text-right">
-                <p
-                  className={`text-2xl font-semibold ${trackingGoalPercentage >= 100 ? "text-emerald-600 dark:text-emerald-300" : "text-emerald-500 dark:text-emerald-400"}`}
-                >
-                  {trackingCompletionLabel}
-                </p>
-                <p className="text-xs text-muted-foreground">avance frente al objetivo</p>
-              </div>
-            </div>
-            <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
-              {GOAL_ORDER.map((period) => (
-                <div
-                  key={`summary-${period}`}
-                  className={`rounded-2xl border border-border bg-card/70 p-3 dark:border-white/10 dark:bg-white/5 ${period === selectedTrackingPeriod ? "ring-1 ring-primary/40" : ""}`}
-                >
-                  <div className="mb-1 flex items-center justify-between text-foreground">
-                    <div className="flex items-center gap-2">
-                      <Target className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="uppercase tracking-wide text-[0.7rem]">
-                        {GOAL_METADATA[period].title.replace("Objetivo ", "")}
-                      </span>
+                <div className="flex h-24 items-end gap-2 rounded-2xl bg-[hsl(var(--foreground)/0.08)] p-4 dark:bg-white/5">
+                  {salesTargetSparkline.map((value, index) => (
+                    <div
+                      key={`spark-${index}`}
+                      className="flex-1 h-full overflow-hidden rounded-full bg-[hsl(var(--foreground)/0.12)] dark:bg-white/10"
+                    >
+                      <div
+                        className="w-full rounded-full bg-emerald-600/80 dark:bg-emerald-300/90"
+                        style={{ height: `${Math.max(value * 100, 8)}%` }}
+                      />
                     </div>
-                    <span className="text-[0.7rem] uppercase text-muted-foreground">{Math.round(goalPercentages[period])}%</span>
-                  </div>
-                  <p className="text-lg font-semibold text-foreground dark:text-white">
-                    {currencyFormatter.format(goals[period].progress)}
-                  </p>
-                  <p className="text-muted-foreground">Meta: {currencyFormatter.format(goals[period].target)}</p>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-none shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-primary" />
-              <CardTitle>Configuración de Objetivos</CardTitle>
-            </div>
-            <CardDescription>Define y ajusta tus metas según el periodo.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-4 rounded-xl border border-border/50 bg-background/50 p-4 shadow-sm ring-1 ring-white/5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-3">
-                  <span className={`h-2.5 w-2.5 rounded-full ${currentGoalMetadata.dotColor}`} />
+                <div className="flex flex-col gap-4 text-foreground sm:flex-row sm:items-end sm:justify-between dark:text-white">
                   <div>
-                    <h3 className="font-semibold">{currentGoalMetadata.title}</h3>
-                    <p className="text-xs text-muted-foreground">{currentGoalMetadata.subtitle}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Progreso actual</p>
+                    <p className="text-3xl font-semibold text-foreground dark:text-white">
+                      {currencyFormatter.format(trackingGoal.progress)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Meta {trackingGoalMetadata.title.replace("Objetivo ", "").toLowerCase()}: {currencyFormatter.format(trackingGoal.target)}
+                    </p>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p
+                      className={`text-2xl font-semibold ${trackingGoalPercentage >= 100 ? "text-emerald-600 dark:text-emerald-300" : "text-emerald-500 dark:text-emerald-400"}`}
+                    >
+                      {trackingCompletionLabel}
+                    </p>
+                    <p className="text-xs text-muted-foreground">avance frente al objetivo</p>
                   </div>
                 </div>
-                <div className="w-full max-w-xs space-y-2">
+                <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
+                  {GOAL_ORDER.map((period) => (
+                    <div
+                      key={`summary-${period}`}
+                      className={`rounded-2xl border border-border bg-card/70 p-3 dark:border-white/10 dark:bg-white/5 ${period === selectedTrackingPeriod ? "ring-1 ring-primary/40" : ""}`}
+                    >
+                      <div className="mb-1 flex items-center justify-between text-foreground">
+                        <div className="flex items-center gap-2">
+                          <Target className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="uppercase tracking-wide text-[0.7rem]">
+                            {GOAL_METADATA[period].title.replace("Objetivo ", "")}
+                          </span>
+                        </div>
+                        <span className="text-[0.7rem] uppercase text-muted-foreground">{Math.round(goalPercentages[period])}%</span>
+                      </div>
+                      <p className="text-lg font-semibold text-foreground dark:text-white">
+                        {currencyFormatter.format(goals[period].progress)}
+                      </p>
+                      <p className="text-muted-foreground">Meta: {currencyFormatter.format(goals[period].target)}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-primary" />
+                  <CardTitle>Configuración de Objetivos</CardTitle>
+                </div>
+                <CardDescription>Define y ajusta tus metas según el periodo.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-4 rounded-xl border border-border/50 bg-background/50 p-4 shadow-sm ring-1 ring-white/5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className={`h-2.5 w-2.5 rounded-full ${currentGoalMetadata.dotColor}`} />
+                      <div>
+                        <h3 className="font-semibold">{currentGoalMetadata.title}</h3>
+                        <p className="text-xs text-muted-foreground">{currentGoalMetadata.subtitle}</p>
+                      </div>
+                    </div>
+                    <div className="w-full max-w-xs space-y-2">
+                      <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Tipo de objetivo
+                      </Label>
+                      <Select value={selectedGoal} onValueChange={(value) => setSelectedGoal(value as GoalPeriod)}>
+                        <SelectTrigger className="bg-background/60">
+                          <SelectValue placeholder="Selecciona un objetivo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GOAL_ORDER.map((period) => (
+                            <SelectItem key={period} value={period}>
+                              {GOAL_METADATA[period].title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`${selectedGoal}-target`}>Meta (COP)</Label>
+                      <Input
+                        id={`${selectedGoal}-target`}
+                        type="number"
+                        value={currentGoal.target}
+                        onChange={(e) => handleGoalInputChange(selectedGoal, "target", Number(e.target.value) || 0)}
+                        placeholder={currentGoalMetadata.targetPlaceholder}
+                        className="bg-background/60"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`${selectedGoal}-progress`}>Progreso</Label>
+                      <Input
+                        id={`${selectedGoal}-progress`}
+                        type="number"
+                        value={currentGoal.progress}
+                        onChange={(e) => handleGoalInputChange(selectedGoal, "progress", Number(e.target.value) || 0)}
+                        placeholder={currentGoalMetadata.progressPlaceholder}
+                        className="bg-background/60"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-dashed border-border/70 bg-primary/5 px-4 py-3 text-sm">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{currentGoalMetadata.helper}</p>
+                    <div className="mt-2 flex flex-wrap items-end justify-between gap-4 text-foreground">
+                      <div>
+                        <p className="text-3xl font-semibold text-primary">{Math.round(currentGoalPercentage)}%</p>
+                        <p className="text-xs text-muted-foreground">Porcentaje alcanzado</p>
+                      </div>
+                      <div className="text-right text-muted-foreground">
+                        <p>Progreso: {currencyFormatter.format(currentGoal.progress)}</p>
+                        <p>Meta: {currencyFormatter.format(currentGoal.target)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
+                    {GOAL_ORDER.map((period) => {
+                      const metadata = GOAL_METADATA[period]
+                      const isActive = selectedGoal === period
+                      return (
+                        <div
+                          key={period}
+                          className={`rounded-xl border border-border bg-card/60 p-3 ${isActive ? "ring-1 ring-primary/40" : ""}`}
+                        >
+                          <div className="mb-1 flex items-center gap-2 text-foreground">
+                            <span className={`h-2 w-2 rounded-full ${metadata.dotColor}`} />
+                            <span className="font-semibold">{metadata.title.replace("Objetivo ", "")}</span>
+                          </div>
+                          <p className="text-lg font-semibold text-foreground">{Math.round(goalPercentages[period])}%</p>
+                          <p className="text-muted-foreground">{currencyFormatter.format(goals[period].progress)}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/5 p-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <p>Los cambios se guardan de inmediato y afectan el seguimiento del dashboard.</p>
+                  <Button className="px-6" type="button">
+                    Guardar cambios
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-xl bg-blue-50">
+                  <Package className="h-7 w-7 text-blue-600" />
+                </div>
+                <CardTitle className="text-xl">Estado general de inventario</CardTitle>
+                <CardDescription className="text-base">
+                  Resumen de productos activos e inventario disponible en los almacenes
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p className="text-foreground">Productos totales: {inventorySummary?.totalProductos ?? 0}</p>
+                <p className="text-green-600">Activos: {inventorySummary?.productosActivos ?? 0}</p>
+                <p className="text-red-600">Inactivos: {inventorySummary?.productosInactivos ?? 0}</p>
+                <p className="flex items-center gap-2">
+                  <Boxes className="h-4 w-4" /> Stock total disponible: {inventorySummary?.stockTotal ?? 0}
+                </p>
+                <p>Almacenes registrados: {inventorySummary?.almacenes ?? 0}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-50">
+                  <Eye className="h-7 w-7 text-emerald-600" />
+                </div>
+                <CardTitle className="text-xl">Productos más consultados</CardTitle>
+                <CardDescription className="text-base">
+                  Registros basados en consultas exitosas mediante reconocimiento visual
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loading && topConsulted.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Cargando consultas…</p>
+                ) : topConsulted.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Aún no hay consultas registradas.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topConsulted.map((producto) => (
+                      <div key={producto.id} className="flex items-center justify-between rounded-lg border bg-muted px-3 py-2">
+                        <span className="text-sm font-medium">{producto.nombre}</span>
+                        <span className="text-sm text-muted-foreground">{producto.consultas} consultas</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Total de consultas: {totalConsultas}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="empleado">
+          <Card className="border-none shadow-sm">
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardDescription className="text-sm text-muted-foreground">Ventas por empleado</CardDescription>
+                  <CardTitle>Impacto del equipo</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Visualiza las ventas acumuladas por cada colaborador según el periodo seleccionado.
+                  </p>
+                </div>
+                <div className="w-full max-w-[180px] space-y-2">
                   <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Tipo de objetivo
+                    Periodo
                   </Label>
-                  <Select value={selectedGoal} onValueChange={(value) => setSelectedGoal(value as GoalPeriod)}>
+                  <Select value={selectedEmployeePeriod} onValueChange={(value) => setSelectedEmployeePeriod(value as GoalPeriod)}>
                     <SelectTrigger className="bg-background/60">
-                      <SelectValue placeholder="Selecciona un objetivo" />
+                      <SelectValue placeholder="Selecciona periodo" />
                     </SelectTrigger>
                     <SelectContent>
                       {GOAL_ORDER.map((period) => (
-                        <SelectItem key={period} value={period}>
+                        <SelectItem key={`employee-${period}`} value={period}>
                           {GOAL_METADATA[period].title}
                         </SelectItem>
                       ))}
@@ -1597,199 +1758,50 @@ export default function ReportesPage() {
                   </Select>
                 </div>
               </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor={`${selectedGoal}-target`}>Meta (COP)</Label>
-                  <Input
-                    id={`${selectedGoal}-target`}
-                    type="number"
-                    value={currentGoal.target}
-                    onChange={(e) => handleGoalInputChange(selectedGoal, "target", Number(e.target.value) || 0)}
-                    placeholder={currentGoalMetadata.targetPlaceholder}
-                    className="bg-background/60"
-                  />
+            </CardHeader>
+            <CardContent>
+              {employeeChartHasData ? (
+                <ChartContainer config={EMPLOYEE_CHART_CONFIG} className="h-[320px] w-full">
+                  <BarChart data={employeeChartData} barCategoryGap="20%">
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={12}
+                      className="text-xs"
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => currencyFormatter.format(value as number).replace(/\u00a0/g, " ")}
+                      className="text-xs"
+                    />
+                    <ChartTooltip
+                      content={({ content, ...contentProps }) => (
+                        <ChartTooltipContent
+                          {...contentProps}
+                          labelFormatter={(_, items = []) => {
+                            const entry = items[0]?.payload as { nombre?: string } | undefined
+                            return entry?.nombre ?? employeeChartMetadata.title
+                          }}
+                          formatter={(value) => currencyFormatter.format(value as number)}
+                        />
+                      )}
+                    />
+                    <Bar dataKey="total" radius={[8, 8, 4, 4]} fill="var(--color-ventas)" />
+                  </BarChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-[320px] flex-col items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+                  Aún no hay ventas registradas para este periodo.
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`${selectedGoal}-progress`}>Progreso</Label>
-                  <Input
-                    id={`${selectedGoal}-progress`}
-                    type="number"
-                    value={currentGoal.progress}
-                    onChange={(e) => handleGoalInputChange(selectedGoal, "progress", Number(e.target.value) || 0)}
-                    placeholder={currentGoalMetadata.progressPlaceholder}
-                    className="bg-background/60"
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-dashed border-border/70 bg-primary/5 px-4 py-3 text-sm">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">{currentGoalMetadata.helper}</p>
-                <div className="mt-2 flex flex-wrap items-end justify-between gap-4 text-foreground">
-                  <div>
-                    <p className="text-3xl font-semibold text-primary">{Math.round(currentGoalPercentage)}%</p>
-                    <p className="text-xs text-muted-foreground">Porcentaje alcanzado</p>
-                  </div>
-                  <div className="text-right text-muted-foreground">
-                    <p>Progreso: {currencyFormatter.format(currentGoal.progress)}</p>
-                    <p>Meta: {currencyFormatter.format(currentGoal.target)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
-                {GOAL_ORDER.map((period) => {
-                  const metadata = GOAL_METADATA[period]
-                  const isActive = selectedGoal === period
-                  return (
-                    <div
-                      key={period}
-                      className={`rounded-xl border border-border bg-card/60 p-3 ${isActive ? "ring-1 ring-primary/40" : ""}`}
-                    >
-                      <div className="mb-1 flex items-center gap-2 text-foreground">
-                        <span className={`h-2 w-2 rounded-full ${metadata.dotColor}`} />
-                        <span className="font-semibold">{metadata.title.replace("Objetivo ", "")}</span>
-                      </div>
-                      <p className="text-lg font-semibold text-foreground">{Math.round(goalPercentages[period])}%</p>
-                      <p className="text-muted-foreground">{currencyFormatter.format(goals[period].progress)}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/5 p-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <p>Los cambios se guardan de inmediato y afectan el seguimiento del dashboard.</p>
-              <Button className="px-6" type="button">
-                Guardar cambios
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm">
-          <CardHeader className="space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardDescription className="text-sm text-muted-foreground">Ventas por empleado</CardDescription>
-                <CardTitle>Impacto del equipo</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Visualiza las ventas acumuladas por cada colaborador según el periodo seleccionado.
-                </p>
-              </div>
-              <div className="w-full max-w-[180px] space-y-2">
-                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Periodo
-                </Label>
-                <Select value={selectedEmployeePeriod} onValueChange={(value) => setSelectedEmployeePeriod(value as GoalPeriod)}>
-                  <SelectTrigger className="bg-background/60">
-                    <SelectValue placeholder="Selecciona periodo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GOAL_ORDER.map((period) => (
-                      <SelectItem key={`employee-${period}`} value={period}>
-                        {GOAL_METADATA[period].title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {employeeChartHasData ? (
-              <ChartContainer config={EMPLOYEE_CHART_CONFIG} className="h-[320px] w-full">
-                <BarChart data={employeeChartData} barCategoryGap="20%">
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={12}
-                    className="text-xs"
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => currencyFormatter.format(value as number).replace(/\u00a0/g, " ")}
-                    className="text-xs"
-                  />
-                  <ChartTooltip
-                    content={({ content, ...contentProps }) => (
-                      <ChartTooltipContent
-                        {...contentProps}
-                        labelFormatter={(_, items = []) => {
-                          const entry = items[0]?.payload as { nombre?: string } | undefined
-                          return entry?.nombre ?? employeeChartMetadata.title
-                        }}
-                        formatter={(value) => currencyFormatter.format(value as number)}
-                      />
-                    )}
-                  />
-                  <Bar dataKey="total" radius={[8, 8, 4, 4]} fill="var(--color-ventas)" />
-                </BarChart>
-              </ChartContainer>
-            ) : (
-              <div className="flex h-[320px] flex-col items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
-                Aún no hay ventas registradas para este periodo.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-xl bg-blue-50">
-              <Package className="h-7 w-7 text-blue-600" />
-            </div>
-            <CardTitle className="text-xl">Estado general de inventario</CardTitle>
-            <CardDescription className="text-base">
-              Resumen de productos activos e inventario disponible en los almacenes
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p className="text-foreground">Productos totales: {inventorySummary?.totalProductos ?? 0}</p>
-            <p className="text-green-600">Activos: {inventorySummary?.productosActivos ?? 0}</p>
-            <p className="text-red-600">Inactivos: {inventorySummary?.productosInactivos ?? 0}</p>
-            <p className="flex items-center gap-2">
-              <Boxes className="h-4 w-4" /> Stock total disponible: {inventorySummary?.stockTotal ?? 0}
-            </p>
-            <p>Almacenes registrados: {inventorySummary?.almacenes ?? 0}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-50">
-              <Eye className="h-7 w-7 text-emerald-600" />
-            </div>
-            <CardTitle className="text-xl">Productos más consultados</CardTitle>
-            <CardDescription className="text-base">
-              Registros basados en consultas exitosas mediante reconocimiento visual
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loading && topConsulted.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Cargando consultas…</p>
-            ) : topConsulted.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aún no hay consultas registradas.</p>
-            ) : (
-              <div className="space-y-2">
-                {topConsulted.map((producto) => (
-                  <div key={producto.id} className="flex items-center justify-between rounded-lg border bg-muted px-3 py-2">
-                    <span className="text-sm font-medium">{producto.nombre}</span>
-                    <span className="text-sm text-muted-foreground">{producto.consultas} consultas</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">Total de consultas: {totalConsultas}</p>
-          </CardContent>
-        </Card>
-      </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
 
 

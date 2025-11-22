@@ -49,8 +49,7 @@ interface HighlightProduct {
 }
 
 interface HighlightsResponse {
-  topProducts?: HighlightProduct[]
-  newProducts?: HighlightProduct[]
+  destacados?: HighlightProduct[]
   generatedAt?: string
 }
 
@@ -152,7 +151,7 @@ function formatRecent(producto: ProductoRow, index: number): HighlightProduct {
     precio: producto.precio ?? null,
     imagen: producto.imagen ?? null,
     etiqueta: producto.createdAt ? fechaRecienteFormatter.format(new Date(producto.createdAt)) : null,
-    tag: index === 0 ? "Mas reciente" : "Nuevo",
+    tag: "Nuevo",
   }
 }
 
@@ -303,21 +302,25 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
         imagen: productInfo?.imagen ?? null,
         totalVendidas: stats.cantidad,
         ingresos: stats.total,
-        tag: index === 0 ? "Mas vendido" : `Top ${index + 1}`,
+        tag: `Top ${index + 1}`,
       }
     })
+
+  const topProductIds = new Set(topProducts.map(p => p.id))
 
   const activos = productos.filter((producto) => producto.estado === "activo")
   const baseRecientes = activos.length ? activos : productos
   const newProducts = baseRecientes
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .filter(p => !topProductIds.has(p.id))
     .slice(0, 4)
     .map((producto, index) => formatRecent(producto, index))
 
+  const destacados = [...topProducts, ...newProducts]
+
   return {
-    topProducts,
-    newProducts,
+    destacados,
     generatedAt: new Date().toISOString(),
   }
 }
@@ -330,8 +333,7 @@ export default function AdminHomePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const searchQuery = searchParams.get("q") ?? ""
-  const [topProducts, setTopProducts] = useState<HighlightProduct[]>([])
-  const [newProducts, setNewProducts] = useState<HighlightProduct[]>([])
+  const [destacados, setDestacados] = useState<HighlightProduct[]>([])
   const [loadingHighlights, setLoadingHighlights] = useState(true)
   const [isHydratingHighlights, startHighlightsTransition] = useTransition()
   const [refreshCounter, setRefreshCounter] = useState(0)
@@ -477,11 +479,10 @@ export default function AdminHomePage() {
       const cached = JSON.parse(cachedRaw) as HighlightsCache | null
       if (!cached) return
 
-      const hasData = Boolean((cached.topProducts?.length ?? 0) || (cached.newProducts?.length ?? 0))
+      const hasData = Boolean(cached.destacados?.length ?? 0)
 
       startHighlightsTransition(() => {
-        setTopProducts(cached.topProducts ?? [])
-        setNewProducts(cached.newProducts ?? [])
+        setDestacados(cached.destacados ?? [])
       })
 
       if (hasData) {
@@ -547,26 +548,19 @@ export default function AdminHomePage() {
         })
 
         if (!response.ok) {
-          if (response.status === 403) {
-            // Si es 403, probablemente el usuario no tiene tienda asignada aún.
-            // No lanzamos error para evitar ruido en consola, simplemente no cargamos destacados.
-            if (!canceled) {
-              setLoadingHighlights(false)
-            }
-            return
-          }
+          // Si falla la API (incluso por auth/403), lanzamos error para que el catch
+          // intente cargar los datos usando el cliente de Supabase del lado del cliente (fallback).
           throw new Error(`No se pudieron cargar los destacados (${response.status})`)
         }
 
         let payload = (await response.json()) as HighlightsResponse
-        if ((!payload.topProducts || payload.topProducts.length === 0) && (!payload.newProducts || payload.newProducts.length === 0)) {
+        if (!payload.destacados || payload.destacados.length === 0) {
           payload = await loadHighlightsFallback()
         }
         if (canceled) return
 
         startHighlightsTransition(() => {
-          setTopProducts(payload.topProducts ?? [])
-          setNewProducts(payload.newProducts ?? [])
+          setDestacados(payload.destacados ?? [])
         })
 
         if (SHOULD_USE_CACHE && typeof window !== "undefined") {
@@ -576,13 +570,17 @@ export default function AdminHomePage() {
         if ((error as Error).name === "AbortError") {
           return
         }
-        console.error("Error al obtener los productos destacados", error)
+        // Si el error es 403, es esperado en algunos entornos (auth), así que no lo logueamos como error
+        // para no alarmar al usuario, ya que el fallback se encargará.
+        const isAuthError = (error as Error).message.includes("403")
+        if (!isAuthError) {
+          console.error("Error al obtener los productos destacados", error)
+        }
         try {
           const fallback = await loadHighlightsFallback()
           if (!canceled) {
             startHighlightsTransition(() => {
-              setTopProducts(fallback.topProducts ?? [])
-              setNewProducts(fallback.newProducts ?? [])
+              setDestacados(fallback.destacados ?? [])
             })
 
             if (SHOULD_USE_CACHE && typeof window !== "undefined") {
@@ -593,8 +591,7 @@ export default function AdminHomePage() {
           console.error("Error al generar destacados locales", fallbackError)
           if (!canceled) {
             startHighlightsTransition(() => {
-              setTopProducts([])
-              setNewProducts([])
+              setDestacados([])
             })
           }
         }
@@ -669,7 +666,7 @@ export default function AdminHomePage() {
         </div>
       )}
 
-      {(loadingHighlights || isHydratingHighlights) && topProducts.length === 0 && newProducts.length === 0 ? (
+      {(loadingHighlights || isHydratingHighlights) && destacados.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
           Calculando recomendaciones de productos
         </div>
@@ -677,7 +674,7 @@ export default function AdminHomePage() {
 
       <SalesWorkspace
         variant="dashboard"
-        highlights={{ top: topProducts, recent: newProducts }}
+        highlights={{ destacados }}
         onSaleRegistered={handleSaleRegistered}
         hideCartTrigger
         searchPlaceholder="Busca un producto para realizar una venta"

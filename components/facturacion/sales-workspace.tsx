@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import * as LucideIcons from "lucide-react"
-const { ShoppingCart, Search, Trash2, Receipt, Package, X, ChevronDown, Plus } = LucideIcons
+const { ShoppingCart, Search, Trash2, Receipt, Package, X, ChevronDown, Plus, ChevronRight } = LucideIcons
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -63,8 +63,7 @@ interface HighlightSummary {
 }
 
 export interface SalesWorkspaceHighlights {
-  top: HighlightSummary[]
-  recent: HighlightSummary[]
+  destacados: HighlightSummary[]
 }
 
 export interface SalesWorkspacePreviewState {
@@ -125,6 +124,20 @@ export function SalesWorkspace({
   const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([])
   const [selectedMetodoPagoId, setSelectedMetodoPagoId] = useState<string | null>(null)
   const [sesionActual, setSesionActual] = useState<CajaSesion | null>(null)
+
+  // Customer Data Form State
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [formData, setFormData] = useState({
+    name: "",
+    identification: "",
+    phone: "",
+    address: "",
+  })
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
 
   const dashboardTitle = title ?? "Facturación rápida"
   const dashboardDescription = description ?? "Añade productos destacados rápidamente a tu carrito de facturación."
@@ -749,6 +762,69 @@ export function SalesWorkspace({
                         {renderEmpleadoSelector("venta-empleado-sheet")}
                         {renderMetodoPagoSelector("venta-metodo-sheet")}
                       </div>
+
+                      <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                        <button
+                          onClick={() => setIsFormOpen(!isFormOpen)}
+                          className="flex w-full items-center justify-between p-4 text-sm font-medium hover:bg-muted/50 transition-colors"
+                        >
+                          <span>Datos de compra</span>
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform duration-200 ${isFormOpen ? "rotate-90" : ""}`}
+                          />
+                        </button>
+                        {isFormOpen && (
+                          <div className="border-t p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+                            <div className="space-y-1">
+                              <Label htmlFor="name" className="text-xs">Nombre completo</Label>
+                              <Input
+                                id="name"
+                                name="name"
+                                value={formData.name}
+                                onChange={handleInputChange}
+                                placeholder="Ej: Juan Pérez"
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="identification" className="text-xs">Identificación (CC/NIT)</Label>
+                              <Input
+                                id="identification"
+                                name="identification"
+                                value={formData.identification}
+                                onChange={handleInputChange}
+                                placeholder="Ej: 123456789"
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="phone" className="text-xs">Teléfono de contacto</Label>
+                              <Input
+                                id="phone"
+                                name="phone"
+                                value={formData.phone}
+                                onChange={handleInputChange}
+                                placeholder="Ej: 3001234567"
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="address" className="text-xs">Dirección de envío</Label>
+                              <Input
+                                id="address"
+                                name="address"
+                                value={formData.address}
+                                onChange={handleInputChange}
+                                placeholder="Ej: Calle 123 # 45-67"
+                                className="h-8"
+                              />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground italic">
+                              * Estos datos son informativos y no se guardarán en la base de datos por ahora.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                       <div className="space-y-1 text-right">
                         <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
                         <p className="text-lg font-semibold text-foreground">
@@ -789,49 +865,23 @@ export function SalesWorkspace({
           </div>
         )}
 
-        {!busqueda && !productosEncontrados.length && highlights && (highlights.top.length > 0 || highlights.recent.length > 0) ? (
+        {!busqueda && !productosEncontrados.length && highlights && highlights.destacados.length > 0 ? (
           <div className="space-y-6">
             <section className="space-y-3">
               <header className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-foreground">Más vendidos</h3>
-                  <p className="text-xs text-muted-foreground">Acceso rápido a los productos con mayor rotación</p>
+                  <h3 className="text-base font-semibold text-foreground">Destacados</h3>
+                  <p className="text-xs text-muted-foreground">Productos más vendidos y novedades recientes</p>
                 </div>
               </header>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {highlights.top.length ? (
-                  highlights.top.map((producto) => (
-                    <HighlightProductCard
-                      key={`top-${producto.id}`}
-                      producto={producto}
-                      onQuickAdd={(detalle, stock) => agregarLinea(detalle, stock)}
-                    />
-                  ))
-                ) : (
-                  <EmptyHighlightCard mensaje="Registra ventas para ver recomendaciones." />
-                )}
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <header className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-foreground">Novedades</h3>
-                  <p className="text-xs text-muted-foreground">Productos recién agregados a tu catálogo</p>
-                </div>
-              </header>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {highlights.recent.length ? (
-                  highlights.recent.map((producto) => (
-                    <HighlightProductCard
-                      key={`recent-${producto.id}`}
-                      producto={producto}
-                      onQuickAdd={(detalle, stock) => agregarLinea(detalle, stock)}
-                    />
-                  ))
-                ) : (
-                  <EmptyHighlightCard mensaje="Agrega nuevos productos para empezar a vender." />
-                )}
+                {highlights.destacados.map((producto) => (
+                  <HighlightProductCard
+                    key={`destacado-${producto.id}`}
+                    producto={producto}
+                    onQuickAdd={(detalle, stock) => agregarLinea(detalle, stock)}
+                  />
+                ))}
               </div>
             </section>
           </div>
