@@ -164,6 +164,54 @@ export class VentaService {
       fechaPrimerVencimiento = fecha.toISOString()
     }
 
+    // Fallback for credit sales if metodoPagoId is missing (to satisfy DB constraints)
+    let finalMetodoPagoId = payload.metodoPagoId ?? null
+
+    if (payload.tipoVenta === 'credito' && !finalMetodoPagoId) {
+      console.log("Buscando método de pago de respaldo para venta a crédito...")
+      // 1. Try to find an existing "Por Cobrar" or "Credito" method
+      const { data: metodos } = await supabase
+        .from('metodos_pago')
+        .select('id, nombre')
+        .eq('tienda_id', tiendaId)
+        .or('nombre.ilike.%Por Cobrar%,nombre.ilike.%Credito%,nombre.ilike.%Crédito%')
+        .limit(1)
+
+      if (metodos && metodos.length > 0) {
+        finalMetodoPagoId = metodos[0].id
+      } else {
+        // 2. If specific credit method not found, CREATE it.
+        console.log("No existe método 'Por Cobrar'. Creándolo...")
+        const { data: newMethod, error: createError } = await supabase
+          .from('metodos_pago')
+          .insert({
+            tienda_id: tiendaId,
+            nombre: 'Por Cobrar',
+            tipo: 'otro',
+            estado: 'activo'
+          })
+          .select('id')
+          .single()
+
+        if (newMethod) {
+          finalMetodoPagoId = newMethod.id
+        } else {
+          console.error("Error creando método 'Por Cobrar':", createError)
+          // 3. Last resort fallback to ANY active method
+          const { data: anyMethod } = await supabase
+            .from('metodos_pago')
+            .select('id')
+            .eq('tienda_id', tiendaId)
+            .eq('estado', 'activo')
+            .limit(1)
+
+          if (anyMethod && anyMethod.length > 0) {
+            finalMetodoPagoId = anyMethod[0].id
+          }
+        }
+      }
+      console.log("Método de pago asignado automáticamente:", finalMetodoPagoId)
+    }
     const { data: ventaData, error: ventaError } = await supabase
       .from('ventas')
       .insert({
@@ -172,7 +220,7 @@ export class VentaService {
         usuario_id: usuarioId,
         created_at: new Date().toISOString(),
         tienda_id: tiendaId,
-        metodo_pago_id: payload.metodoPagoId ?? null,
+        metodo_pago_id: finalMetodoPagoId,
         caja_sesion_id: payload.cajaSesionId ?? null,
         cliente_id: payload.clienteId ?? null,
         tipo_venta: payload.tipoVenta ?? 'contado',
@@ -187,8 +235,8 @@ export class VentaService {
       .single()
 
     if (ventaError || !ventaData) {
-      console.error('Error al registrar la venta', ventaError)
-      throw new Error('No se pudo registrar la venta. Intenta nuevamente')
+      console.error('Error al registrar la venta (Detalles):', JSON.stringify(ventaError, null, 2))
+      throw new Error(`No se pudo registrar la venta: ${ventaError?.message || 'Error desconocido'}`)
     }
 
     const venta = ventaData as Venta
