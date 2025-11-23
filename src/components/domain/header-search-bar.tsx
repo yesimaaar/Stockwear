@@ -22,18 +22,17 @@ export function HeaderSearchBar({
   return (
     <div
       className={cn(
-        "flex h-12 w-full items-center gap-3 px-0 text-sm text-foreground/80",
-        "bg-transparent border-none shadow-none",
+        "flex h-10 w-full items-center gap-2 rounded-xl border border-border/50 bg-muted/50 px-3 text-sm text-foreground transition-colors focus-within:bg-background focus-within:ring-2 focus-within:ring-primary/20",
         className,
       )}
     >
-      <Search className="h-4 w-4 text-foreground/70" aria-hidden="true" />
+      <Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
       <input
         type="search"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="flex-1 bg-transparent text-base text-foreground placeholder:text-foreground/50 focus:outline-none"
+        className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         aria-label={ariaLabel}
         {...restInputProps}
       />

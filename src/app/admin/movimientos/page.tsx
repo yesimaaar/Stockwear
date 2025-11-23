@@ -17,6 +17,15 @@ import {
   Receipt,
   MessageCircle,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+import XLSX from "xlsx-js-style"
 
 import { AdminSectionLayout } from "@/components/domain/admin-section-layout"
 import { Button } from "@/components/ui/button"
@@ -60,6 +69,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { ClienteService } from "@/features/ventas/services/cliente-service"
 import { DialogFooter } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 
 // --- Schemas (Existing) ---
 
@@ -230,6 +240,15 @@ export default function MovimientosPage() {
   // Cierres History State
   const [cierres, setCierres] = useState<CajaSesion[]>([])
   const [loadingCierres, setLoadingCierres] = useState(true)
+
+  // Export State
+  const [openExportDialog, setOpenExportDialog] = useState(false)
+  const [selectedSheets, setSelectedSheets] = useState({
+    inventario: true,
+    ingresos: true,
+    cuentas: true
+  })
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'excel'>('excel')
 
   const entradaForm = useForm<EntradaFormValues>({
     resolver: zodResolver(entradaSchema),
@@ -871,6 +890,194 @@ export default function MovimientosPage() {
       </SelectItem>
     ))
 
+  const generateExcelReport = () => {
+    const wb = XLSX.utils.book_new();
+    
+    // Estilos para encabezados
+    const headerStyle = {
+      fill: { fgColor: { rgb: "4F46E5" } }, // Indigo 600
+      font: { color: { rgb: "FFFFFF" }, bold: true },
+      alignment: { horizontal: "center" }
+    };
+
+    if (selectedSheets.inventario) {
+      // --- Hoja 1: Movimientos de Inventario ---
+      const inventarioData = filteredHistorial.map(item => ({
+        Fecha: format(new Date(item.createdAt), "dd/MM/yyyy HH:mm", { locale: es }),
+        Producto: item.producto?.nombre || "Desconocido",
+        Tipo: item.tipo.toUpperCase(),
+        Cantidad: item.cantidad,
+        "Costo Unit.": item.costoUnitario ? currencyFormatter.format(item.costoUnitario) : "-",
+        Motivo: item.motivo || "-"
+      }));
+
+      const wsInventario = XLSX.utils.json_to_sheet(inventarioData);
+      
+      // Aplicar estilos a encabezados (Fila 1)
+      const rangeInv = XLSX.utils.decode_range(wsInventario['!ref'] || "A1:A1");
+      for (let C = rangeInv.s.c; C <= rangeInv.e.c; ++C) {
+        const address = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!wsInventario[address]) continue;
+        wsInventario[address].s = headerStyle;
+      }
+      // Ajustar ancho de columnas
+      wsInventario['!cols'] = [
+        { wch: 20 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 40 }
+      ];
+      
+      XLSX.utils.book_append_sheet(wb, wsInventario, "Inventario");
+    }
+
+    if (selectedSheets.ingresos) {
+      // --- Hoja 2: Ingresos (Ventas y Abonos) ---
+      const ingresosData = filteredIngresos.map(item => ({
+        Fecha: format(new Date(item.fecha), "dd/MM/yyyy HH:mm", { locale: es }),
+        Tipo: item.tipo === 'venta_contado' ? 'VENTA CONTADO' : 'ABONO',
+        Monto: currencyFormatter.format(item.monto),
+        Descripción: item.descripcion,
+        Referencia: item.referencia || "-"
+      }));
+
+      const wsIngresos = XLSX.utils.json_to_sheet(ingresosData);
+      
+      // Estilos encabezados
+      const rangeIng = XLSX.utils.decode_range(wsIngresos['!ref'] || "A1:A1");
+      for (let C = rangeIng.s.c; C <= rangeIng.e.c; ++C) {
+        const address = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!wsIngresos[address]) continue;
+        wsIngresos[address].s = headerStyle;
+      }
+      wsIngresos['!cols'] = [
+        { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 40 }, { wch: 20 }
+      ];
+
+      XLSX.utils.book_append_sheet(wb, wsIngresos, "Ingresos");
+    }
+
+    if (selectedSheets.cuentas) {
+      // --- Hoja 3: Cuentas por Cobrar ---
+      const cuentasData = cuentasPorCobrar.map(item => ({
+        Folio: item.folio,
+        Cliente: item.cliente?.nombre || "Desconocido",
+        Total: currencyFormatter.format(item.total),
+        "Saldo Pendiente": currencyFormatter.format(item.saldoPendiente),
+        "Vencimiento": item.fechaPrimerVencimiento ? format(new Date(item.fechaPrimerVencimiento), "dd/MM/yyyy", { locale: es }) : "-",
+        Cuotas: `${item.numeroCuotas} (${item.frecuenciaPago || '-'})`
+      }));
+
+      const wsCuentas = XLSX.utils.json_to_sheet(cuentasData);
+      
+      // Estilos encabezados
+      const rangeCuentas = XLSX.utils.decode_range(wsCuentas['!ref'] || "A1:A1");
+      for (let C = rangeCuentas.s.c; C <= rangeCuentas.e.c; ++C) {
+        const address = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!wsCuentas[address]) continue;
+        wsCuentas[address].s = headerStyle;
+      }
+      wsCuentas['!cols'] = [
+        { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }
+      ];
+
+      XLSX.utils.book_append_sheet(wb, wsCuentas, "Cuentas por Cobrar");
+    }
+
+    XLSX.writeFile(wb, `Reporte_General_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    setOpenExportDialog(false);
+  };
+
+  const generatePdfReport = () => {
+    const doc = new jsPDF();
+    let yPos = 15;
+
+    doc.setFontSize(16);
+    doc.text(`Reporte General - ${format(new Date(), "dd/MM/yyyy", { locale: es })}`, 14, yPos);
+    yPos += 10;
+
+    if (selectedSheets.inventario) {
+      doc.setFontSize(14);
+      doc.text("Movimientos de Inventario", 14, yPos);
+      yPos += 5;
+
+      const tableData = filteredHistorial.map(item => [
+        format(new Date(item.createdAt), "dd/MM/yyyy HH:mm", { locale: es }),
+        item.producto?.nombre || "Desconocido",
+        item.tipo.toUpperCase(),
+        item.cantidad,
+        item.motivo || "-"
+      ]);
+
+      autoTable(doc, {
+        head: [['Fecha', 'Producto', 'Tipo', 'Cant.', 'Motivo']],
+        body: tableData,
+        startY: yPos,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] }, // Indigo 600
+      });
+      
+      // @ts-ignore
+      yPos = doc.lastAutoTable.finalY + 15;
+    }
+
+    if (selectedSheets.ingresos) {
+      if (yPos > 250) { doc.addPage(); yPos = 20; }
+      
+      doc.setFontSize(14);
+      doc.text("Ingresos (Ventas y Abonos)", 14, yPos);
+      yPos += 5;
+
+      const tableData = filteredIngresos.map(item => [
+        format(new Date(item.fecha), "dd/MM/yyyy HH:mm", { locale: es }),
+        item.tipo === 'venta_contado' ? 'VENTA' : 'ABONO',
+        currencyFormatter.format(item.monto),
+        item.descripcion,
+        item.referencia || "-"
+      ]);
+
+      autoTable(doc, {
+        head: [['Fecha', 'Tipo', 'Monto', 'Descripción', 'Ref.']],
+        body: tableData,
+        startY: yPos,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+      });
+
+      // @ts-ignore
+      yPos = doc.lastAutoTable.finalY + 15;
+    }
+
+    if (selectedSheets.cuentas) {
+      if (yPos > 250) { doc.addPage(); yPos = 20; }
+
+      doc.setFontSize(14);
+      doc.text("Cuentas por Cobrar", 14, yPos);
+      yPos += 5;
+
+      const tableData = cuentasPorCobrar.map(item => [
+        item.folio,
+        item.cliente?.nombre || "Desconocido",
+        currencyFormatter.format(item.total),
+        currencyFormatter.format(item.saldoPendiente),
+        item.fechaPrimerVencimiento ? format(new Date(item.fechaPrimerVencimiento), "dd/MM/yyyy", { locale: es }) : "-",
+      ]);
+
+      autoTable(doc, {
+        head: [['Folio', 'Cliente', 'Total', 'Saldo', 'Vencimiento']],
+        body: tableData,
+        startY: yPos,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+      });
+    }
+
+    doc.save(`Reporte_General_${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    setOpenExportDialog(false);
+  };
+
+  const handleDownloadReport = (formatType: 'pdf' | 'excel') => {
+    setExportFormat(formatType);
+    setOpenExportDialog(true);
+  };
+
   return (
     <AdminSectionLayout
       title="Movimientos"
@@ -885,14 +1092,80 @@ export default function MovimientosPage() {
             <Store className={cn("h-4 w-4", sesionActual ? "text-rose-500" : "text-amber-500")} />
             {loadingSesion ? "Cargando..." : sesionActual ? "Cerrar caja" : "Abrir caja"}
           </Button>
-          <Button variant="outline" className="gap-2 bg-background">
-            <Download className="h-4 w-4 text-amber-500" />
-            Descargar reporte
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2 bg-background">
+                <Download className="h-4 w-4 text-amber-500" />
+                Descargar reporte
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleDownloadReport('pdf')}>
+                Descargar PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownloadReport('excel')}>
+                Descargar Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       }
     >
       <div className="space-y-6">
+
+        {/* Dialog for Export Options */}
+        <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Opciones de Exportación {exportFormat === 'excel' ? 'Excel' : 'PDF'}</DialogTitle>
+              <DialogDescription>Selecciona los módulos que deseas incluir en el reporte.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="sheet-inventario" 
+                  checked={selectedSheets.inventario}
+                  onCheckedChange={(checked) => setSelectedSheets(prev => ({ ...prev, inventario: checked as boolean }))}
+                />
+                <label
+                  htmlFor="sheet-inventario"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Movimientos de Inventario
+                </label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="sheet-ingresos" 
+                  checked={selectedSheets.ingresos}
+                  onCheckedChange={(checked) => setSelectedSheets(prev => ({ ...prev, ingresos: checked as boolean }))}
+                />
+                <label
+                  htmlFor="sheet-ingresos"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Ingresos (Ventas y Abonos)
+                </label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="sheet-cuentas" 
+                  checked={selectedSheets.cuentas}
+                  onCheckedChange={(checked) => setSelectedSheets(prev => ({ ...prev, cuentas: checked as boolean }))}
+                />
+                <label
+                  htmlFor="sheet-cuentas"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Cuentas por Cobrar
+                </label>
+              </div>
+              <Button className="w-full" onClick={exportFormat === 'excel' ? generateExcelReport : generatePdfReport}>
+                Generar {exportFormat === 'excel' ? 'Excel' : 'PDF'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Dialogs for Cash Register */}
         <Dialog open={openCajaDialog} onOpenChange={setOpenCajaDialog}>
@@ -1814,6 +2087,7 @@ export default function MovimientosPage() {
                           {cierre.montoFinalEsperado !== undefined && cierre.montoFinalEsperado !== null
                             ? currencyFormatter.format(cierre.montoFinalEsperado - cierre.montoInicial)
                             : "-"}
+
                         </p>
                       </div>
                       <div className="col-span-2 border-t pt-2">

@@ -177,7 +177,7 @@ export default function EmpleadoDashboard() {
         video.onloadedmetadata = null
       }
     }
-  }, [cameraActive])
+  }, [cameraActive, cameraFacingMode])
 
   const handleLogout = async () => {
     await AuthService.logout()
@@ -719,6 +719,7 @@ export default function EmpleadoDashboard() {
             </div>
           </div>
         </div>
+        <HiddenFileInput />
       </div>
     )
   }
@@ -731,62 +732,62 @@ export default function EmpleadoDashboard() {
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_rgba(15,15,15,0)_60%)] opacity-70" />
           <div className="relative mx-4 rounded-3xl border border-white/10 bg-black/40 px-4 py-3 shadow-[0_15px_45px_rgba(0,0,0,0.45)] backdrop-blur">
             <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
-                <Image
-                  src="/stockwear-icon.png"
-                  alt="StockWear"
-                  width={28}
-                  height={28}
-                  className="object-contain brightness-0 invert"
-                />
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+                  <Image
+                    src="/stockwear-icon.png"
+                    alt="StockWear"
+                    width={28}
+                    height={28}
+                    className="object-contain brightness-0 invert"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-widest text-white/70">Panel empleado</p>
+                  <p className="text-lg font-semibold leading-tight">Hola, {user?.nombre?.split(" ")?.[0] ?? "Equipo"}</p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-widest text-white/70">Panel empleado</p>
-                <p className="text-lg font-semibold leading-tight">Hola, {user?.nombre?.split(" ")?.[0] ?? "Equipo"}</p>
-              </div>
-            </div>
               {renderUserMenu("mobile")}
             </div>
           </div>
 
           <div className="relative mx-4 mt-4 space-y-3 rounded-2xl border border-white/15 bg-white/10 p-4 text-white shadow-lg backdrop-blur">
-              <div className="flex items-center justify-between text-sm">
-                <div>
-                  <p className="text-xs uppercase text-white/60">Umbral actual</p>
-                  <p className="text-2xl font-semibold">{Math.round(threshold * 100)}%</p>
-                </div>
-                <Badge variant="secondary" className="bg-white/10 text-white">
-                  {loadingModel ? "Cargando" : "Listo"}
-                </Badge>
+            <div className="flex items-center justify-between text-sm">
+              <div>
+                <p className="text-xs uppercase text-white/60">Umbral actual</p>
+                <p className="text-2xl font-semibold">{Math.round(threshold * 100)}%</p>
               </div>
-              <p className="text-xs text-white/70">
-                Ajusta la sensibilidad del reconocimiento para controlar el equilibrio entre precisión y velocidad.
-              </p>
-              <div className="space-y-2">
-                <Slider
-                  value={[threshold]}
-                  min={0.5}
-                  max={0.99}
-                  step={0.01}
-                  onValueChange={handleThresholdChange}
-                  onValueCommit={handleThresholdCommit}
-                  className="[&_[role=slider]]:bg-white"
-                  aria-label="Sensibilidad del reconocimiento"
-                />
-                <div className="flex justify-between text-[11px] uppercase tracking-[0.2em] text-white/50">
-                  <span>Preciso</span>
-                  <span>Balanceado</span>
-                  <span>Sensible</span>
-                </div>
-              </div>
-              {loadingModel && (
-                <div className="flex items-center gap-2 text-xs text-white/70">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Preparando modelo de reconocimiento…</span>
-                </div>
-              )}
+              <Badge variant="secondary" className="bg-white/10 text-white">
+                {loadingModel ? "Cargando" : "Listo"}
+              </Badge>
             </div>
+            <p className="text-xs text-white/70">
+              Ajusta la sensibilidad del reconocimiento para controlar el equilibrio entre precisión y velocidad.
+            </p>
+            <div className="space-y-2">
+              <Slider
+                value={[threshold]}
+                min={0.5}
+                max={0.99}
+                step={0.01}
+                onValueChange={handleThresholdChange}
+                onValueCommit={handleThresholdCommit}
+                className="[&_[role=slider]]:bg-white"
+                aria-label="Sensibilidad del reconocimiento"
+              />
+              <div className="flex justify-between text-[11px] uppercase tracking-[0.2em] text-white/50">
+                <span>Preciso</span>
+                <span>Balanceado</span>
+                <span>Sensible</span>
+              </div>
+            </div>
+            {loadingModel && (
+              <div className="flex items-center gap-2 text-xs text-white/70">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Preparando modelo de reconocimiento…</span>
+              </div>
+            )}
+          </div>
 
           <div className="mx-4 mt-4">
             <div className="flex items-center gap-2">
@@ -1041,8 +1042,8 @@ export default function EmpleadoDashboard() {
                 <CardDescription>
                   {resultado.success
                     ? `Similitud ${Math.round(resultado.similitud * 100)}% · Umbral ${Math.round(
-                        resultado.umbral * 100,
-                      )}%`
+                      resultado.umbral * 100,
+                    )}%`
                     : "No encontramos una coincidencia exacta."}
                 </CardDescription>
               </CardHeader>
@@ -1284,288 +1285,288 @@ export default function EmpleadoDashboard() {
                 </div>
 
                 {/* Vista de cámara en tiempo real integrada en el dashboard */}
-            <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
-              {cameraActive ? (
-                <>
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
+                  {cameraActive ? (
+                    <>
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
 
-                  {captureCountdown !== null && captureCountdown > 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="rounded-full border border-white/40 bg-black/70 px-10 py-6 text-4xl font-semibold text-white">
-                        {captureCountdown}
+                      {captureCountdown !== null && captureCountdown > 0 && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="rounded-full border border-white/40 bg-black/70 px-10 py-6 text-4xl font-semibold text-white">
+                            {captureCountdown}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Overlay de controles */}
+                      <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                        <div className="flex items-center gap-4 rounded-full bg-black/60 px-6 py-4 backdrop-blur">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={stopCamera}
+                            className="h-12 w-12 rounded-full text-white hover:bg-white/20"
+                          >
+                            <X className="h-5 w-5" />
+                          </Button>
+
+                          <Button
+                            type="button"
+                            onClick={() => void handleCaptureRequest()}
+                            disabled={scanning || loadingModel || captureCountdown !== null}
+                            className="flex h-20 w-20 items-center justify-center rounded-full bg-white text-primary hover:bg-white/90"
+                          >
+                            {scanning ? (
+                              <Loader2 className="h-6 w-6 animate-spin" />
+                            ) : loadingModel ? (
+                              <Loader2 className="h-6 w-6 animate-spin text-secondary" />
+                            ) : (
+                              <Search className="h-6 w-6" />
+                            )}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="flex h-12 w-12 items-center justify-center rounded-full text-white hover:bg-white/20"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Package className="h-5 w-5" />
+                          </Button>
+                        </div>
                       </div>
+
+                      {/* Indicador de escaneo */}
+                      {scanning && (
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow">
+                          Procesando imagen...
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center text-white">
+                      <Camera className="mb-4 h-16 w-16 text-gray-400" />
+                      <p className="mb-4 text-lg">Cámara no activa</p>
+                      <Button
+                        onClick={() => void startCamera()}
+                        disabled={cameraLoading}
+                        className="bg-gray-900 hover:bg-gray-800 disabled:opacity-70"
+                      >
+                        {cameraLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                        {cameraLoading ? "Abriendo cámara" : "Activar cámara"}
+                      </Button>
                     </div>
                   )}
 
-                  {/* Overlay de controles */}
-                  <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                    <div className="flex items-center gap-4 rounded-full bg-black/60 px-6 py-4 backdrop-blur">
+                  {cameraError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-red-600/90 text-white p-4">
+                      <div className="text-center">
+                        <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                        <p>{cameraError}</p>
+                        <Button onClick={() => void startCamera()} className="mt-2 bg-white text-red-600 hover:bg-white/90">
+                          Reintentar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {resultado && (
+                  <div className="mt-6 space-y-4">
+                    {resultado.success ? (
+                      <>
+                        <div className="flex items-center gap-2 text-gray-900">
+                          <CheckCircle className="h-5 w-5" />
+                          <span className="font-medium">{resultado.message}</span>
+                          {resultado.nivelConfianza === "medio" && (
+                            <Badge variant="outline" className="ml-2">
+                              Confirmación requerida
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Sparkles className="h-4 w-4 text-primary" />
+                            <span>Similitud {Math.round(resultado.similitud * 100)}%</span>
+                          </div>
+                          <Badge variant="secondary">Umbral {Math.round(resultado.umbral * 100)}%</Badge>
+                          <Badge variant="secondary" className="capitalize">
+                            Confianza {resultado.nivelConfianza}
+                          </Badge>
+                        </div>
+
+                        {resultado.producto && (
+                          <Card>
+                            <CardContent className="pt-6">
+                              <div className="flex gap-4">
+                                <div className="relative h-32 w-32 overflow-hidden rounded-lg">
+                                  <Image
+                                    src={resultado.producto.imagen || "/placeholder.svg"}
+                                    alt={resultado.producto.nombre}
+                                    fill
+                                    sizes="128px"
+                                    loading="lazy"
+                                    className="object-cover"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <h3 className="text-xl font-bold mb-2">{resultado.producto.nombre}</h3>
+                                  <p className="text-sm text-muted-foreground mb-1">Código: {resultado.producto.codigo}</p>
+                                  <p className="text-sm text-muted-foreground mb-3">
+                                    Categoría: {resultado.producto.categoria}
+                                  </p>
+                                  <div className="flex items-baseline gap-2 mb-4">
+                                    <span className="text-3xl font-bold text-primary">
+                                      ${resultado.producto.precio.toLocaleString()}
+                                    </span>
+                                    {resultado.producto.descuento > 0 && (
+                                      <Badge variant="destructive">{resultado.producto.descuento}% OFF</Badge>
+                                    )}
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <p className="font-medium">Disponibilidad por talla:</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {resultado.producto.stockPorTalla.map((s, i) => (
+                                        <div key={i} className="flex justify-between text-sm p-2 bg-muted rounded">
+                                          <span>Talla {s.talla}</span>
+                                          <span className={s.cantidad > 0 ? "text-gray-900 font-medium" : "text-red-600"}>
+                                            {s.cantidad > 0 ? `${s.cantidad} unidades` : "Sin stock"}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {resultado.nivelConfianza === "medio" && (
+                                <div className="mt-4 flex gap-2">
+                                  <Button
+                                    onClick={() => handleConfirmarProducto(true)}
+                                    className="flex-1"
+                                    variant="default"
+                                  >
+                                    <CheckCircle className="mr-2 h-4 w-4" />
+                                    Sí, es correcto
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleConfirmarProducto(false)}
+                                    className="flex-1"
+                                    variant="outline"
+                                  >
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    No, intentar de nuevo
+                                  </Button>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )}
+                      </>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-red-600">
+                          <XCircle className="h-5 w-5" />
+                          <span className="font-medium">{resultado.message}</span>
+                        </div>
+                        {resultado.coincidencias && resultado.coincidencias.length > 0 && (
+                          <div className="rounded-lg border border-dashed border-muted-foreground/40 p-4">
+                            <p className="text-sm font-medium text-foreground mb-2">Coincidencias más cercanas</p>
+                            <ul className="space-y-1 text-sm text-muted-foreground">
+                              {resultado.coincidencias.map((item) => (
+                                <li key={item.productoId} className="flex justify-between">
+                                  <span>{item.nombre}</span>
+                                  <span>{Math.round(item.similitud * 100)}%</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5" />
+                  Búsqueda Manual
+                </CardTitle>
+                <CardDescription>Busca productos por nombre o código</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      ref={manualSearchRef}
+                      placeholder="Buscar por nombre o código..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                      className="pr-11"
+                    />
+                    {searchQuery && (
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={stopCamera}
-                        className="h-12 w-12 rounded-full text-white hover:bg-white/20"
+                        onClick={clearManualSearch}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       >
-                        <X className="h-5 w-5" />
+                        <X className="h-4 w-4" />
                       </Button>
-
-                      <Button
-                        type="button"
-                        onClick={() => void handleCaptureRequest()}
-                        disabled={scanning || loadingModel || captureCountdown !== null}
-                        className="flex h-20 w-20 items-center justify-center rounded-full bg-white text-primary hover:bg-white/90"
-                      >
-                        {scanning ? (
-                          <Loader2 className="h-6 w-6 animate-spin" />
-                        ) : loadingModel ? (
-                          <Loader2 className="h-6 w-6 animate-spin text-secondary" />
-                        ) : (
-                          <Search className="h-6 w-6" />
-                        )}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="flex h-12 w-12 items-center justify-center rounded-full text-white hover:bg-white/20"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Package className="h-5 w-5" />
-                      </Button>
-                    </div>
+                    )}
                   </div>
-
-                  {/* Indicador de escaneo */}
-                  {scanning && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow">
-                      Procesando imagen...
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center text-white">
-                  <Camera className="mb-4 h-16 w-16 text-gray-400" />
-                  <p className="mb-4 text-lg">Cámara no activa</p>
-                  <Button
-                    onClick={() => void startCamera()}
-                    disabled={cameraLoading}
-                    className="bg-gray-900 hover:bg-gray-800 disabled:opacity-70"
-                  >
-                    {cameraLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-                    {cameraLoading ? "Abriendo cámara" : "Activar cámara"}
+                  <Button onClick={handleSearch}>
+                    <Search className="h-4 w-4" />
                   </Button>
                 </div>
-              )}
 
-              {cameraError && (
-                <div className="absolute inset-0 flex items-center justify-center bg-red-600/90 text-white p-4">
-                  <div className="text-center">
-                    <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                    <p>{cameraError}</p>
-                    <Button onClick={() => void startCamera()} className="mt-2 bg-white text-red-600 hover:bg-white/90">
-                      Reintentar
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {resultado && (
-              <div className="mt-6 space-y-4">
-                {resultado.success ? (
-                  <>
-                    <div className="flex items-center gap-2 text-gray-900">
-                      <CheckCircle className="h-5 w-5" />
-                      <span className="font-medium">{resultado.message}</span>
-                      {resultado.nivelConfianza === "medio" && (
-                        <Badge variant="outline" className="ml-2">
-                          Confirmación requerida
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <span>Similitud {Math.round(resultado.similitud * 100)}%</span>
-                      </div>
-                      <Badge variant="secondary">Umbral {Math.round(resultado.umbral * 100)}%</Badge>
-                      <Badge variant="secondary" className="capitalize">
-                        Confianza {resultado.nivelConfianza}
-                      </Badge>
-                    </div>
-
-                    {resultado.producto && (
-                      <Card>
+                {searchResults.length > 0 && (
+                  <div className="space-y-3">
+                    {searchResults.map((producto) => (
+                      <Card key={producto.id}>
                         <CardContent className="pt-6">
                           <div className="flex gap-4">
-                            <div className="relative h-32 w-32 overflow-hidden rounded-lg">
+                            <div className="relative h-20 w-20 overflow-hidden rounded-lg">
                               <Image
-                                src={resultado.producto.imagen || "/placeholder.svg"}
-                                alt={resultado.producto.nombre}
+                                src={producto.imagen || "/placeholder.svg"}
+                                alt={producto.nombre}
                                 fill
-                                sizes="128px"
+                                sizes="80px"
                                 loading="lazy"
                                 className="object-cover"
                               />
                             </div>
                             <div className="flex-1">
-                              <h3 className="text-xl font-bold mb-2">{resultado.producto.nombre}</h3>
-                              <p className="text-sm text-muted-foreground mb-1">Código: {resultado.producto.codigo}</p>
-                              <p className="text-sm text-muted-foreground mb-3">
-                                Categoría: {resultado.producto.categoria}
+                              <h4 className="font-bold">{producto.nombre}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {producto.codigo} - {producto.categoria}
                               </p>
-                              <div className="flex items-baseline gap-2 mb-4">
-                                <span className="text-3xl font-bold text-primary">
-                                  ${resultado.producto.precio.toLocaleString()}
-                                </span>
-                                {resultado.producto.descuento > 0 && (
-                                  <Badge variant="destructive">{resultado.producto.descuento}% OFF</Badge>
-                                )}
-                              </div>
-
-                              <div className="space-y-2">
-                                <p className="font-medium">Disponibilidad por talla:</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {resultado.producto.stockPorTalla.map((s, i) => (
-                                    <div key={i} className="flex justify-between text-sm p-2 bg-muted rounded">
-                                      <span>Talla {s.talla}</span>
-                                      <span className={s.cantidad > 0 ? "text-gray-900 font-medium" : "text-red-600"}>
-                                        {s.cantidad > 0 ? `${s.cantidad} unidades` : "Sin stock"}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+                              <p className="text-lg font-bold text-primary mt-1">${producto.precio.toLocaleString()}</p>
+                              <p className="text-sm text-muted-foreground">Stock total: {producto.stockTotal} unidades</p>
                             </div>
                           </div>
-
-                          {resultado.nivelConfianza === "medio" && (
-                            <div className="mt-4 flex gap-2">
-                              <Button
-                                onClick={() => handleConfirmarProducto(true)}
-                                className="flex-1"
-                                variant="default"
-                              >
-                                <CheckCircle className="mr-2 h-4 w-4" />
-                                Sí, es correcto
-                              </Button>
-                              <Button
-                                onClick={() => handleConfirmarProducto(false)}
-                                className="flex-1"
-                                variant="outline"
-                              >
-                                <XCircle className="mr-2 h-4 w-4" />
-                                No, intentar de nuevo
-                              </Button>
-                            </div>
-                          )}
                         </CardContent>
                       </Card>
-                    )}
-                  </>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-red-600">
-                      <XCircle className="h-5 w-5" />
-                      <span className="font-medium">{resultado.message}</span>
-                    </div>
-                    {resultado.coincidencias && resultado.coincidencias.length > 0 && (
-                      <div className="rounded-lg border border-dashed border-muted-foreground/40 p-4">
-                        <p className="text-sm font-medium text-foreground mb-2">Coincidencias más cercanas</p>
-                        <ul className="space-y-1 text-sm text-muted-foreground">
-                          {resultado.coincidencias.map((item) => (
-                            <li key={item.productoId} className="flex justify-between">
-                              <span>{item.nombre}</span>
-                              <span>{Math.round(item.similitud * 100)}%</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    ))}
                   </div>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              Búsqueda Manual
-            </CardTitle>
-            <CardDescription>Busca productos por nombre o código</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  ref={manualSearchRef}
-                  placeholder="Buscar por nombre o código..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  className="pr-11"
-                />
-                {searchQuery && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={clearManualSearch}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                {searchQuery && searchResults.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No se encontraron productos</p>
+                  </div>
                 )}
-              </div>
-              <Button onClick={handleSearch}>
-                <Search className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {searchResults.length > 0 && (
-              <div className="space-y-3">
-                {searchResults.map((producto) => (
-                  <Card key={producto.id}>
-                    <CardContent className="pt-6">
-                      <div className="flex gap-4">
-                        <div className="relative h-20 w-20 overflow-hidden rounded-lg">
-                          <Image
-                            src={producto.imagen || "/placeholder.svg"}
-                            alt={producto.nombre}
-                            fill
-                            sizes="80px"
-                            loading="lazy"
-                            className="object-cover"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-bold">{producto.nombre}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {producto.codigo} - {producto.categoria}
-                          </p>
-                          <p className="text-lg font-bold text-primary mt-1">${producto.precio.toLocaleString()}</p>
-                          <p className="text-sm text-muted-foreground">Stock total: {producto.stockTotal} unidades</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {searchQuery && searchResults.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No se encontraron productos</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
           </div>
 
           <aside className="xl:w-[360px] space-y-6">
