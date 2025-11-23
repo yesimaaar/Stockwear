@@ -127,6 +127,15 @@ interface HistorialItem {
   producto: { nombre: string } | null
 }
 
+interface IngresoItem {
+  id: string | number
+  tipo: 'venta_contado' | 'abono'
+  monto: number
+  fecha: string
+  descripcion: string
+  referencia?: string
+}
+
 interface CuentaPorCobrar {
   id: number
   folio: string
@@ -192,6 +201,10 @@ export default function MovimientosPage() {
   const [loadingHistorial, setLoadingHistorial] = useState(true)
   const [filterTerm, setFilterTerm] = useState("")
 
+  // New State for Cash Flow
+  const [ingresos, setIngresos] = useState<IngresoItem[]>([])
+  const [loadingIngresos, setLoadingIngresos] = useState(true)
+
   useEffect(() => {
     setFilterTerm(searchQ)
   }, [searchQ])
@@ -212,7 +225,7 @@ export default function MovimientosPage() {
   const [openCierreDialog, setOpenCierreDialog] = useState(false)
   const [montoInicial, setMontoInicial] = useState("")
   const [montoFinal, setMontoFinal] = useState("")
-  const [resumenCierre, setResumenCierre] = useState<{ totalVentas: number, totalGastos: number } | null>(null)
+  const [resumenCierre, setResumenCierre] = useState<{ totalVentas: number, totalAbonos: number, totalIngresos: number, totalGastos: number } | null>(null)
   
   // Cierres History State
   const [cierres, setCierres] = useState<CajaSesion[]>([])
@@ -298,7 +311,68 @@ export default function MovimientosPage() {
     loadHistorial()
   }, [])
 
-  // Load Accounts Receivable
+  // Load Cash Flow (Sales & Abonos)
+  useEffect(() => {
+    const loadIngresos = async () => {
+      setLoadingIngresos(true)
+      try {
+        const tiendaId = await getCurrentTiendaId()
+        
+        // 1. Fetch Cash Sales
+        const { data: ventas, error: ventasError } = await supabase
+          .from("ventas")
+          .select("id, folio, total, createdAt, tipo_venta")
+          .eq("tienda_id", tiendaId)
+          .eq("tipo_venta", "contado")
+          .order("createdAt", { ascending: false })
+          .limit(500)
+        
+        if (ventasError) throw ventasError
+
+        // 2. Fetch Abonos
+        const { data: abonos, error: abonosError } = await supabase
+          .from("abonos")
+          .select("id, monto, createdAt, nota, cliente:clientes(nombre)")
+          .eq("tienda_id", tiendaId)
+          .order("createdAt", { ascending: false })
+          .limit(500)
+
+        if (abonosError) throw abonosError
+
+        // 3. Map and Combine
+        const ventasMapped: IngresoItem[] = (ventas || []).map(v => ({
+          id: `v-${v.id}`,
+          tipo: 'venta_contado',
+          monto: v.total,
+          fecha: v.createdAt,
+          descripcion: 'Venta de contado',
+          referencia: v.folio
+        }))
+
+        const abonosMapped: IngresoItem[] = (abonos || []).map(a => ({
+          id: `a-${a.id}`,
+          tipo: 'abono',
+          monto: a.monto,
+          fecha: a.createdAt,
+          descripcion: `Abono de ${(a.cliente as any)?.nombre || 'Cliente'}`,
+          referencia: a.nota
+        }))
+
+        const combined = [...ventasMapped, ...abonosMapped].sort((a, b) => 
+          new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+        )
+
+        setIngresos(combined)
+      } catch (error) {
+        console.error("Error loading ingresos", error)
+      } finally {
+        setLoadingIngresos(false)
+      }
+    }
+    void loadIngresos()
+  }, [])
+
+  // Accounts Receivable
   useEffect(() => {
     const loadCuentasPorCobrar = async () => {
       setLoadingCuentas(true)
@@ -443,29 +517,63 @@ export default function MovimientosPage() {
     })
   }, [historial, date, periodo, filterTerm])
 
+  const filteredIngresos = useMemo(() => {
+    return ingresos.filter((item) => {
+      // 1. Filter by Date/Period
+      if (date) {
+        const itemDate = new Date(item.fecha)
+        const selectedDate = new Date(date)
+
+        if (periodo === "diario") {
+          const isSameDay =
+            itemDate.getDate() === selectedDate.getDate() &&
+            itemDate.getMonth() === selectedDate.getMonth() &&
+            itemDate.getFullYear() === selectedDate.getFullYear()
+          if (!isSameDay) return false
+        } else if (periodo === "mensual") {
+          const isSameMonth =
+            itemDate.getMonth() === selectedDate.getMonth() &&
+            itemDate.getFullYear() === selectedDate.getFullYear()
+          if (!isSameMonth) return false
+        } else if (periodo === "semanal") {
+          const startOfWeek = new Date(selectedDate)
+          startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay())
+          startOfWeek.setHours(0, 0, 0, 0)
+
+          const endOfWeek = new Date(startOfWeek)
+          endOfWeek.setDate(startOfWeek.getDate() + 6)
+          endOfWeek.setHours(23, 59, 59, 999)
+
+          if (itemDate < startOfWeek || itemDate > endOfWeek) return false
+        }
+      }
+      return true
+    })
+  }, [ingresos, date, periodo])
+
   const movimientosIngresos = useMemo(() => {
-    return filteredHistorial.filter(h => h.tipo !== 'entrada')
-  }, [filteredHistorial])
+    return filteredIngresos
+  }, [filteredIngresos])
 
   const movimientosEgresos = useMemo(() => {
     return filteredHistorial.filter(h => h.tipo === 'entrada')
   }, [filteredHistorial])
 
   const resumenFinanciero = useMemo(() => {
-    const ventas = filteredHistorial
-      .filter(item => item.tipo === 'venta' || item.tipo === 'salida')
-      .reduce((acc, item) => acc + (item.costoUnitario || 0) * item.cantidad, 0)
+    // Calculate Income from Cash Sales + Abonos
+    const totalIngresos = filteredIngresos.reduce((acc, item) => acc + item.monto, 0)
 
+    // Calculate Expenses from Inventory Entries (Cost)
     const gastos = filteredHistorial
       .filter(item => item.tipo === 'entrada')
       .reduce((acc, item) => acc + (item.costoUnitario || 0) * item.cantidad, 0)
 
     return {
-      ventas,
+      ventas: totalIngresos,
       gastos,
-      balance: ventas - gastos
+      balance: totalIngresos - gastos
     }
-  }, [filteredHistorial])
+  }, [filteredIngresos, filteredHistorial])
 
   const convertirId = (valor: string | undefined) => {
     if (!valor || valor === "none") {
@@ -688,7 +796,7 @@ export default function MovimientosPage() {
     if (!sesionActual || !resumenCierre) return
     try {
       const montoReal = parseFloat(montoFinal) || 0
-      const montoEsperado = sesionActual.montoInicial + resumenCierre.totalVentas - resumenCierre.totalGastos
+      const montoEsperado = sesionActual.montoInicial + resumenCierre.totalIngresos - resumenCierre.totalGastos
       await CajaService.cerrarCaja(sesionActual.id, montoEsperado, montoReal)
       setSesionActual(null)
       setOpenCierreDialog(false)
@@ -822,12 +930,16 @@ export default function MovimientosPage() {
                     <span>{currencyFormatter.format(sesionActual.montoInicial)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Ventas</span>
+                    <span className="text-muted-foreground">Ventas (Contado)</span>
                     <span>{currencyFormatter.format(resumenCierre.totalVentas)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Abonos</span>
+                    <span>{currencyFormatter.format(resumenCierre.totalAbonos)}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2 font-medium">
                     <span>Balance total esperado</span>
-                    <span>{currencyFormatter.format(sesionActual.montoInicial + resumenCierre.totalVentas)}</span>
+                    <span>{currencyFormatter.format(sesionActual.montoInicial + resumenCierre.totalIngresos)}</span>
                   </div>
                 </div>
 
@@ -844,11 +956,11 @@ export default function MovimientosPage() {
                 {montoFinal && (
                   <div className={cn(
                     "rounded-lg p-3 text-sm font-medium",
-                    (parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalVentas)) < 0
+                    (parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalIngresos)) < 0
                       ? "bg-amber-100 text-amber-800"
                       : "bg-emerald-100 text-emerald-800"
                   )}>
-                    Diferencia: {currencyFormatter.format(parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalVentas))}
+                    Diferencia: {currencyFormatter.format(parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalIngresos))}
                   </div>
                 )}
 
@@ -991,7 +1103,7 @@ export default function MovimientosPage() {
               </TabsList>
 
               <TabsContent value="ingresos" className="min-h-[300px]">
-                {loadingHistorial ? (
+                {loadingIngresos ? (
                   <div className="flex h-[200px] items-center justify-center">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                   </div>
@@ -1423,18 +1535,21 @@ export default function MovimientosPage() {
                       >
                         <div className="flex flex-col gap-1">
                           <span className="font-semibold text-foreground">
-                            {item.producto?.nombre || "Producto desconocido"}
+                            {item.descripcion}
                           </span>
                           <span className="text-sm text-muted-foreground">
-                            {item.motivo || "Sin motivo"}
+                            {item.referencia || "Sin referencia"}
                           </span>
+                          <Badge variant="outline" className="w-fit text-[10px]">
+                            {item.tipo === 'venta_contado' ? 'Venta Contado' : 'Abono'}
+                          </Badge>
                         </div>
                         <div className="flex items-center justify-between gap-6 sm:justify-end">
                           <span className="text-sm text-muted-foreground">
-                            {format(new Date(item.createdAt), "PP p", { locale: es })}
+                            {format(new Date(item.fecha), "PP p", { locale: es })}
                           </span>
                           <span className="text-lg font-bold text-emerald-600">
-                            +{currencyFormatter.format((item.costoUnitario || 0) * item.cantidad)}
+                            +{currencyFormatter.format(item.monto)}
                           </span>
                         </div>
                       </div>

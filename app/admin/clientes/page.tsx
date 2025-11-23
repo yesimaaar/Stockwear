@@ -17,6 +17,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { ClienteService } from "@/lib/services/cliente-service"
+import { CajaService } from "@/lib/services/caja-service"
+import { AuthService } from "@/lib/services/auth-service"
 import type { Cliente, Abono } from "@/lib/types"
 
 export default function ClientesPage() {
@@ -95,10 +97,22 @@ export default function ClientesPage() {
         }
 
         try {
+            // Get current session
+            const user = await AuthService.getCurrentUser()
+            let cajaSesionId: number | undefined = undefined
+
+            if (user) {
+                const sesion = await CajaService.getSesionActual(user.id)
+                if (sesion) {
+                    cajaSesionId = sesion.id
+                }
+            }
+
             await ClienteService.registrarAbono({
                 clienteId: selectedCliente.id,
                 monto,
-                nota: paymentNote
+                nota: paymentNote,
+                cajaSesionId
             })
             toast({ title: "Abono registrado", description: "El saldo del cliente ha sido actualizado." })
             setIsPaymentOpen(false)

@@ -467,11 +467,7 @@ export function SalesWorkspace({
 
 
   const renderMetodoPagoSelector = (id: string) => {
-    const opciones: MetodoPago[] = metodosPago.length > 0 ? metodosPago : [
-      { id: 1, nombre: "Efectivo", tipo: "efectivo", tiendaId: 0, estado: "activo" },
-      { id: 2, nombre: "Transferencia", tipo: "banco", tiendaId: 0, estado: "activo" },
-      { id: 3, nombre: "Tarjeta de crédito", tipo: "otro", tiendaId: 0, estado: "activo" }
-    ]
+    const opciones: MetodoPago[] = metodosPago
 
     // Ensure Tarjeta is visible if it exists in DB, or add it if missing and needed
     // The user wants "Tarjeta de crédito" explicitly.
@@ -487,7 +483,17 @@ export function SalesWorkspace({
         <div className="grid grid-cols-2 gap-2 p-1 bg-muted rounded-lg">
           <button
             type="button"
-            onClick={() => setTipoVenta('contado')}
+            onClick={() => {
+              setTipoVenta('contado')
+              // Auto-select first non-credit method (usually Efectivo)
+              const efectivo = metodosPago.find(m => m.tipo === 'efectivo')
+              if (efectivo) {
+                setSelectedMetodoPagoId(String(efectivo.id))
+              } else if (metodosPago.length > 0) {
+                // Fallback to first available if no cash
+                setSelectedMetodoPagoId(String(metodosPago[0].id))
+              }
+            }}
             className={cn(
               "flex items-center justify-center py-2 text-sm font-medium rounded-md transition-all",
               tipoVenta === 'contado'
@@ -499,7 +505,18 @@ export function SalesWorkspace({
           </button>
           <button
             type="button"
-            onClick={() => setTipoVenta('credito')}
+            onClick={() => {
+              setTipoVenta('credito')
+              // Auto-select "Crédito" or "Por Cobrar" method
+              const credito = metodosPago.find(m =>
+                m.nombre === 'Crédito' ||
+                m.nombre === 'Por Cobrar' ||
+                m.nombre.toLowerCase() === 'credito'
+              )
+              if (credito) {
+                setSelectedMetodoPagoId(String(credito.id))
+              }
+            }}
             className={cn(
               "flex items-center justify-center py-2 text-sm font-medium rounded-md transition-all",
               tipoVenta === 'credito'
@@ -524,20 +541,26 @@ export function SalesWorkspace({
                 <SelectValue placeholder="Seleccionar método" />
               </SelectTrigger>
               <SelectContent>
-                {opciones.map((metodo) => (
-                  <SelectItem key={metodo.id} value={String(metodo.id)}>
-                    <div className="flex items-center gap-2">
-                      {metodo.nombre.toLowerCase().includes("tarjeta") ? (
-                        <Receipt className="h-4 w-4" />
-                      ) : metodo.nombre.toLowerCase().includes("transferencia") ? (
-                        <ArrowLeftRight className="h-4 w-4" />
-                      ) : (
-                        <Banknote className="h-4 w-4" />
-                      )}
-                      <span>{metodo.nombre}</span>
-                    </div>
-                  </SelectItem>
-                ))}
+                {opciones.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground text-center">
+                    Cargando métodos...
+                  </div>
+                ) : (
+                  opciones.map((metodo) => (
+                    <SelectItem key={metodo.id} value={String(metodo.id)}>
+                      <div className="flex items-center gap-2">
+                        {metodo.nombre.toLowerCase().includes("tarjeta") ? (
+                          <Receipt className="h-4 w-4" />
+                        ) : metodo.nombre.toLowerCase().includes("transferencia") ? (
+                          <ArrowLeftRight className="h-4 w-4" />
+                        ) : (
+                          <Banknote className="h-4 w-4" />
+                        )}
+                        <span>{metodo.nombre}</span>
+                      </div>
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -680,28 +703,42 @@ export function SalesWorkspace({
 
     setRegistrando(true)
     try {
-      // Find a fallback payment method for credit sales if DB requires it
-      let metodoPagoIdCredito: number | undefined = undefined
+      // Validate payment method
+      if (tipoVenta === 'contado' && !selectedMetodoPagoId) {
+        toast({
+          title: "Método de pago requerido",
+          description: "Selecciona un método de pago para la venta de contado.",
+          variant: "destructive",
+        })
+        setRegistrando(false)
+        return
+      }
 
-      if (isCredito) {
-        // Try to find a "Credito" or "Crédito" method
-        const metodoCredito = metodosPago.find(m =>
-          m.nombre.toLowerCase().includes('credito') ||
-          m.nombre.toLowerCase().includes('crédito')
+      if (tipoVenta === 'credito') {
+        // Ensure we have the credit method selected
+        const creditoMethod = metodosPago.find(m =>
+          m.nombre === 'Crédito' ||
+          m.nombre === 'Por Cobrar' ||
+          m.nombre.toLowerCase() === 'credito'
         )
-
-        if (metodoCredito) {
-          metodoPagoIdCredito = metodoCredito.id
-        } else if (metodosPago.length > 0) {
-          // Fallback to the first available method (usually Efectivo) if no specific credit method exists
-          // This is to satisfy potential NOT NULL constraints in the DB
-          metodoPagoIdCredito = metodosPago[0].id
+        if (!creditoMethod) {
+          toast({
+            title: "Error de configuración",
+            description: "No se encontró el método de pago 'Crédito'. Contacta a soporte.",
+            variant: "destructive",
+          })
+          setRegistrando(false)
+          return
+        }
+        // Force selection of credit method just in case
+        if (selectedMetodoPagoId !== String(creditoMethod.id)) {
+          setSelectedMetodoPagoId(String(creditoMethod.id))
         }
       }
 
       const venta = await VentaService.create({
         usuarioId: selectedEmpleadoId,
-        metodoPagoId: isCredito ? metodoPagoIdCredito : (selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined),
+        metodoPagoId: selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined,
         cajaSesionId: sesionActual?.id,
         clienteId: clienteIdParaVenta,
         tipoVenta: isCredito ? 'credito' : 'contado',

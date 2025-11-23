@@ -69,6 +69,7 @@ export class ClienteService {
         nota?: string
         usuarioId?: string
         ventaId?: number
+        cajaSesionId?: number
     }): Promise<Abono | null> {
         const tiendaId = await getCurrentTiendaId()
 
@@ -82,7 +83,8 @@ export class ClienteService {
                 monto: payload.monto,
                 metodo_pago_id: payload.metodoPagoId,
                 usuario_id: payload.usuarioId,
-                nota: payload.nota
+                nota: payload.nota,
+                caja_sesion_id: payload.cajaSesionId
             })
             .select()
             .single()

@@ -120,26 +120,40 @@ export const CajaService = {
         // Obtener ventas de esta sesión
         const { data: ventas, error } = await supabase
             .from("ventas")
-            .select("total, metodo_pago_id")
+            .select("total, metodo_pago_id, tipo_venta")
             .eq("caja_sesion_id", sesionId)
             .eq("tienda_id", tiendaId)
 
         if (error) throw error
 
-        const totalVentas = ventas?.reduce((sum, v) => sum + Number(v.total), 0) ?? 0
+        // Filter out credit sales from the total
+        const totalVentas = ventas?.reduce((sum, v) => {
+            if (v.tipo_venta === 'credito') return sum
+            return sum + Number(v.total)
+        }, 0) ?? 0
 
-        // Aquí se podrían sumar gastos si estuvieran vinculados a la sesión
-        // Por ahora solo ventas
+        // Obtener abonos de esta sesión
+        const { data: abonos, error: abonosError } = await supabase
+            .from("abonos")
+            .select("monto")
+            .eq("caja_sesion_id", sesionId)
+            .eq("tienda_id", tiendaId)
+
+        if (abonosError) throw abonosError
+
+        const totalAbonos = abonos?.reduce((sum, a) => sum + Number(a.monto), 0) ?? 0
 
         return {
             totalVentas,
+            totalAbonos,
+            totalIngresos: totalVentas + totalAbonos,
             totalGastos: 0, // Placeholder
         }
     },
 
     async getHistorialCierres(): Promise<CajaSesion[]> {
         const tiendaId = await getCurrentTiendaId()
-        
+
         // 1. Get sessions
         const { data: sesiones, error } = await supabase
             .from("caja_sesiones")
@@ -161,7 +175,7 @@ export const CajaService = {
                 .from("usuarios")
                 .select("id, nombre")
                 .in("id", userIds)
-            
+
             if (usuarios) {
                 usuarios.forEach(u => userMap.set(u.id, u.nombre))
             }
