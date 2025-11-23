@@ -5,7 +5,7 @@ import dynamic from "next/dynamic"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import * as LucideIcons from "lucide-react"
+import { Boxes, Edit, MapPin, Plus, Trash2, Warehouse } from "lucide-react"
 
 import { AdminSectionLayout } from "@/components/admin-section-layout"
 import { Badge } from "@/components/ui/badge"
@@ -73,7 +73,7 @@ const WarehouseMap = dynamic<WarehouseMapProps>(() => import("./warehouse-map").
 	)
 })
 
-const { Boxes, Edit, MapPin, Plus, Trash2, Warehouse } = LucideIcons
+
 
 const ESTADO_VARIANT: Record<string, "default" | "secondary"> = {
 	activo: "default",
@@ -86,6 +86,11 @@ const almacenSchema = z.object({
 		.trim()
 		.min(2, "Usa al menos 2 caracteres")
 		.max(100, "Máximo 100 caracteres"),
+	abreviatura: z
+		.string({ required_error: "La abreviatura es obligatoria" })
+		.trim()
+		.min(1, "La abreviatura es obligatoria")
+		.max(10, "Máximo 10 caracteres"),
 	direccion: z
 		.string()
 		.trim()
@@ -101,6 +106,7 @@ type AlmacenFormValues = z.infer<typeof almacenSchema>
 function getDefaultValues(): AlmacenFormValues {
 	return {
 		nombre: "",
+		abreviatura: "",
 		direccion: "",
 		tipo: "principal",
 		estado: "activo"
@@ -212,6 +218,7 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 		setEditingAlmacen(almacen)
 		form.reset({
 			nombre: almacen.nombre,
+			abreviatura: almacen.abreviatura ?? "",
 			direccion: almacen.direccion ?? "",
 			tipo: almacen.tipo,
 			estado: almacen.estado as EstadoRegistro
@@ -223,6 +230,7 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 		setIsSaving(true)
 		const payload = {
 			nombre: values.nombre.trim(),
+			abreviatura: values.abreviatura,
 			direccion: values.direccion.trim() ? values.direccion.trim() : null,
 			tipo: values.tipo,
 			estado: values.estado as EstadoRegistro
@@ -382,32 +390,37 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 						<WarehouseMap almacenes={almacenes} />
 					</section>
 				</div>
-					{loading ? (
-						<div className="grid gap-4 md:grid-cols-2">
-							{Array.from({ length: 4 }).map((_, index) => (
-								<Card key={index} className="animate-pulse">
-									<CardContent className="p-6">
-										<div className="h-6 w-40 rounded bg-muted" />
-									</CardContent>
-								</Card>
-							))}
-						</div>
-					) : almacenes.length === 0 ? (
-						<div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
-							No hay almacenes registrados.
-						</div>
-					) : (
-						<div className="grid gap-4 md:grid-cols-2">
-							{almacenes.map((almacen) => (
-								<Card key={almacen.id} className="transition-all hover:shadow-lg">
-									<CardContent className="p-6">
+				{loading ? (
+					<div className="grid gap-4 md:grid-cols-2">
+						{Array.from({ length: 4 }).map((_, index) => (
+							<Card key={index} className="animate-pulse">
+								<CardContent className="p-6">
+									<div className="h-6 w-40 rounded bg-muted" />
+								</CardContent>
+							</Card>
+						))}
+					</div>
+				) : almacenes.length === 0 ? (
+					<div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+						No hay almacenes registrados.
+					</div>
+				) : (
+					<div className="grid gap-4 md:grid-cols-2">
+						{almacenes.map((almacen) => (
+							<Card key={almacen.id} className="transition-all hover:shadow-lg">
+								<CardContent className="p-6">
 									<div className="mb-4 flex items-start justify-between">
 										<div className="flex gap-3">
 											<div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-primary">
 												<Warehouse className="h-6 w-6" />
 											</div>
 											<div>
-												<h3 className="text-xl font-semibold">{almacen.nombre}</h3>
+												<h3 className="text-xl font-semibold">
+													{almacen.nombre}
+													<span className="ml-2 text-sm font-normal text-muted-foreground">
+														({almacen.abreviatura})
+													</span>
+												</h3>
 												<div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
 													<MapPin className="h-4 w-4" />
 													{almacen.direccion || "Sin dirección"}
@@ -499,6 +512,19 @@ export function AlmacenesPageClient({ initialAlmacenes }: AlmacenesPageClientPro
 										<FormLabel>Nombre</FormLabel>
 										<FormControl>
 											<Input placeholder="Bodega Central" {...field} />
+										</FormControl>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+							<FormField
+								control={form.control}
+								name="abreviatura"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Abreviatura</FormLabel>
+										<FormControl>
+											<Input placeholder="Ej: DS7" {...field} />
 										</FormControl>
 										<FormMessage />
 									</FormItem>

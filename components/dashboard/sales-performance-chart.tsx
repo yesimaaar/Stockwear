@@ -50,38 +50,25 @@ export function SalesPerformanceChart({
   title = "Rendimiento de ventas",
   description = "Comparativa de ingresos en COP",
   className,
-}: SalesPerformanceChartProps) {
+  timeRange = "90d",
+  onTimeRangeChange,
+}: SalesPerformanceChartProps & {
+  timeRange?: TimeRange
+  onTimeRangeChange?: (range: TimeRange) => void
+}) {
   const isMobile = useIsMobile()
-  const [timeRange, setTimeRange] = React.useState<TimeRange>("90d")
 
   React.useEffect(() => {
-    if (isMobile) {
-      setTimeRange("7d")
+    if (isMobile && timeRange !== "7d" && onTimeRangeChange) {
+      onTimeRangeChange("7d")
     }
-  }, [isMobile])
+  }, [isMobile, onTimeRangeChange, timeRange])
 
-  const sortedData = React.useMemo(() => {
-    return [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [data])
-
-  const filteredData = React.useMemo(() => {
-    if (sortedData.length === 0) {
-      return []
-    }
-
-    const referenceDate = new Date(sortedData[sortedData.length - 1].date ?? Date.now())
-    const daysToSubtract = RANGE_TO_DAYS[timeRange]
-    const startDate = new Date(referenceDate)
-    startDate.setDate(referenceDate.getDate() - daysToSubtract + 1)
-
-    return sortedData.filter((item) => new Date(item.date) >= startDate)
-  }, [sortedData, timeRange])
-
-  const hasData = filteredData.length > 0
+  const hasData = data.length > 0
 
   const handleTimeRangeChange = (value: string) => {
-    if (value === "90d" || value === "30d" || value === "7d" || value === "1d") {
-      setTimeRange(value)
+    if ((value === "90d" || value === "30d" || value === "7d" || value === "1d") && onTimeRangeChange) {
+      onTimeRangeChange(value as TimeRange)
     }
   }
 
@@ -129,7 +116,7 @@ export function SalesPerformanceChart({
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
         {hasData ? (
           <ChartContainer config={chartConfig} className="h-[280px] w-full">
-            <AreaChart data={filteredData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+            <AreaChart data={data} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="fillVentas" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--color-ventas)" stopOpacity={0.5} />
@@ -145,6 +132,12 @@ export function SalesPerformanceChart({
                 minTickGap={24}
                 tickFormatter={(value) => {
                   const date = new Date(value)
+                  if (value.includes("T")) {
+                    return date.toLocaleTimeString("es-CO", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  }
                   return date.toLocaleDateString("es-CO", {
                     month: "short",
                     day: "numeric",
@@ -153,16 +146,23 @@ export function SalesPerformanceChart({
               />
               <ChartTooltip
                 cursor={false}
-                defaultIndex={isMobile ? -1 : Math.min(filteredData.length - 1, 8)}
+                defaultIndex={isMobile ? -1 : Math.min(data.length - 1, 8)}
                 content={
                   <ChartTooltipContent
                     indicator="dot"
-                    labelFormatter={(value) =>
-                      new Date(value as string).toLocaleDateString("es-CO", {
+                    labelFormatter={(value) => {
+                      const date = new Date(value as string)
+                      if ((value as string).includes("T")) {
+                        return date.toLocaleTimeString("es-CO", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      }
+                      return date.toLocaleDateString("es-CO", {
                         month: "short",
                         day: "numeric",
                       })
-                    }
+                    }}
                     formatter={(value) => <span className="font-medium">{formatter(Number(value))}</span>}
                   />
                 }

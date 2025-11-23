@@ -118,18 +118,21 @@ type TooltipItem = {
 interface ChartTooltipContentProps
   extends React.HTMLAttributes<HTMLDivElement> {
   active?: boolean
-  payload?: TooltipItem[]
+  payload?: TooltipItem[] | readonly TooltipItem[]
   indicator?: 'line' | 'dot' | 'dashed'
   hideLabel?: boolean
   hideIndicator?: boolean
   label?: React.ReactNode
-  labelFormatter?: (value: React.ReactNode, payload: TooltipItem[]) => React.ReactNode
+  labelFormatter?: (
+    value: React.ReactNode,
+    payload: TooltipItem[] | readonly TooltipItem[],
+  ) => React.ReactNode
   formatter?: (
     value: TooltipValue,
     name: TooltipName,
     item: TooltipItem,
     index: number,
-    payload: TooltipItem[],
+    payload: TooltipItem[] | readonly TooltipItem[],
   ) => React.ReactNode
   labelClassName?: string
   color?: string

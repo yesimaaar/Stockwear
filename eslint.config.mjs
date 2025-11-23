@@ -4,7 +4,14 @@ import globals from "globals"
 
 export default [
   {
-    ignores: ["**/node_modules/**", ".next/**", "dist/**", "build/**", "supabase/migrations/**"],
+    ignores: [
+      "**/node_modules/**",
+      ".next/**",
+      "dist/**",
+      "build/**",
+      "supabase/migrations/**",
+      "**/.venv*/**",
+    ],
   },
   {
     files: ["**/*.{ts,tsx,js,jsx}"],

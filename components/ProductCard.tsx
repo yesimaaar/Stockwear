@@ -1,30 +1,14 @@
-"use client"
 import React, { useState } from "react"
 import Image from "next/image"
-import { Package, Check, ChevronsUpDown } from "lucide-react"
+import { Package } from "lucide-react"
 import { useCart, type CartItem } from "@/hooks/useCart"
 import { formatCurrency } from "@/lib/whatsapp"
 import { Button } from "@/components/ui/button"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import type { ProductoConStock } from "@/lib/services/producto-service"
 
 export default function ProductCard({ product }: { product: ProductoConStock }) {
   const { addItem } = useCart()
-  const [selectedSize, setSelectedSize] = useState<string>("")
-  const [open, setOpen] = useState(false)
 
   // Group stock by size
   const stockBySize = React.useMemo(() => {
@@ -52,32 +36,31 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
     })
   }, [product.stockPorTalla])
 
-  function onAdd() {
-    if (!selectedSize) return
-
+  function onAdd(size: string) {
     const item: CartItem = {
-      id: `${product.id}-${selectedSize}`,
+      id: `${product.id}-${size}`,
       productId: product.id,
       name: product.nombre,
       price: product.precio,
       qty: 1,
-      size: selectedSize,
+      size: size,
       image: product.imagen || undefined
     }
     addItem(item)
-    setSelectedSize("") // Reset selection after adding
   }
 
+  const hasStock = stockBySize.length > 0
+
   return (
-    <div className="group flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm transition-all hover:border-border hover:shadow-md">
-      <div className="relative h-56 w-full overflow-hidden rounded-xl border border-border/40 bg-white">
+    <div className="group flex flex-col h-full gap-2 sm:gap-3 rounded-2xl border border-border/60 bg-background/80 p-3 sm:p-4 shadow-sm transition-all hover:border-border hover:shadow-md">
+      <div className="relative w-full h-32 sm:h-56 overflow-hidden rounded-xl border border-border/40 bg-card">
         {product.imagen ? (
           <Image
             src={product.imagen}
             alt={product.nombre ?? product.codigo ?? "Producto"}
             fill
             className="object-contain p-2 transition-transform duration-500 group-hover:scale-105"
-            sizes="(min-width: 1280px) 240px, (min-width: 768px) 220px, 200px"
+            sizes="(min-width: 1280px) 240px, (min-width: 768px) 220px, 160px"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-muted-foreground">
@@ -86,88 +69,50 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
         )}
         {product.stockTotal <= 5 && product.stockTotal > 0 && (
           <div className="absolute bottom-2 right-2 rounded-full bg-red-500/90 px-2 py-0.5 text-[0.65rem] font-bold text-white backdrop-blur-sm">
-            ¡Últimos pares!
+            ¡Últimos!
           </div>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col justify-between gap-3">
-        <div className="space-y-1.5">
+      <div className="flex flex-1 flex-col justify-between gap-2 sm:gap-3">
+        <div className="space-y-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-base font-semibold text-foreground line-clamp-2 leading-tight" title={product.nombre ?? product.codigo ?? "Producto"}>
+            <p className="text-sm sm:text-base font-semibold text-foreground line-clamp-2 leading-tight" title={product.nombre ?? product.codigo ?? "Producto"}>
               {product.nombre ?? product.codigo ?? "Producto"}
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">{product.categoria || "General"}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground">{product.categoria || "General"}</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           <div className="flex items-end justify-between gap-2">
-            <p className="text-lg font-bold text-foreground">{formatCurrency(product.precio ?? 0)}</p>
+            <p className="text-base sm:text-lg font-bold text-foreground">{formatCurrency(product.precio ?? 0)}</p>
           </div>
 
-          <div className="grid gap-2">
-            {stockBySize.length > 0 ? (
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
+          <div className="min-h-[36px] sm:min-h-[44px]">
+            {hasStock ? (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-1.5">
+                {stockBySize.map(([size]) => (
                   <Button
+                    key={size}
                     variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between"
+                    size="sm"
+                    className="h-8 sm:h-9 w-full p-0 text-[10px] sm:text-xs font-medium hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                    onClick={() => onAdd(size)}
                   >
-                    {selectedSize
-                      ? `Talla ${selectedSize}`
-                      : "Seleccionar talla..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    {size}
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Buscar talla..." />
-                    <CommandList>
-                      <CommandEmpty>Sin stock.</CommandEmpty>
-                      <CommandGroup>
-                        {stockBySize.map(([size, details]) => (
-                          <CommandItem
-                            key={size}
-                            value={size}
-                            onSelect={(currentValue) => {
-                              setSelectedSize(currentValue === selectedSize ? "" : currentValue)
-                              setOpen(false)
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedSize === size ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-1 justify-between items-center">
-                              <span>Talla {size}</span>
-                              <span className="text-xs text-muted-foreground">({details.total})</span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                ))}
+              </div>
             ) : (
-              <Button variant="outline" disabled className="w-full opacity-50">
+              <Button
+                className="w-full h-8 sm:h-9 rounded-xl font-medium shadow-sm text-[10px] sm:text-xs"
+                variant="secondary"
+                disabled
+              >
                 Agotado
               </Button>
             )}
-
-            <Button
-              onClick={onAdd}
-              className="w-full rounded-xl font-medium shadow-sm transition-all active:scale-[0.98]"
-              variant="default"
-              disabled={!selectedSize || product.stockTotal === 0}
-            >
-              {product.stockTotal === 0 ? "Sin stock" : "Agregar al carrito"}
-            </Button>
           </div>
         </div>
       </div>

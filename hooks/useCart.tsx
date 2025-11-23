@@ -22,6 +22,7 @@ type CartContextValue = {
   openCart: () => void
   closeCart: () => void
   isCartOpen: boolean
+  setStoreScope: (scope: string) => void
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined)
@@ -29,23 +30,34 @@ const CartContext = createContext<CartContextValue | undefined>(undefined)
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const [storeScope, setStoreScope] = useState<string>("")
 
-  // Load cart from localStorage on mount
+  // Load cart from localStorage on mount or scope change
   useEffect(() => {
-    const saved = localStorage.getItem("stockwear-cart")
+    // If no scope is set, we might want to load a default cart or nothing.
+    // For now, let's assume 'default' if empty, or just wait for scope.
+    // But existing app uses 'stockwear-cart'. Let's keep backward compatibility for non-scoped usage if needed,
+    // or just default to 'global' if empty.
+    const key = storeScope ? `stockwear-cart-${storeScope}` : "stockwear-cart"
+
+    const saved = localStorage.getItem(key)
     if (saved) {
       try {
         setItems(JSON.parse(saved))
       } catch (e) {
         console.error("Failed to load cart", e)
+        setItems([])
       }
+    } else {
+      setItems([])
     }
-  }, [])
+  }, [storeScope])
 
   // Save cart to localStorage on change
   useEffect(() => {
-    localStorage.setItem("stockwear-cart", JSON.stringify(items))
-  }, [items])
+    const key = storeScope ? `stockwear-cart-${storeScope}` : "stockwear-cart"
+    localStorage.setItem(key, JSON.stringify(items))
+  }, [items, storeScope])
 
   function addItem(item: CartItem) {
     setItems(prev => {
@@ -90,7 +102,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, clearCart, total, setItemQty, updateItemQty, openCart, closeCart, isCartOpen }}>
+      value={{ items, addItem, removeItem, clearCart, total, setItemQty, updateItemQty, openCart, closeCart, isCartOpen, setStoreScope }}>
       {children}
     </CartContext.Provider>
   )

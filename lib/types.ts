@@ -85,13 +85,14 @@ export interface Almacen {
   estado: EstadoRegistro
   latitud?: number | null
   longitud?: number | null
+  abreviatura: string
 }
 
 export interface Stock {
   id: number
   tiendaId: number
   productoId: number
-  tallaId: number
+  tallaId: number | null
   almacenId: number
   cantidad: number
   updatedAt: string
@@ -102,7 +103,7 @@ export interface HistorialStock {
   tiendaId: number
   tipo: 'entrada' | 'salida' | 'venta' | 'ajuste'
   productoId: number
-  tallaId: number
+  tallaId: number | null
   almacenId: number
   cantidad: number
   stockAnterior: number
@@ -124,12 +125,41 @@ export interface Consulta {
   createdAt: string
 }
 
+export interface MetodoPago {
+  id: number
+  tiendaId: number
+  nombre: string
+  tipo: 'efectivo' | 'digital' | 'banco' | 'otro'
+  estado: EstadoRegistro
+}
+
+export interface CajaSesion {
+  id: number
+  tiendaId: number
+  usuarioId: string
+  usuarioNombre?: string
+  fechaApertura: string
+  fechaCierre?: string | null
+  montoInicial: number
+  montoFinalEsperado?: number | null
+  montoFinalReal?: number | null
+  diferencia?: number | null
+  estado: 'abierta' | 'cerrada'
+}
+
 export interface Venta {
   id: number
   tiendaId: number
   folio: string
   total: number
   usuarioId: string | null
+  metodoPagoId?: number | null
+  cajaSesionId?: number | null
+  numeroCuotas?: number
+  interesPorcentaje?: number
+  montoCuota?: number
+  frecuenciaPago?: 'semanal' | 'mensual'
+  fechaPrimerVencimiento?: string
   createdAt: string
 }
 
@@ -143,4 +173,31 @@ export interface VentaDetalle {
   precioUnitario: number
   descuento: number
   subtotal: number
+}
+
+export interface Cliente {
+  id: number
+  tiendaId: number
+  nombre: string
+  documento?: string | null
+  telefono?: string | null
+  direccion?: string | null
+  email?: string | null
+  limiteCredito: number
+  saldoActual: number
+  estado: EstadoRegistro
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Abono {
+  id: number
+  tiendaId: number
+  clienteId: number
+  ventaId?: number | null
+  monto: number
+  metodoPagoId?: number | null
+  usuarioId?: string | null
+  nota?: string | null
+  createdAt: string
 }

@@ -5,8 +5,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import * as LucideIcons from "lucide-react";
-const { LogOut, AlertTriangle, Bell, Loader2, RefreshCcw, Moon, PanelLeft, ShoppingCart } = LucideIcons;
+import { LogOut, AlertTriangle, Bell, Loader2, RefreshCcw, Moon, PanelLeft, ShoppingCart } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -42,14 +41,10 @@ type InventoryNotification = {
 };
 
 const SEARCHABLE_MODULES = ADMIN_NAV_ITEMS.filter((module) =>
-	["/admin", "/admin/productos", "/admin/historial"].includes(module.href)
+	["/admin", "/admin/productos", "/admin/historial", "/admin/movimientos"].includes(module.href)
 );
 
-const DEFAULT_SEARCH_MODULE =
-	SEARCHABLE_MODULES.find((module) => module.href === "/admin/productos")?.href ??
-	SEARCHABLE_MODULES[0]?.href ??
-	ADMIN_NAV_ITEMS[0]?.href ??
-	"/admin";
+const DEFAULT_SEARCH_MODULE = "/admin"
 
 const AdminSidebar = dynamic<AdminSidebarProps>(() => import("@/components/admin-sidebar"), {
 	ssr: false,
@@ -83,7 +78,10 @@ export default function AdminLayout({
 	const [sidebarMode, setSidebarMode] = useState<SidebarMode>("condensed");
 	const searchWrapperRef = useRef<HTMLDivElement | null>(null);
 	const [searchTerm, setSearchTerm] = useState("");
-	const [searchModule, setSearchModule] = useState(DEFAULT_SEARCH_MODULE);
+	const [searchModule, setSearchModule] = useState(() => {
+		const isSearchable = SEARCHABLE_MODULES.some(m => m.href === pathname);
+		return isSearchable ? pathname : DEFAULT_SEARCH_MODULE;
+	});
 	const [searchPanelOpen, setSearchPanelOpen] = useState(false);
 	const canShowSearchModules = pathname === "/admin";
 
@@ -109,6 +107,9 @@ export default function AdminLayout({
 	}, [router]);
 
 	const loadNotifications = useCallback(async () => {
+		if (!user?.tiendaId) {
+			return
+		}
 		setNotificationsLoading(true);
 		setNotificationsError(null);
 		try {
@@ -116,6 +117,7 @@ export default function AdminLayout({
 				.from("productos")
 				.select("id,nombre,estado,\"stockMinimo\"")
 				.eq("estado", "activo")
+				.eq("tienda_id", user.tiendaId)
 				.order("nombre", { ascending: true })
 				.limit(500);
 
@@ -130,6 +132,7 @@ export default function AdminLayout({
 				const { data: stockData, error: stockError } = await supabase
 					.from("stock")
 					.select("\"productoId\",cantidad")
+					.eq("tienda_id", user.tiendaId)
 					.in("productoId", productIds)
 					.limit(5000);
 
@@ -180,7 +183,7 @@ export default function AdminLayout({
 		} finally {
 			setNotificationsLoading(false);
 		}
-	}, []);
+	}, [user?.tiendaId]);
 
 	useEffect(() => {
 		if (!user) {

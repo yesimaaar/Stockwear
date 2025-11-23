@@ -1,10 +1,8 @@
 import * as React from 'react'
-import * as LucideIcons from 'lucide-react'
+import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
-
-const { ChevronLeft, ChevronRight, Ellipsis } = LucideIcons
 
 function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
   return (

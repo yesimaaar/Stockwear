@@ -2,8 +2,7 @@
 
 import type { ComponentType } from "react"
 import { useEffect, useMemo, useState } from "react"
-import * as LucideIcons from "lucide-react"
-const {
+import {
   Download,
   Filter,
   History,
@@ -12,7 +11,7 @@ const {
   RefreshCw,
   ShoppingBag,
   Wrench
-} = LucideIcons
+} from "lucide-react"
 
 import { AdminSectionLayout } from "@/components/admin-section-layout"
 import { Badge } from "@/components/ui/badge"

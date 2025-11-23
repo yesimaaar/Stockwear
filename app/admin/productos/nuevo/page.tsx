@@ -6,8 +6,7 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import * as LucideIcons from "lucide-react"
-const { ArrowLeft } = LucideIcons
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -248,7 +247,7 @@ export default function NuevoProductoPage() {
         </div>
       </header>
 
-      <main className="container mx-auto max-w-4xl px-4 py-8">
+      <main className="container mx-auto max-w-6xl px-4 py-8">
         <form onSubmit={handleSubmit}>
           <div className="grid gap-6">
             <Card>
