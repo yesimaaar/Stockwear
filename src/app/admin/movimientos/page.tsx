@@ -143,6 +143,7 @@ interface IngresoItem {
   monto: number
   fecha: string
   descripcion: string
+  secondaryDescription?: string
   referencia?: string
 }
 
@@ -236,7 +237,7 @@ export default function MovimientosPage() {
   const [montoInicial, setMontoInicial] = useState("")
   const [montoFinal, setMontoFinal] = useState("")
   const [resumenCierre, setResumenCierre] = useState<{ totalVentas: number, totalAbonos: number, totalIngresos: number, totalGastos: number } | null>(null)
-  
+
   // Cierres History State
   const [cierres, setCierres] = useState<CajaSesion[]>([])
   const [loadingCierres, setLoadingCierres] = useState(true)
@@ -336,22 +337,22 @@ export default function MovimientosPage() {
       setLoadingIngresos(true)
       try {
         const tiendaId = await getCurrentTiendaId()
-        
+
         // 1. Fetch Cash Sales
         const { data: ventas, error: ventasError } = await supabase
           .from("ventas")
-          .select("id, folio, total, createdAt, tipo_venta")
+          .select("id, folio, total, createdAt, tipo_venta, ventasDetalle(producto:productos(nombre))")
           .eq("tienda_id", tiendaId)
           .eq("tipo_venta", "contado")
           .order("createdAt", { ascending: false })
           .limit(500)
-        
+
         if (ventasError) throw ventasError
 
         // 2. Fetch Abonos
         const { data: abonos, error: abonosError } = await supabase
           .from("abonos")
-          .select("id, monto, createdAt, nota, cliente:clientes(nombre)")
+          .select("id, monto, createdAt, nota, cliente:clientes(nombre), venta:ventas(ventasDetalle(producto:productos(nombre)))")
           .eq("tienda_id", tiendaId)
           .order("createdAt", { ascending: false })
           .limit(500)
@@ -359,25 +360,41 @@ export default function MovimientosPage() {
         if (abonosError) throw abonosError
 
         // 3. Map and Combine
-        const ventasMapped: IngresoItem[] = (ventas || []).map(v => ({
-          id: `v-${v.id}`,
-          tipo: 'venta_contado',
-          monto: v.total,
-          fecha: v.createdAt,
-          descripcion: 'Venta de contado',
-          referencia: v.folio
-        }))
+        const ventasMapped: IngresoItem[] = (ventas || []).map(v => {
+          // Extract product names
+          const productos = (v.ventasDetalle as any[])?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
+          const descripcion = productos.length > 0
+            ? productos.slice(0, 2).join(", ") + (productos.length > 2 ? ` y ${productos.length - 2} más` : "")
+            : 'Venta de contado'
 
-        const abonosMapped: IngresoItem[] = (abonos || []).map(a => ({
-          id: `a-${a.id}`,
-          tipo: 'abono',
-          monto: a.monto,
-          fecha: a.createdAt,
-          descripcion: `Abono de ${(a.cliente as any)?.nombre || 'Cliente'}`,
-          referencia: a.nota
-        }))
+          return {
+            id: `v-${v.id}`,
+            tipo: 'venta_contado',
+            monto: v.total,
+            fecha: v.createdAt,
+            descripcion: descripcion,
+            referencia: v.folio
+          }
+        })
 
-        const combined = [...ventasMapped, ...abonosMapped].sort((a, b) => 
+        const abonosMapped: IngresoItem[] = (abonos || []).map(a => {
+          // Extract product names from the associated sale
+          const productos = (a.venta as any)?.ventasDetalle?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
+          const modelo = productos.length > 0 ? productos[0] : 'Producto'
+          const clienteNombre = (a.cliente as any)?.nombre || 'Cliente'
+
+          return {
+            id: `a-${a.id}`,
+            tipo: 'abono',
+            monto: a.monto,
+            fecha: a.createdAt,
+            descripcion: `Abono de ${modelo}`,
+            secondaryDescription: `(${clienteNombre})`,
+            referencia: a.nota
+          }
+        })
+
+        const combined = [...ventasMapped, ...abonosMapped].sort((a, b) =>
           new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
         )
 
@@ -644,7 +661,7 @@ export default function MovimientosPage() {
         title: "Pago registrado",
         description: `Se registró el pago de ${currencyFormatter.format(amount)}`,
       })
-      
+
       // Update local state
       setCuentasPorCobrar(prev => prev.map(c => {
         if (c.id === selectedCuenta.id) {
@@ -669,10 +686,10 @@ export default function MovimientosPage() {
 
   const handleWhatsApp = () => {
     if (!selectedCuenta || !selectedCuenta.cliente?.telefono) return
-    
+
     const phone = selectedCuenta.cliente.telefono.replace(/\D/g, '')
     const message = `Hola ${selectedCuenta.cliente.nombre}, le recordamos que tiene una cuota pendiente de ${currencyFormatter.format(selectedCuenta.montoCuota || selectedCuenta.saldoPendiente)} correspondiente a la venta ${selectedCuenta.folio}. Su saldo pendiente total es de ${currencyFormatter.format(selectedCuenta.saldoPendiente)}. Agradecemos su pago.`
-    
+
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
     window.open(url, '_blank')
   }
@@ -892,7 +909,7 @@ export default function MovimientosPage() {
 
   const generateExcelReport = () => {
     const wb = XLSX.utils.book_new();
-    
+
     // Estilos para encabezados
     const headerStyle = {
       fill: { fgColor: { rgb: "4F46E5" } }, // Indigo 600
@@ -912,7 +929,7 @@ export default function MovimientosPage() {
       }));
 
       const wsInventario = XLSX.utils.json_to_sheet(inventarioData);
-      
+
       // Aplicar estilos a encabezados (Fila 1)
       const rangeInv = XLSX.utils.decode_range(wsInventario['!ref'] || "A1:A1");
       for (let C = rangeInv.s.c; C <= rangeInv.e.c; ++C) {
@@ -924,7 +941,7 @@ export default function MovimientosPage() {
       wsInventario['!cols'] = [
         { wch: 20 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 40 }
       ];
-      
+
       XLSX.utils.book_append_sheet(wb, wsInventario, "Inventario");
     }
 
@@ -939,7 +956,7 @@ export default function MovimientosPage() {
       }));
 
       const wsIngresos = XLSX.utils.json_to_sheet(ingresosData);
-      
+
       // Estilos encabezados
       const rangeIng = XLSX.utils.decode_range(wsIngresos['!ref'] || "A1:A1");
       for (let C = rangeIng.s.c; C <= rangeIng.e.c; ++C) {
@@ -966,7 +983,7 @@ export default function MovimientosPage() {
       }));
 
       const wsCuentas = XLSX.utils.json_to_sheet(cuentasData);
-      
+
       // Estilos encabezados
       const rangeCuentas = XLSX.utils.decode_range(wsCuentas['!ref'] || "A1:A1");
       for (let C = rangeCuentas.s.c; C <= rangeCuentas.e.c; ++C) {
@@ -1013,14 +1030,14 @@ export default function MovimientosPage() {
         theme: 'grid',
         headStyles: { fillColor: [79, 70, 229] }, // Indigo 600
       });
-      
+
       // @ts-ignore
       yPos = doc.lastAutoTable.finalY + 15;
     }
 
     if (selectedSheets.ingresos) {
       if (yPos > 250) { doc.addPage(); yPos = 20; }
-      
+
       doc.setFontSize(14);
       doc.text("Ingresos (Ventas y Abonos)", 14, yPos);
       yPos += 5;
@@ -1122,8 +1139,8 @@ export default function MovimientosPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="sheet-inventario" 
+                <Checkbox
+                  id="sheet-inventario"
                   checked={selectedSheets.inventario}
                   onCheckedChange={(checked) => setSelectedSheets(prev => ({ ...prev, inventario: checked as boolean }))}
                 />
@@ -1135,8 +1152,8 @@ export default function MovimientosPage() {
                 </label>
               </div>
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="sheet-ingresos" 
+                <Checkbox
+                  id="sheet-ingresos"
                   checked={selectedSheets.ingresos}
                   onCheckedChange={(checked) => setSelectedSheets(prev => ({ ...prev, ingresos: checked as boolean }))}
                 />
@@ -1148,8 +1165,8 @@ export default function MovimientosPage() {
                 </label>
               </div>
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="sheet-cuentas" 
+                <Checkbox
+                  id="sheet-cuentas"
                   checked={selectedSheets.cuentas}
                   onCheckedChange={(checked) => setSelectedSheets(prev => ({ ...prev, cuentas: checked as boolean }))}
                 />
@@ -1809,6 +1826,11 @@ export default function MovimientosPage() {
                         <div className="flex flex-col gap-1">
                           <span className="font-semibold text-foreground">
                             {item.descripcion}
+                            {item.secondaryDescription && (
+                              <span className="ml-1 font-normal text-muted-foreground opacity-70">
+                                {item.secondaryDescription}
+                              </span>
+                            )}
                           </span>
                           <span className="text-sm text-muted-foreground">
                             {item.referencia || "Sin referencia"}
@@ -1943,7 +1965,7 @@ export default function MovimientosPage() {
                         Folio: {selectedCuenta?.folio}
                       </DialogDescription>
                     </DialogHeader>
-                    
+
                     {selectedCuenta && (
                       <div className="grid gap-4 py-4">
                         <div className="space-y-1">
@@ -1975,8 +1997,8 @@ export default function MovimientosPage() {
                           <div>
                             <p className="text-xs text-muted-foreground">Cuotas Restantes</p>
                             <p className="font-medium">
-                              {selectedCuenta.montoCuota > 0 
-                                ? Math.ceil(selectedCuenta.saldoPendiente / selectedCuenta.montoCuota) 
+                              {selectedCuenta.montoCuota > 0
+                                ? Math.ceil(selectedCuenta.saldoPendiente / selectedCuenta.montoCuota)
                                 : 1}
                             </p>
                           </div>
@@ -1993,16 +2015,16 @@ export default function MovimientosPage() {
                           <div className="flex gap-2">
                             <div className="relative flex-1">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                              <Input 
-                                type="number" 
-                                className="pl-6" 
+                              <Input
+                                type="number"
+                                className="pl-6"
                                 value={paymentAmount}
                                 onChange={(e) => setPaymentAmount(e.target.value)}
                               />
                             </div>
                           </div>
-                          <Textarea 
-                            placeholder="Nota del abono (opcional)" 
+                          <Textarea
+                            placeholder="Nota del abono (opcional)"
                             value={paymentNote}
                             onChange={(e) => setPaymentNote(e.target.value)}
                             className="h-20"
@@ -2013,9 +2035,9 @@ export default function MovimientosPage() {
 
                     <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:space-x-0">
                       {selectedCuenta?.cliente?.telefono && (
-                        <Button 
-                          type="button" 
-                          variant="outline" 
+                        <Button
+                          type="button"
+                          variant="outline"
                           className="w-full sm:w-auto text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
                           onClick={handleWhatsApp}
                         >
@@ -2023,8 +2045,8 @@ export default function MovimientosPage() {
                           WhatsApp
                         </Button>
                       )}
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         className="w-full sm:w-auto"
                         onClick={handleRegisterPayment}
                         disabled={registeringPayment}
@@ -2092,19 +2114,19 @@ export default function MovimientosPage() {
                       </div>
                       <div className="col-span-2 border-t pt-2">
                         <div className="flex justify-between items-center">
-                           <span className="text-xs text-muted-foreground">Diferencia en caja</span>
-                           <span className={cn(
-                              "font-bold text-base",
-                              cierre.diferencia && cierre.diferencia < 0 ? "text-rose-600" : "text-emerald-600"
-                            )}>
-                              {cierre.diferencia !== undefined && cierre.diferencia !== null 
-                                ? currencyFormatter.format(cierre.diferencia) 
-                                : "-"}
-                            </span>
+                          <span className="text-xs text-muted-foreground">Diferencia en caja</span>
+                          <span className={cn(
+                            "font-bold text-base",
+                            cierre.diferencia && cierre.diferencia < 0 ? "text-rose-600" : "text-emerald-600"
+                          )}>
+                            {cierre.diferencia !== undefined && cierre.diferencia !== null
+                              ? currencyFormatter.format(cierre.diferencia)
+                              : "-"}
+                          </span>
                         </div>
                       </div>
                     </div>
-                    
+
                     {cierre.fechaCierre && (
                       <div className="mt-auto pt-2 text-xs text-muted-foreground text-right">
                         Cierre: {format(new Date(cierre.fechaCierre), "p", { locale: es })}

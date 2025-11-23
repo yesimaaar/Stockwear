@@ -24,6 +24,7 @@ Sistema de gestión de inventario y catálogo omnicanal con reconocimiento visua
 ```bash
 npm install -g pnpm
 pnpm install
+pnpm add jspdf jspdf-autotable
 pnpm run dev --webpack
 ```
 
