@@ -1,3 +1,0 @@
--- Migration intentionally left blank to preserve sequence numbers while avoiding
--- automatic seeding. Historical data seeding was removed per updated
--- environment requirements.

@@ -29,6 +29,7 @@ export interface Producto {
   categoriaId: number
   descripcion: string | null
   precio: number
+  precio_base?: number | null
   descuento: number
   proveedor: string | null
   imagen: string | null
