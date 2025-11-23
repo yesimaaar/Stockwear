@@ -4,10 +4,11 @@ import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Fragment, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { AdminSectionLayout } from "@/components/admin-section-layout"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   Package,
   Plus,
-  ArrowLeft,
   TriangleAlert,
   ChevronDown,
   ChevronUp,
@@ -1183,65 +1184,46 @@ export default function ProductosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="mx-auto w-full max-w-[88rem] px-3 py-3 space-y-4 sm:px-4 sm:py-4 sm:space-y-5">
-        <div className="rounded-2xl border border-border bg-card/70 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-5 sm:py-3">
-            <div className="flex items-center gap-3">
-              <Link href="/admin">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 rounded-xl border border-border bg-background/60 hover:bg-background"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </Link>
-              <div className="flex items-center gap-3">
-                <Package className="h-6 w-6 text-primary" />
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    Inventario
-                  </p>
-                  <h1 className="text-lg font-semibold text-foreground sm:text-xl">Productos y stock</h1>
-                </div>
-              </div>
-            </div>
-            <Button
-              className="rounded-xl px-4"
-              onClick={() => handleDialogOpenChange(true)}
-              type="button"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo producto
-            </Button>
-          </div>
-        </div>
+    <>
+      <AdminSectionLayout
+        title="Stock"
+        description="Gestión de productos y existencias"
+        icon={<Package className="h-5 w-5" />}
+        actions={
+          <Button
+            className="rounded-xl px-4"
+            onClick={() => handleDialogOpenChange(true)}
+            type="button"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Nuevo producto
+          </Button>
+        }
+      >
 
         {totalStockBajo > 0 && !lowStockDismissed && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                <TriangleAlert className="h-4 w-4" />
-              </span>
-              <div className="flex-1 space-y-1">
-                <p className="font-semibold">
-                  {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
-                </p>
-                <p className="text-xs text-amber-800/80">
-                  Revisa el stock de los productos en alerta para reabastecerlos cuanto antes.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLowStockDismissed(true)}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-amber-700 transition hover:bg-amber-100"
-                aria-label="Cerrar alerta de stock"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+          <Alert
+            variant="destructive"
+            className="flex items-start gap-3 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+          >
+            <TriangleAlert className="mt-0.5 h-4 w-4 !text-amber-600 dark:!text-amber-400" />
+            <div className="flex-1">
+              <AlertTitle>
+                {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
+              </AlertTitle>
+              <AlertDescription className="text-amber-800/90 dark:text-amber-300/90">
+                Revisa el stock de los productos en alerta para reabastecerlos cuanto antes.
+              </AlertDescription>
             </div>
-          </div>
+            <button
+              type="button"
+              onClick={() => setLowStockDismissed(true)}
+              className="absolute right-4 top-4 inline-flex h-6 w-6 items-center justify-center rounded-full text-amber-700 transition hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/50"
+              aria-label="Cerrar alerta de stock"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </Alert>
         )}
 
         {loading ? (
@@ -1511,7 +1493,7 @@ export default function ProductosPage() {
             )}
           </div>
         )}
-      </main>
+      </AdminSectionLayout>
       <Dialog open={editDialogOpen} onOpenChange={handleEditDialogChange}>
         <DialogContent className="max-w-[90vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -2545,6 +2527,6 @@ export default function ProductosPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }

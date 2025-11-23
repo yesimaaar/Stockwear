@@ -8,6 +8,7 @@ import {
 	Layers3,
 	Package,
 	Shirt,
+	Store,
 	Users
 } from "lucide-react";
 
@@ -19,9 +20,9 @@ export type AdminNavItem = {
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
 	{ href: "/admin", icon: Home, label: "Inicio" },
-	{ href: "/admin/almacenes", icon: Boxes, label: "Almacenes" },
+	{ href: "/admin/almacenes", icon: Store, label: "Almacenes" },
 	{ href: "/admin/categorias", icon: Layers3, label: "Categorías" },
-	{ href: "/admin/productos", icon: Package, label: "Productos y Stock" },
+	{ href: "/admin/productos", icon: Package, label: "Stock" },
 	{ href: "/admin/movimientos", icon: ArrowLeftRight, label: "Movimientos" },
 	{ href: "/admin/tallas", icon: Shirt, label: "Tallas" },
 	{ href: "/admin/usuarios", icon: Users, label: "Usuarios" },

@@ -142,6 +142,8 @@ export default function UsuariosPage() {
     defaultValues: DEFAULT_FORM_VALUES,
   })
 
+  const [currentUser, setCurrentUser] = useState<Usuario | null>(null)
+
   const fetchUsuarios = useCallback(
     async (showFullLoader: boolean) => {
       if (showFullLoader) {
@@ -151,8 +153,12 @@ export default function UsuariosPage() {
       }
 
       try {
-        const data = await AuthService.getAll()
+        const [data, user] = await Promise.all([
+          AuthService.getAll(),
+          AuthService.getCurrentUser(),
+        ])
         setUsuarios(data)
+        setCurrentUser(user)
       } catch (error) {
         console.error("Error al cargar usuarios", error)
         toast({
@@ -483,24 +489,59 @@ export default function UsuariosPage() {
                         <TableCell>{formatDate(usuario.createdAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenEditor(usuario)}
-                            >
-                              Editar
-                            </Button>
-                            <Button
-                              variant={usuario.estado === "activo" ? "outline" : "secondary"}
-                              size="sm"
-                              onClick={() => void handleToggleEstado(usuario)}
-                              disabled={updatingEstadoId === usuario.id}
-                            >
-                              {updatingEstadoId === usuario.id ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : null}
-                              {usuario.estado === "activo" ? "Desactivar" : "Activar"}
-                            </Button>
+                            {(() => {
+                              // Identify owner: earliest createdAt
+                              // We can do this globally or per render. Since users list is small, finding it here is okay,
+                              // but better to find it once. Let's rely on the sorted list or find it in the useMemo.
+                              // Actually, let's do it in the render for simplicity as we have the full list.
+                              // Wait, filtering inside map is inefficient.
+                              // Let's assume the owner is the one with the earliest createdAt in the entire 'usuarios' list.
+                              const owner = usuarios.reduce((prev, curr) =>
+                                new Date(prev.createdAt).getTime() < new Date(curr.createdAt).getTime() ? prev : curr
+                                , usuarios[0])
+
+                              const isOwner = usuario.id === owner?.id
+                              const isCurrentUserOwner = currentUser?.id === owner?.id
+                              const isMe = currentUser?.id === usuario.id
+
+                              // Logic:
+                              // - Owner row:
+                              //   - Edit: Only if I am the owner.
+                              //   - Deactivate: NEVER.
+                              // - Other rows:
+                              //   - Edit: Always (as admin).
+                              //   - Deactivate: Always (as admin).
+
+                              const showEdit = isOwner ? isCurrentUserOwner : true
+                              const showDeactivate = !isOwner
+
+                              return (
+                                <>
+                                  {showEdit && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleOpenEditor(usuario)}
+                                    >
+                                      Editar
+                                    </Button>
+                                  )}
+                                  {showDeactivate && (
+                                    <Button
+                                      variant={usuario.estado === "activo" ? "outline" : "secondary"}
+                                      size="sm"
+                                      onClick={() => void handleToggleEstado(usuario)}
+                                      disabled={updatingEstadoId === usuario.id}
+                                    >
+                                      {updatingEstadoId === usuario.id ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      ) : null}
+                                      {usuario.estado === "activo" ? "Desactivar" : "Activar"}
+                                    </Button>
+                                  )}
+                                </>
+                              )
+                            })()}
                           </div>
                         </TableCell>
                       </TableRow>

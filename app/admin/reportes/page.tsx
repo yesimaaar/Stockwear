@@ -19,6 +19,7 @@ import {
   CalendarDays,
   Loader2,
   Search,
+  Rocket,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentTiendaId } from "@/lib/services/tenant-service"
@@ -151,6 +152,7 @@ interface EmployeeSalesPoint {
   empleadoId: string
   nombre: string
   total: number
+  cantidad: number
 }
 
 interface SalesReportRow {
@@ -381,6 +383,8 @@ export default function ReportesPage() {
   })
   const [exportingReport, setExportingReport] = useState(false)
   const [lowStockCount, setLowStockCount] = useState(0)
+  const [expensesMetrics, setExpensesMetrics] = useState({ total: 0, count: 0, average: 0 })
+  const [expensesChartData, setExpensesChartData] = useState<Array<{ date: string; value: number }>>([])
 
   const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null)
   const [topConsulted, setTopConsulted] = useState<TopConsultedProduct[]>([])
@@ -609,18 +613,19 @@ export default function ReportesPage() {
         })
         const yearlySalesValue = yearlySales.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
 
-        const employeeTotals: Record<GoalPeriod, Record<string, number>> = {
+        const employeeTotals: Record<GoalPeriod, Record<string, { total: number; cantidad: number }>> = {
           daily: {},
           weekly: {},
           monthly: {},
           yearly: {},
         }
 
-        const sumEmployeeSale = (period: GoalPeriod, empleadoId: string, amount: number) => {
+        const sumEmployeeSale = (period: GoalPeriod, empleadoId: string, amount: number, quantity: number) => {
           if (!employeeTotals[period][empleadoId]) {
-            employeeTotals[period][empleadoId] = 0
+            employeeTotals[period][empleadoId] = { total: 0, cantidad: 0 }
           }
-          employeeTotals[period][empleadoId] += amount
+          employeeTotals[period][empleadoId].total += amount
+          employeeTotals[period][empleadoId].cantidad += quantity
         }
 
         ventas.forEach((venta) => {
@@ -629,10 +634,10 @@ export default function ReportesPage() {
           if (!empleado || empleado.rol !== "empleado") return
           const saleDate = new Date(venta.createdAt)
           const amount = (venta.costoUnitario || 0) * venta.cantidad
-          if (saleDate >= today) sumEmployeeSale("daily", venta.usuarioId, amount)
-          if (saleDate >= weekStartDate) sumEmployeeSale("weekly", venta.usuarioId, amount)
-          if (saleDate >= monthStartDate) sumEmployeeSale("monthly", venta.usuarioId, amount)
-          if (saleDate >= yearStartDate) sumEmployeeSale("yearly", venta.usuarioId, amount)
+          if (saleDate >= today) sumEmployeeSale("daily", venta.usuarioId, amount, venta.cantidad)
+          if (saleDate >= weekStartDate) sumEmployeeSale("weekly", venta.usuarioId, amount, venta.cantidad)
+          if (saleDate >= monthStartDate) sumEmployeeSale("monthly", venta.usuarioId, amount, venta.cantidad)
+          if (saleDate >= yearStartDate) sumEmployeeSale("yearly", venta.usuarioId, amount, venta.cantidad)
         })
         const activeUsers = usuarios.filter((u) => (u.estado ?? "activo") === "activo")
         const usersCurrentMonth = usuarios.filter((u) => {
@@ -678,6 +683,33 @@ export default function ReportesPage() {
         })
 
         setAllSales(ventas)
+
+        // Expenses Logic
+        const expenses = historial.filter((item) => item.tipo === "entrada")
+        const expensesTotal = expenses.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+        const expensesCount = expenses.length
+        const expensesAverage = expensesCount > 0 ? expensesTotal / expensesCount : 0
+
+        setExpensesMetrics({
+          total: expensesTotal,
+          count: expensesCount,
+          average: expensesAverage,
+        })
+
+        // Group expenses by date for chart
+        const expensesByDate = expenses.reduce<Record<string, number>>((acc, item) => {
+          const dateKey = new Date(item.createdAt).toISOString().split("T")[0]
+          const amount = (item.costoUnitario || 0) * item.cantidad
+          acc[dateKey] = (acc[dateKey] || 0) + amount
+          return acc
+        }, {})
+
+        const expensesChartPayload = Object.entries(expensesByDate)
+          .map(([date, value]) => ({ date, value }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .slice(-30) // Last 30 days
+
+        setExpensesChartData(expensesChartPayload)
 
 
 
@@ -738,10 +770,11 @@ export default function ReportesPage() {
         const employeeSalesPayload: Record<GoalPeriod, EmployeeSalesPoint[]> = GOAL_ORDER.reduce(
           (acc, period) => {
             const entries = Object.entries(employeeTotals[period])
-              .map(([empleadoId, total]) => ({
+              .map(([empleadoId, data]) => ({
                 empleadoId,
                 nombre: usuariosById[empleadoId]?.nombre ?? "Empleado",
-                total,
+                total: data.total,
+                cantidad: data.cantidad,
               }))
               .sort((a, b) => b.total - a.total)
               .slice(0, 6)
@@ -1410,9 +1443,10 @@ export default function ReportesPage() {
       )}
 
       <Tabs defaultValue="general" className="space-y-4">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="empleado">Empleado</TabsTrigger>
+          <TabsTrigger value="gastos">Gastos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
@@ -1420,6 +1454,7 @@ export default function ReportesPage() {
             {metrics.map((metric) => {
               const TrendIcon = metric.trend === "up" ? TrendingUp : metric.trend === "down" ? TrendingDown : null
               const trendLabel =
+
                 metric.trend === "up"
                   ? "Tendencia al alza"
                   : metric.trend === "down"
@@ -1728,46 +1763,195 @@ export default function ReportesPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="empleado">
+        <TabsContent value="empleado" className="space-y-4">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="space-y-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <CardDescription className="text-sm text-muted-foreground">Ventas por empleado</CardDescription>
+                    <CardTitle>Impacto del equipo</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Visualiza las ventas acumuladas por cada colaborador según el periodo seleccionado.
+                    </p>
+                  </div>
+                  <div className="w-full max-w-[180px] space-y-2">
+                    <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Periodo
+                    </Label>
+                    <Select value={selectedEmployeePeriod} onValueChange={(value) => setSelectedEmployeePeriod(value as GoalPeriod)}>
+                      <SelectTrigger className="bg-background/60">
+                        <SelectValue placeholder="Selecciona periodo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GOAL_ORDER.map((period) => (
+                          <SelectItem key={`employee-${period}`} value={period}>
+                            {GOAL_METADATA[period].title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {employeeChartHasData ? (
+                  <ChartContainer
+                    config={EMPLOYEE_CHART_CONFIG}
+                    className={`h-[320px] w-full ${employeeChartData.length < 5 ? "max-w-[600px] mx-auto" : ""}`}
+                  >
+                    <BarChart data={employeeChartData} barCategoryGap="20%">
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={12}
+                        className="text-xs"
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => currencyFormatter.format(value as number).replace(/\u00a0/g, " ")}
+                        className="text-xs"
+                      />
+                      <ChartTooltip
+                        content={({ content, ...contentProps }) => (
+                          <ChartTooltipContent
+                            {...contentProps}
+                            labelFormatter={(_, items = []) => {
+                              const entry = items[0]?.payload as { nombre?: string } | undefined
+                              return entry?.nombre ?? employeeChartMetadata.title
+                            }}
+                            formatter={(value) => currencyFormatter.format(value as number)}
+                          />
+                        )}
+                      />
+                      <Bar dataKey="total" radius={[8, 8, 4, 4]} fill="var(--color-ventas)" maxBarSize={50} />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <div className="flex h-[320px] flex-col items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+                    Aún no hay ventas registradas para este periodo.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle>Detalle de ventas por empleado</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="w-[300px]">Empleado</TableHead>
+                        <TableHead className="text-right">Total ventas</TableHead>
+                        <TableHead className="text-right">Total de productos vendidos</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {employeeChartData.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                            Sin datos para mostrar
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        employeeChartData.map((item, index) => {
+                          const isStarEmployee = index === 0 && item.total > 0
+
+                          return (
+                            <TableRow key={item.empleadoId}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{item.nombre}</span>
+                                  {isStarEmployee && (
+                                    <Badge variant="secondary" className="gap-1 bg-amber-100 text-amber-700 hover:bg-amber-100/80 dark:bg-amber-900/30 dark:text-amber-400">
+                                      <Rocket className="h-3 w-3" />
+                                      Empleado estrella
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-medium">{currencyFormatter.format(item.total)}</TableCell>
+                              <TableCell className="text-right">{item.cantidad}</TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="gastos" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Gastos</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{currencyFormatter.format(expensesMetrics.total)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Costo total de entradas de inventario
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Entradas Registradas</CardTitle>
+                <Boxes className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{expensesMetrics.count}</div>
+                <p className="text-xs text-muted-foreground">
+                  Número de movimientos de entrada
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Costo Promedio</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{currencyFormatter.format(expensesMetrics.average)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Promedio por entrada
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card className="border-none shadow-sm">
-            <CardHeader className="space-y-4">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardDescription className="text-sm text-muted-foreground">Ventas por empleado</CardDescription>
-                  <CardTitle>Impacto del equipo</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Visualiza las ventas acumuladas por cada colaborador según el periodo seleccionado.
-                  </p>
-                </div>
-                <div className="w-full max-w-[180px] space-y-2">
-                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Periodo
-                  </Label>
-                  <Select value={selectedEmployeePeriod} onValueChange={(value) => setSelectedEmployeePeriod(value as GoalPeriod)}>
-                    <SelectTrigger className="bg-background/60">
-                      <SelectValue placeholder="Selecciona periodo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GOAL_ORDER.map((period) => (
-                        <SelectItem key={`employee-${period}`} value={period}>
-                          {GOAL_METADATA[period].title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+            <CardHeader>
+              <CardTitle>Historial de Gastos</CardTitle>
+              <CardDescription>
+                Visualiza los gastos acumulados por fecha basados en las entradas de inventario.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {employeeChartHasData ? (
-                <ChartContainer config={EMPLOYEE_CHART_CONFIG} className="h-[320px] w-full">
-                  <BarChart data={employeeChartData} barCategoryGap="20%">
+              {expensesChartData.length > 0 ? (
+                <ChartContainer config={{ gastos: { label: "Gastos", color: "hsl(var(--destructive))" } }} className="h-[300px] w-full">
+                  <BarChart data={expensesChartData}>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis
-                      dataKey="label"
+                      dataKey="date"
                       tickLine={false}
                       axisLine={false}
-                      tickMargin={12}
+                      tickMargin={8}
+                      tickFormatter={(value) => {
+                        const date = new Date(value as string)
+                        return date.toLocaleDateString("es-CO", { day: "numeric", month: "short" })
+                      }}
                       className="text-xs"
                     />
                     <YAxis
@@ -1781,30 +1965,29 @@ export default function ReportesPage() {
                       content={({ content, ...contentProps }) => (
                         <ChartTooltipContent
                           {...contentProps}
-                          labelFormatter={(_, items = []) => {
-                            const entry = items[0]?.payload as { nombre?: string } | undefined
-                            return entry?.nombre ?? employeeChartMetadata.title
+                          labelFormatter={(label) => {
+                            return new Date(label as string).toLocaleDateString("es-CO", {
+                              weekday: "long",
+                              day: "numeric",
+                              month: "long",
+                            })
                           }}
                           formatter={(value) => currencyFormatter.format(value as number)}
                         />
                       )}
                     />
-                    <Bar dataKey="total" radius={[8, 8, 4, 4]} fill="var(--color-ventas)" />
+                    <Bar dataKey="value" fill="var(--color-gastos)" radius={[4, 4, 0, 0]} maxBarSize={50} />
                   </BarChart>
                 </ChartContainer>
               ) : (
-                <div className="flex h-[320px] flex-col items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
-                  Aún no hay ventas registradas para este periodo.
+                <div className="flex h-[300px] items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+                  No hay registros de gastos para el periodo seleccionado.
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-
-
-
     </div>
   )
 }
