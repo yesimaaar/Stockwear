@@ -92,6 +92,7 @@ const getDefaultNuevoProducto = () => ({
   nombre: "",
   categoriaId: "",
   precio: "",
+  precio_base: "",
   descuento: "0",
   proveedor: "",
   stockMinimo: "",
@@ -239,6 +240,7 @@ export default function ProductosPage() {
     nombre: producto.nombre,
     categoriaId: String(producto.categoriaId),
     precio: String(producto.precio),
+    precio_base: String(producto.precio_base ?? 0),
     descuento: String(producto.descuento ?? 0),
     proveedor: producto.proveedor ?? "",
     stockMinimo: String(producto.stockMinimo),
@@ -325,6 +327,7 @@ export default function ProductosPage() {
       categoriaId,
       descripcion: form.descripcion.trim() || null,
       precio,
+      precio_base: Number(form.precio_base) || 0,
       descuento: Number.isNaN(descuento) ? 0 : descuento,
       proveedor: form.proveedor.trim() || null,
       imagen: form.imagen.trim() || null,
@@ -1625,6 +1628,17 @@ export default function ProductosPage() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="editar-precio-base">Costo Base (COP)</Label>
+                      <Input
+                        id="editar-precio-base"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.precio_base}
+                        onChange={(event) => updateEditFormField("precio_base", event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="editar-descuento">Descuento (%)</Label>
                       <Input
                         id="editar-descuento"
@@ -2212,6 +2226,18 @@ export default function ProductosPage() {
                       value={nuevoProducto.precio}
                       onChange={(event) => setNuevoProducto((prev) => ({ ...prev, precio: event.target.value }))}
                       required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-precio-base">Costo Base (COP)</Label>
+                    <Input
+                      id="nuevo-precio-base"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="300000"
+                      value={nuevoProducto.precio_base}
+                      onChange={(event) => setNuevoProducto((prev) => ({ ...prev, precio_base: event.target.value }))}
                     />
                   </div>
                   <div className="space-y-2">

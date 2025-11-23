@@ -42,6 +42,7 @@ export type ProductoRow = {
   categoriaId: number
   descripcion: string | null
   precio: number
+  precio_base?: number | null
   descuento: number
   proveedor: string | null
   imagen: string | null
@@ -88,6 +89,7 @@ export const PRODUCTO_SELECT = `
   descripcion,
   categoriaId,
   precio,
+  precio_base,
   descuento,
   proveedor,
   imagen,

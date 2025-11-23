@@ -31,6 +31,7 @@ export default function NuevoProductoPage() {
     nombre: "",
     categoriaId: "",
     precio: "",
+    precio_base: "",
     descuento: "0",
     proveedor: "",
     stockMinimo: "",
@@ -118,6 +119,7 @@ export default function NuevoProductoPage() {
         categoriaId,
         descripcion: formData.descripcion.trim() || null,
         precio,
+        precio_base: Number(formData.precio_base) || 0,
         descuento: Number.isNaN(descuento) ? 0 : descuento,
         proveedor: formData.proveedor.trim() || null,
         imagen: formData.imagen.trim() || null,
@@ -173,9 +175,8 @@ export default function NuevoProductoPage() {
       if (referenceSuccess > 0) {
         toast({
           title: referenceSuccess === 1 ? "Imagen de referencia registrada" : "Imágenes de referencia registradas",
-          description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${
-            referenceSuccess > 1 ? "s" : ""
-          } correctamente`,
+          description: `${referenceSuccess} referencia${referenceSuccess > 1 ? "s" : ""} procesada${referenceSuccess > 1 ? "s" : ""
+            } correctamente`,
         })
       }
 
@@ -353,6 +354,16 @@ export default function NuevoProductoPage() {
                       value={formData.precio}
                       onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
                       required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="precio_base">Costo Base (COP)</Label>
+                    <Input
+                      id="precio_base"
+                      type="number"
+                      placeholder="300000"
+                      value={formData.precio_base}
+                      onChange={(e) => setFormData({ ...formData, precio_base: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
