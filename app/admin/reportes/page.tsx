@@ -3,8 +3,7 @@
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import * as LucideIcons from "lucide-react"
-const {
+import {
   DollarSign,
   ShoppingCart,
   Users,
@@ -20,7 +19,7 @@ const {
   CalendarDays,
   Loader2,
   Search,
-} = LucideIcons
+} from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentTiendaId } from "@/lib/services/tenant-service"
 import { Badge } from "@/components/ui/badge"

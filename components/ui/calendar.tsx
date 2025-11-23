@@ -1,13 +1,11 @@
 'use client'
 
 import * as React from 'react'
-import * as LucideIcons from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { DayButton, DayPicker, getDefaultClassNames } from 'react-day-picker'
 
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
-
-const { ChevronDown, ChevronLeft, ChevronRight } = LucideIcons
 
 function Calendar({
   className,

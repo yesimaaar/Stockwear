@@ -3,8 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import * as LucideIcons from "lucide-react"
-const { ShoppingCart, Search, Trash2, Receipt, Package, X, ChevronDown, Plus, ChevronRight } = LucideIcons
+import {
+  ShoppingCart,
+  Search,
+  Trash2,
+  Receipt,
+  Package,
+  X,
+  ChevronDown,
+  Plus,
+  ChevronRight,
+  Minus,
+  Banknote,
+  ArrowLeftRight,
+  Settings2,
+  User,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -19,8 +33,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { CreditCard, Banknote, ArrowLeftRight } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -29,7 +41,8 @@ import { ProductoService, type ProductoConStock } from "@/lib/services/producto-
 import { type VentaConDetalles, VentaService } from "@/lib/services/venta-service"
 import { AuthService } from "@/lib/services/auth-service"
 import { CajaService } from "@/lib/services/caja-service"
-import type { Usuario, MetodoPago, CajaSesion } from "@/lib/types"
+import { ClienteService } from "@/lib/services/cliente-service"
+import type { Usuario, MetodoPago, CajaSesion, Cliente } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED } from "@/lib/events"
 
@@ -125,8 +138,21 @@ export function SalesWorkspace({
   const [selectedMetodoPagoId, setSelectedMetodoPagoId] = useState<string | null>(null)
   const [sesionActual, setSesionActual] = useState<CajaSesion | null>(null)
 
+  // Client State
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [selectedClienteId, setSelectedClienteId] = useState<string | null>(null)
+  const [clienteSearch, setClienteSearch] = useState("")
+
+  const [loadingClientes, setLoadingClientes] = useState(false)
+
+  // Credit Details State
+  const [numeroCuotas, setNumeroCuotas] = useState<number | "">("")
+  const [interesPorcentaje, setInteresPorcentaje] = useState<number | "">("")
+  const [frecuenciaPago, setFrecuenciaPago] = useState<'semanal' | 'mensual'>('mensual')
+
   // Customer Data Form State
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [isConfigOpen, setIsConfigOpen] = useState(true) // Default open for quick access
   const [formData, setFormData] = useState({
     name: "",
     identification: "",
@@ -249,6 +275,27 @@ export function SalesWorkspace({
       window.removeEventListener("focus", handleFocus)
     }
   }, [])
+
+  // Load Clients on search
+  useEffect(() => {
+    const searchClientes = async () => {
+      setLoadingClientes(true)
+      try {
+        const results = await ClienteService.search(clienteSearch)
+        setClientes(results)
+      } catch (error) {
+        console.error("Error searching clients", error)
+      } finally {
+        setLoadingClientes(false)
+      }
+    }
+
+    const timeoutId = setTimeout(() => {
+      void searchClientes()
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [clienteSearch])
 
   const selectedEmpleado = useMemo(
     () => empleados.find((empleado) => empleado.id === selectedEmpleadoId) ?? null,
@@ -424,39 +471,117 @@ export function SalesWorkspace({
   const renderMetodoPagoSelector = (id: string) => {
     const opciones: MetodoPago[] = metodosPago.length > 0 ? metodosPago : [
       { id: 1, nombre: "Efectivo", tipo: "efectivo", tiendaId: 0, estado: "activo" },
-      { id: 2, nombre: "Transferencia", tipo: "banco", tiendaId: 0, estado: "activo" },
-      { id: 3, nombre: "Tarjeta", tipo: "banco", tiendaId: 0, estado: "activo" }
+      { id: 2, nombre: "Transferencia", tipo: "banco", tiendaId: 0, estado: "activo" }
     ]
+
+    // Filter out "Tarjeta" if it comes from DB and add "Cuotas"
+    const displayOptions = opciones.filter(m => !m.nombre.toLowerCase().includes("tarjeta"))
+
+    // Add virtual "Cuotas" option
+    const cuotasOption = { id: 'cuotas', nombre: "Cuotas", tipo: "otro", tiendaId: 0, estado: "activo" }
+
+    const totalConInteres = useMemo(() => {
+      if (selectedMetodoPagoId !== 'cuotas') return total
+      const interes = typeof interesPorcentaje === 'number' ? Math.max(0, interesPorcentaje) : 0
+      return total * (1 + interes / 100)
+    }, [total, selectedMetodoPagoId, interesPorcentaje])
+
+    const montoPorCuota = useMemo(() => {
+      if (selectedMetodoPagoId !== 'cuotas') return 0
+      const cuotas = typeof numeroCuotas === 'number' ? Math.max(1, numeroCuotas) : 1
+      return totalConInteres / cuotas
+    }, [totalConInteres, numeroCuotas, selectedMetodoPagoId])
 
     return (
       <div className="space-y-2">
         <Label htmlFor={id} className="text-sm font-medium text-foreground">
           Método de Pago
         </Label>
-        <RadioGroup
+        <Select
           value={selectedMetodoPagoId ?? ""}
           onValueChange={(value) => setSelectedMetodoPagoId(value)}
-          className="grid grid-cols-3 gap-2"
         >
-          {opciones.map((metodo) => {
-            let Icon = Banknote
-            if (metodo.nombre.toLowerCase().includes("tarjeta")) Icon = CreditCard
-            else if (metodo.nombre.toLowerCase().includes("transferencia")) Icon = ArrowLeftRight
+          <SelectTrigger id={id}>
+            <SelectValue placeholder="Seleccionar método" />
+          </SelectTrigger>
+          <SelectContent>
+            {[...displayOptions, cuotasOption].map((metodo) => (
+              <SelectItem key={metodo.id} value={String(metodo.id)}>
+                <div className="flex items-center gap-2">
+                  {metodo.nombre === "Cuotas" ? (
+                    <Receipt className="h-4 w-4" />
+                  ) : metodo.nombre.toLowerCase().includes("transferencia") ? (
+                    <ArrowLeftRight className="h-4 w-4" />
+                  ) : (
+                    <Banknote className="h-4 w-4" />
+                  )}
+                  <span>{metodo.nombre}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-            return (
-              <div key={metodo.id}>
-                <RadioGroupItem value={String(metodo.id)} id={`${id}-${metodo.id}`} className="peer sr-only" />
-                <Label
-                  htmlFor={`${id}-${metodo.id}`}
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-2 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
-                >
-                  <Icon className="mb-2 h-5 w-5" />
-                  <span className="text-xs font-medium">{metodo.nombre}</span>
-                </Label>
+        {selectedMetodoPagoId === 'cuotas' && (
+          <div className="mt-3 space-y-3 rounded-md border bg-muted/30 p-3 animate-in slide-in-from-top-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="cuotas-input" className="text-xs">N° Cuotas</Label>
+                <Input
+                  id="cuotas-input"
+                  type="number"
+                  min={1}
+                  placeholder="Ej. 3"
+                  value={numeroCuotas}
+                  onChange={(e) => setNumeroCuotas(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="h-8 bg-background"
+                />
               </div>
-            )
-          })}
-        </RadioGroup>
+              <div className="space-y-1">
+                <Label htmlFor="interes-input" className="text-xs">Interés %</Label>
+                <div className="relative">
+                  <Input
+                    id="interes-input"
+                    type="number"
+                    min={0}
+                    placeholder="Ej. 10"
+                    value={interesPorcentaje}
+                    onChange={(e) => setInteresPorcentaje(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="h-8 bg-background pr-6"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                </div>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label htmlFor="frecuencia-input" className="text-xs">Frecuencia de Pago</Label>
+                <Select value={frecuenciaPago} onValueChange={(val: 'semanal' | 'mensual') => setFrecuenciaPago(val)}>
+                  <SelectTrigger id="frecuencia-input" className="h-8 bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="semanal">Semanal</SelectItem>
+                    <SelectItem value="mensual">Mensual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1 border-t pt-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Original:</span>
+                <span>{priceFormatter.format(total)}</span>
+              </div>
+              <div className="flex justify-between font-medium text-foreground">
+                <span>Total con Interés:</span>
+                <span>{priceFormatter.format(totalConInteres)}</span>
+              </div>
+              <div className="flex justify-between text-primary">
+                <span>Monto por Cuota:</span>
+                <span>{priceFormatter.format(montoPorCuota)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!sesionActual && (
           <p className="text-xs text-amber-600 font-medium">
             ⚠️ No tienes una caja abierta.
@@ -465,6 +590,46 @@ export function SalesWorkspace({
       </div>
     )
   }
+
+
+  const renderClienteSelector = (id: string) => (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-sm font-medium text-foreground">
+        Cliente
+      </Label>
+      <div className="relative">
+        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar cliente..."
+          value={clienteSearch}
+          onChange={(e) => setClienteSearch(e.target.value)}
+          className="pl-8"
+        />
+      </div>
+      <Select
+        value={selectedClienteId ?? "anonimo"}
+        onValueChange={(value) => setSelectedClienteId(value === "anonimo" ? null : value)}
+      >
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Seleccionar cliente" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="anonimo">Cliente General</SelectItem>
+          {clientes.map((cliente) => (
+            <SelectItem key={cliente.id} value={String(cliente.id)}>
+              {cliente.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {selectedClienteId && (
+        <p className="text-xs text-muted-foreground">
+          Saldo actual: ${clientes.find(c => String(c.id) === selectedClienteId)?.saldoActual.toLocaleString() ?? 0}
+        </p>
+      )}
+    </div>
+  )
+
 
 
   const registrarVenta = async () => {
@@ -495,12 +660,75 @@ export function SalesWorkspace({
       return
     }
 
+    const isCredito = selectedMetodoPagoId === 'cuotas'
+    let clienteIdParaVenta = selectedClienteId && selectedClienteId !== 'anonimo' ? Number(selectedClienteId) : null
+
+    // Si es crédito y no hay cliente seleccionado, intentamos usar los datos del formulario
+    if (isCredito && !clienteIdParaVenta) {
+      if (formData.name && formData.identification) {
+        try {
+          // Intentar crear el cliente al vuelo
+          const nuevoCliente = await ClienteService.create({
+            nombre: formData.name,
+            documento: formData.identification,
+            telefono: formData.phone,
+            direccion: formData.address,
+          })
+
+          if (nuevoCliente) {
+            clienteIdParaVenta = nuevoCliente.id
+            // Actualizar estado local para que se refleje en la UI
+            setClientes((prev) => [...prev, nuevoCliente])
+            setSelectedClienteId(String(nuevoCliente.id))
+            toast({
+              title: "Cliente registrado",
+              description: `Se creó el cliente ${nuevoCliente.nombre} automáticamente.`,
+            })
+          } else {
+            toast({
+              title: "Error al crear cliente",
+              description: "No se pudo registrar el cliente con los datos proporcionados.",
+              variant: "destructive",
+            })
+            return
+          }
+        } catch (error) {
+          console.error("Error creando cliente desde venta", error)
+          toast({
+            title: "Error al crear cliente",
+            description: "Verifica que el documento no esté ya registrado.",
+            variant: "destructive",
+          })
+          return
+        }
+      } else {
+        toast({
+          title: "Cliente requerido",
+          description: "Para ventas a crédito debes seleccionar un cliente o llenar los Datos de Compra (Nombre e ID).",
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
+    const interesValido = typeof interesPorcentaje === 'number' ? interesPorcentaje : 0
+    const cuotasValidas = typeof numeroCuotas === 'number' ? Math.max(1, numeroCuotas) : 1
+
+    const totalConInteres = isCredito ? total * (1 + Math.max(0, interesValido) / 100) : total
+    const montoCuotaFinal = isCredito ? totalConInteres / cuotasValidas : 0
+
     setRegistrando(true)
     try {
       const venta = await VentaService.create({
         usuarioId: selectedEmpleadoId,
-        metodoPagoId: selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined,
+        metodoPagoId: isCredito ? undefined : (selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined),
         cajaSesionId: sesionActual?.id,
+        clienteId: clienteIdParaVenta,
+        tipoVenta: isCredito ? 'credito' : 'contado',
+        numeroCuotas: isCredito ? cuotasValidas : undefined,
+        interesPorcentaje: isCredito ? interesValido : undefined,
+        montoCuota: isCredito ? montoCuotaFinal : undefined,
+        frecuenciaPago: isCredito ? frecuenciaPago : undefined,
         items: lineas.map((linea) => ({
           stockId: linea.stockId,
           cantidad: linea.cantidad,
@@ -625,7 +853,7 @@ export function SalesWorkspace({
                           onClick={() => actualizarCantidad(linea.stockId, linea.cantidad - 1)}
                           disabled={linea.cantidad <= 1}
                         >
-                          <LucideIcons.Minus className="h-3 w-3" />
+                          <Minus className="h-3 w-3" />
                         </Button>
                         <span className="w-8 text-center font-medium">{linea.cantidad}</span>
                         <Button
@@ -635,7 +863,7 @@ export function SalesWorkspace({
                           onClick={() => actualizarCantidad(linea.stockId, linea.cantidad + 1)}
                           disabled={linea.cantidad >= linea.disponible}
                         >
-                          <LucideIcons.Plus className="h-3 w-3" />
+                          <Plus className="h-3 w-3" />
                         </Button>
                       </div>
                       <p className="mt-1 text-center text-[10px] text-muted-foreground">Max: {linea.disponible}</p>
@@ -682,7 +910,12 @@ export function SalesWorkspace({
           <div className="flex flex-col gap-2 border-t pt-4 text-right">
             <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} unidades</p>
             <p className="text-lg font-semibold text-foreground">
-              Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
+              Total a pagar: ${
+                (selectedMetodoPagoId === 'cuotas'
+                  ? (total * (1 + (typeof interesPorcentaje === 'number' ? Math.max(0, interesPorcentaje) : 0) / 100))
+                  : total
+                ).toLocaleString("es-CO", { minimumFractionDigits: 0 })
+              }
             </p>
           </div>
         ) : null}
@@ -740,91 +973,120 @@ export function SalesWorkspace({
                     </SheetDescription>
                   </SheetHeader>
                   <div className="flex-1 overflow-hidden px-6 py-4">
-                    {lineas.length ? (
-                      <ScrollArea className="h-full pr-3">
-                        {renderCartContent({
+                    <ScrollArea className="h-full pr-3">
+                      {lineas.length ? (
+                        renderCartContent({
                           emptyMessageClass:
                             "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
                           showTotals: false,
-                        })}
-                      </ScrollArea>
-                    ) : (
-                      renderCartContent({
-                        emptyMessageClass:
-                          "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
-                        showTotals: false,
-                      })
-                    )}
+                        })
+                      ) : (
+                        renderCartContent({
+                          emptyMessageClass:
+                            "rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground",
+                          showTotals: false,
+                        })
+                      )}
+
+                      <div className="mt-6 space-y-4 border-t pt-6">
+                        {/* Configuration Section */}
+                        <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                          <button
+                            onClick={() => setIsConfigOpen(!isConfigOpen)}
+                            className="flex w-full items-center justify-between p-4 text-sm font-medium hover:bg-muted/50 transition-colors"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Settings2 className="h-4 w-4" />
+                              Configuración de Venta
+                            </span>
+                            <ChevronRight
+                              className={`h-4 w-4 transition-transform duration-200 ${isConfigOpen ? "rotate-90" : ""}`}
+                            />
+                          </button>
+                          {isConfigOpen && (
+                            <div className="border-t p-4 animate-in slide-in-from-top-2 duration-200">
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                {renderEmpleadoSelector("venta-empleado-sheet")}
+                                {renderClienteSelector("venta-cliente-sheet")}
+                                <div className="sm:col-span-2">
+                                  {renderMetodoPagoSelector("venta-metodo-sheet")}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Customer Data Form */}
+                        <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                          <button
+                            onClick={() => setIsFormOpen(!isFormOpen)}
+                            className="flex w-full items-center justify-between p-4 text-sm font-medium hover:bg-muted/50 transition-colors"
+                          >
+                            <span className="flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              Datos de compra (Opcional)
+                            </span>
+                            <ChevronRight
+                              className={`h-4 w-4 transition-transform duration-200 ${isFormOpen ? "rotate-90" : ""}`}
+                            />
+                          </button>
+                          {isFormOpen && (
+                            <div className="border-t p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+                              <div className="space-y-1">
+                                <Label htmlFor="name" className="text-xs">Nombre completo</Label>
+                                <Input
+                                  id="name"
+                                  name="name"
+                                  value={formData.name}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: Juan Pérez"
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="identification" className="text-xs">Identificación (CC/NIT)</Label>
+                                <Input
+                                  id="identification"
+                                  name="identification"
+                                  value={formData.identification}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: 123456789"
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="phone" className="text-xs">Teléfono de contacto</Label>
+                                <Input
+                                  id="phone"
+                                  name="phone"
+                                  value={formData.phone}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: 3001234567"
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="address" className="text-xs">Dirección de envío</Label>
+                                <Input
+                                  id="address"
+                                  name="address"
+                                  value={formData.address}
+                                  onChange={handleInputChange}
+                                  placeholder="Ej: Calle 123 # 45-67"
+                                  className="h-8"
+                                />
+                              </div>
+                              <p className="text-[10px] text-muted-foreground italic">
+                                * Estos datos son informativos y no se guardarán en la base de datos por ahora.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </ScrollArea>
                   </div>
                   <SheetFooter className="border-t px-6 py-5">
-                    <div className="flex w-full flex-col gap-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        {renderEmpleadoSelector("venta-empleado-sheet")}
-                        {renderMetodoPagoSelector("venta-metodo-sheet")}
-                      </div>
-
-                      <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-                        <button
-                          onClick={() => setIsFormOpen(!isFormOpen)}
-                          className="flex w-full items-center justify-between p-4 text-sm font-medium hover:bg-muted/50 transition-colors"
-                        >
-                          <span>Datos de compra</span>
-                          <ChevronRight
-                            className={`h-4 w-4 transition-transform duration-200 ${isFormOpen ? "rotate-90" : ""}`}
-                          />
-                        </button>
-                        {isFormOpen && (
-                          <div className="border-t p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
-                            <div className="space-y-1">
-                              <Label htmlFor="name" className="text-xs">Nombre completo</Label>
-                              <Input
-                                id="name"
-                                name="name"
-                                value={formData.name}
-                                onChange={handleInputChange}
-                                placeholder="Ej: Juan Pérez"
-                                className="h-8"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="identification" className="text-xs">Identificación (CC/NIT)</Label>
-                              <Input
-                                id="identification"
-                                name="identification"
-                                value={formData.identification}
-                                onChange={handleInputChange}
-                                placeholder="Ej: 123456789"
-                                className="h-8"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="phone" className="text-xs">Teléfono de contacto</Label>
-                              <Input
-                                id="phone"
-                                name="phone"
-                                value={formData.phone}
-                                onChange={handleInputChange}
-                                placeholder="Ej: 3001234567"
-                                className="h-8"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="address" className="text-xs">Dirección de envío</Label>
-                              <Input
-                                id="address"
-                                name="address"
-                                value={formData.address}
-                                onChange={handleInputChange}
-                                placeholder="Ej: Calle 123 # 45-67"
-                                className="h-8"
-                              />
-                            </div>
-                            <p className="text-[10px] text-muted-foreground italic">
-                              * Estos datos son informativos y no se guardarán en la base de datos por ahora.
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                    <div className="w-full space-y-4">
                       <div className="space-y-1 text-right">
                         <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
                         <p className="text-lg font-semibold text-foreground">
@@ -962,6 +1224,7 @@ export function SalesWorkspace({
           {renderCartContent()}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {renderEmpleadoSelector("venta-empleado-card")}
+            {renderClienteSelector("venta-cliente-card")}
             {renderMetodoPagoSelector("venta-metodo-card")}
           </div>
         </CardContent>

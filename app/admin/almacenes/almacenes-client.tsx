@@ -5,7 +5,7 @@ import dynamic from "next/dynamic"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import * as LucideIcons from "lucide-react"
+import { Boxes, Edit, MapPin, Plus, Trash2, Warehouse } from "lucide-react"
 
 import { AdminSectionLayout } from "@/components/admin-section-layout"
 import { Badge } from "@/components/ui/badge"
@@ -73,7 +73,7 @@ const WarehouseMap = dynamic<WarehouseMapProps>(() => import("./warehouse-map").
 	)
 })
 
-const { Boxes, Edit, MapPin, Plus, Trash2, Warehouse } = LucideIcons
+
 
 const ESTADO_VARIANT: Record<string, "default" | "secondary"> = {
 	activo: "default",

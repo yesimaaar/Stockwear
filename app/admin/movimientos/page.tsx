@@ -1,26 +1,26 @@
 "use client"
 
+import { useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import * as LucideIcons from "lucide-react"
-const {
-  ArrowLeftRight,
+import {
   Wallet,
   TrendingUp,
   TrendingDown,
-  Calendar: CalendarIcon,
+  Calendar as CalendarIcon,
   Search,
   Filter,
-  Plus,
   Download,
   Store,
-} = LucideIcons
+  Receipt,
+  MessageCircle,
+} from "lucide-react"
 
 import { AdminSectionLayout } from "@/components/admin-section-layout"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Form,
   FormControl,
@@ -48,7 +48,7 @@ import { getCurrentTiendaId } from "@/lib/services/tenant-service"
 import { CajaService } from "@/lib/services/caja-service"
 import { AuthService } from "@/lib/services/auth-service"
 import type { CajaSesion } from "@/lib/types"
-import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED } from "@/lib/events"
+import { CAJA_SESSION_UPDATED } from "@/lib/events"
 import {
   Table,
   TableBody,
@@ -58,6 +58,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { ClienteService } from "@/lib/services/cliente-service"
+import { DialogFooter } from "@/components/ui/dialog"
 
 // --- Schemas (Existing) ---
 
@@ -125,6 +127,19 @@ interface HistorialItem {
   producto: { nombre: string } | null
 }
 
+interface CuentaPorCobrar {
+  id: number
+  folio: string
+  cliente: { id: number; nombre: string; telefono?: string; documento?: string; direccion?: string } | null
+  total: number
+  saldoPendiente: number
+  fechaPrimerVencimiento: string | null
+  numeroCuotas: number
+  montoCuota: number
+  frecuenciaPago: string | null
+  createdAt: string
+}
+
 // --- Defaults ---
 
 const DEFAULT_ENTRADA_VALUES: EntradaFormValues = {
@@ -161,6 +176,8 @@ const currencyFormatter = new Intl.NumberFormat("es-CO", {
 })
 
 export default function MovimientosPage() {
+  const searchParams = useSearchParams()
+  const searchQ = searchParams.get("q") || ""
   const { toast } = useToast()
   const [productos, setProductos] = useState<ProductoBasico[]>([])
   const [tallas, setTallas] = useState<Talla[]>([])
@@ -174,6 +191,19 @@ export default function MovimientosPage() {
   const [historial, setHistorial] = useState<HistorialItem[]>([])
   const [loadingHistorial, setLoadingHistorial] = useState(true)
   const [filterTerm, setFilterTerm] = useState("")
+
+  useEffect(() => {
+    setFilterTerm(searchQ)
+  }, [searchQ])
+
+  // Accounts Receivable State
+  const [cuentasPorCobrar, setCuentasPorCobrar] = useState<CuentaPorCobrar[]>([])
+  const [loadingCuentas, setLoadingCuentas] = useState(true)
+  const [selectedCuenta, setSelectedCuenta] = useState<CuentaPorCobrar | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState("")
+  const [paymentNote, setPaymentNote] = useState("")
+  const [registeringPayment, setRegisteringPayment] = useState(false)
 
   // Cash Register State
   const [sesionActual, setSesionActual] = useState<CajaSesion | null>(null)
@@ -268,7 +298,56 @@ export default function MovimientosPage() {
     loadHistorial()
   }, [])
 
-  // Load Session
+  // Load Accounts Receivable
+  useEffect(() => {
+    const loadCuentasPorCobrar = async () => {
+      setLoadingCuentas(true)
+      try {
+        const tiendaId = await getCurrentTiendaId()
+        const { data, error } = await supabase
+          .from("ventas")
+          .select(`
+            id, 
+            folio, 
+            total, 
+            saldo_pendiente, 
+            fecha_primer_vencimiento, 
+            numero_cuotas,
+            monto_cuota,
+            frecuencia_pago,
+            createdAt,
+            cliente:clientes(id, nombre, telefono, documento, direccion)
+          `)
+          .eq("tienda_id", tiendaId)
+          .eq("tipo_venta", "credito")
+          .gt("saldo_pendiente", 0)
+          .order("fecha_primer_vencimiento", { ascending: true })
+
+        if (error) throw error
+
+        const mapped = data.map((item: any) => ({
+          id: item.id,
+          folio: item.folio,
+          cliente: item.cliente,
+          total: item.total,
+          saldoPendiente: item.saldo_pendiente,
+          fechaPrimerVencimiento: item.fecha_primer_vencimiento,
+          numeroCuotas: item.numero_cuotas || 1,
+          montoCuota: item.monto_cuota || 0,
+          frecuenciaPago: item.frecuencia_pago,
+          createdAt: item.createdAt
+        }))
+        setCuentasPorCobrar(mapped)
+      } catch (error) {
+        console.error("Error loading accounts receivable", error)
+      } finally {
+        setLoadingCuentas(false)
+      }
+    }
+    void loadCuentasPorCobrar()
+  }, [])
+
+  // Load Cash Register Session
   useEffect(() => {
     const loadSesion = async () => {
       setLoadingSesion(true)
@@ -364,6 +443,14 @@ export default function MovimientosPage() {
     })
   }, [historial, date, periodo, filterTerm])
 
+  const movimientosIngresos = useMemo(() => {
+    return filteredHistorial.filter(h => h.tipo !== 'entrada')
+  }, [filteredHistorial])
+
+  const movimientosEgresos = useMemo(() => {
+    return filteredHistorial.filter(h => h.tipo === 'entrada')
+  }, [filteredHistorial])
+
   const resumenFinanciero = useMemo(() => {
     const ventas = filteredHistorial
       .filter(item => item.tipo === 'venta' || item.tipo === 'salida')
@@ -386,6 +473,81 @@ export default function MovimientosPage() {
     }
     const id = Number(valor)
     return Number.isFinite(id) ? id : null
+  }
+
+  const handleOpenDetails = (cuenta: CuentaPorCobrar) => {
+    setSelectedCuenta(cuenta)
+    setPaymentAmount(String(cuenta.montoCuota || cuenta.saldoPendiente))
+    setPaymentNote("")
+    setDetailsOpen(true)
+  }
+
+  const handleRegisterPayment = async () => {
+    if (!selectedCuenta || !selectedCuenta.cliente) return
+    const amount = Number(paymentAmount)
+    if (amount <= 0) {
+      toast({
+        title: "Monto inválido",
+        description: "El monto debe ser mayor a cero",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (amount > selectedCuenta.saldoPendiente) {
+      toast({
+        title: "Monto excesivo",
+        description: "El monto no puede ser mayor al saldo pendiente",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setRegisteringPayment(true)
+    try {
+      await ClienteService.registrarAbono({
+        clienteId: selectedCuenta.cliente.id,
+        monto: amount,
+        nota: paymentNote || `Abono a venta ${selectedCuenta.folio}`,
+        ventaId: selectedCuenta.id,
+        // If we had session, we could pass usuarioId from session or auth
+      })
+
+      toast({
+        title: "Pago registrado",
+        description: `Se registró el pago de ${currencyFormatter.format(amount)}`,
+      })
+      
+      // Update local state
+      setCuentasPorCobrar(prev => prev.map(c => {
+        if (c.id === selectedCuenta.id) {
+          const newBalance = c.saldoPendiente - amount
+          return { ...c, saldoPendiente: newBalance }
+        }
+        return c
+      }).filter(c => c.saldoPendiente > 0)) // Remove if fully paid
+
+      setDetailsOpen(false)
+    } catch (error) {
+      console.error("Error registering payment", error)
+      toast({
+        title: "Error",
+        description: "No se pudo registrar el pago",
+        variant: "destructive",
+      })
+    } finally {
+      setRegisteringPayment(false)
+    }
+  }
+
+  const handleWhatsApp = () => {
+    if (!selectedCuenta || !selectedCuenta.cliente?.telefono) return
+    
+    const phone = selectedCuenta.cliente.telefono.replace(/\D/g, '')
+    const message = `Hola ${selectedCuenta.cliente.nombre}, le recordamos que tiene una cuota pendiente de ${currencyFormatter.format(selectedCuenta.montoCuota || selectedCuenta.saldoPendiente)} correspondiente a la venta ${selectedCuenta.folio}. Su saldo pendiente total es de ${currencyFormatter.format(selectedCuenta.saldoPendiente)}. Agradecemos su pago.`
+    
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+    window.open(url, '_blank')
   }
 
   // --- Submit Handlers ---
@@ -517,7 +679,7 @@ export default function MovimientosPage() {
       const resumen = await CajaService.getResumenSesion(sesionActual.id)
       setResumenCierre(resumen)
       setOpenCierreDialog(true)
-    } catch (error) {
+    } catch (_) {
       toast({ title: "Error", description: "No se pudo cargar el resumen", variant: "destructive" })
     }
   }
@@ -534,7 +696,7 @@ export default function MovimientosPage() {
       setResumenCierre(null)
       toast({ title: "Caja cerrada", description: "Turno finalizado." })
       window.dispatchEvent(new CustomEvent(CAJA_SESSION_UPDATED))
-    } catch (error) {
+    } catch (_) {
       toast({ title: "Error", description: "No se pudo cerrar la caja", variant: "destructive" })
     }
   }
@@ -622,7 +784,7 @@ export default function MovimientosPage() {
         </div>
       }
     >
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
 
         {/* Dialogs for Cash Register */}
         <Dialog open={openCajaDialog} onOpenChange={setOpenCajaDialog}>
@@ -696,28 +858,64 @@ export default function MovimientosPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Summary Cards */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="border-none shadow-sm">
+            <CardContent className="flex items-center gap-3 p-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <Wallet className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Balance</p>
+                <h3 className="text-lg font-bold leading-none">{currencyFormatter.format(resumenFinanciero.balance)}</h3>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="flex items-center gap-3 p-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Ventas totales</p>
+                <h3 className="text-lg font-bold text-emerald-600 leading-none">{currencyFormatter.format(resumenFinanciero.ventas)}</h3>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="flex items-center gap-3 p-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                <TrendingDown className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Gastos totales</p>
+                <h3 className="text-lg font-bold text-rose-600 leading-none">{currencyFormatter.format(resumenFinanciero.gastos)}</h3>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Main Content */}
         <Tabs defaultValue="transacciones" className="space-y-6">
-          <div className="flex items-center justify-between rounded-lg border bg-background p-1">
-            <TabsList className="w-full justify-start bg-transparent p-0">
-              <TabsTrigger
-                value="transacciones"
-                className="flex-1 rounded-md data-[state=active]:bg-slate-900 data-[state=active]:text-slate-50 md:flex-none md:px-8"
-              >
-                Transacciones
-              </TabsTrigger>
-              <TabsTrigger
-                value="cierres"
-                className="flex-1 rounded-md data-[state=active]:bg-slate-900 data-[state=active]:text-slate-50 md:flex-none md:px-8"
-              >
-                Cierres de caja
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="rounded-lg border bg-background p-1">
+              <TabsList className="flex bg-transparent p-0">
+                <TabsTrigger
+                  value="transacciones"
+                  className="rounded-md px-6 py-1.5 text-sm font-medium data-[state=active]:bg-slate-900 data-[state=active]:text-slate-50"
+                >
+                  Transacciones
+                </TabsTrigger>
+                <TabsTrigger
+                  value="cierres"
+                  className="rounded-md px-6 py-1.5 text-sm font-medium data-[state=active]:bg-slate-900 data-[state=active]:text-slate-50"
+                >
+                  Cierres de caja
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          <TabsContent value="transacciones" className="space-y-6">
-            {/* Filters */}
-            <div className="flex flex-col gap-4 md:flex-row">
+            <div className="flex items-center gap-2">
               <Button variant="outline" className="gap-2 bg-background">
                 <Filter className="h-4 w-4" />
                 Filtrar
@@ -756,92 +954,54 @@ export default function MovimientosPage() {
                   />
                 </PopoverContent>
               </Popover>
-
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar concepto..."
-                  className="pl-9 bg-background"
-                  value={filterTerm}
-                  onChange={(e) => setFilterTerm(e.target.value)}
-                />
-              </div>
             </div>
+          </div>
 
-            {/* Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="border-none shadow-sm">
-                <CardContent className="flex items-center gap-4 p-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                    <Wallet className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Balance</p>
-                    <h3 className="text-2xl font-bold">{currencyFormatter.format(resumenFinanciero.balance)}</h3>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-sm">
-                <CardContent className="flex items-center gap-4 p-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                    <TrendingUp className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Ventas totales</p>
-                    <h3 className="text-2xl font-bold text-emerald-600">{currencyFormatter.format(resumenFinanciero.ventas)}</h3>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-sm">
-                <CardContent className="flex items-center gap-4 p-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-                    <TrendingDown className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Gastos totales</p>
-                    <h3 className="text-2xl font-bold text-rose-600">{currencyFormatter.format(resumenFinanciero.gastos)}</h3>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+          <TabsContent value="transacciones" className="space-y-6">
+
+            {/* Summary Cards moved to top */}
 
             {/* Sub-tabs & List */}
             <Tabs defaultValue="ingresos" className="space-y-4">
-              <TabsList className="w-full justify-start border-b bg-transparent p-0 rounded-none h-auto">
+              <TabsList className="grid w-full grid-cols-4 bg-muted p-1 rounded-lg h-auto">
                 <TabsTrigger
                   value="ingresos"
-                  className="rounded-none border-b-2 border-transparent px-4 py-2 data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900"
+                  className="rounded-md py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
                 >
                   Ingresos
                 </TabsTrigger>
                 <TabsTrigger
                   value="egresos"
-                  className="rounded-none border-b-2 border-transparent px-4 py-2 data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900"
+                  className="rounded-md py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
                 >
                   Egresos
                 </TabsTrigger>
                 <TabsTrigger
                   value="por_cobrar"
-                  className="rounded-none border-b-2 border-transparent px-4 py-2 data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900"
+                  className="rounded-md py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
                 >
                   Por cobrar
                 </TabsTrigger>
                 <TabsTrigger
                   value="por_pagar"
-                  className="rounded-none border-b-2 border-transparent px-4 py-2 data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900"
+                  className="rounded-md py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
                 >
                   Por pagar
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="ingresos" className="min-h-[300px]">
-                {filteredHistorial.length === 0 ? (
+                {loadingHistorial ? (
+                  <div className="flex h-[200px] items-center justify-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  </div>
+                ) : movimientosIngresos.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <div className="mb-4 rounded-full bg-slate-100 p-6">
                       <Wallet className="h-12 w-12 text-slate-400" />
                     </div>
-                    <h3 className="text-lg font-medium text-foreground">Aún no tienes registros creados en esta fecha.</h3>
-                    <p className="text-sm text-muted-foreground mb-6">Comienza registrando tus movimientos.</p>
+                    <h3 className="text-lg font-medium text-foreground">Aún no tienes ingresos registrados en esta fecha.</h3>
+                    <p className="text-sm text-muted-foreground mb-6">Comienza registrando tus ventas.</p>
 
                     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                       <DialogTrigger asChild>
@@ -1256,18 +1416,26 @@ export default function MovimientosPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Transaction List Implementation */}
-                    {filteredHistorial.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between border-b py-4 last:border-0">
-                        <div>
-                          <p className="font-medium">{item.producto?.nombre || "Producto desconocido"}</p>
-                          <p className="text-sm text-muted-foreground">{item.motivo || "Sin motivo"}</p>
+                    {movimientosIngresos.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex flex-col justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-foreground">
+                            {item.producto?.nombre || "Producto desconocido"}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {item.motivo || "Sin motivo"}
+                          </span>
                         </div>
-                        <div className="text-right">
-                          <p className={cn("font-bold", item.tipo === 'entrada' ? "text-rose-600" : "text-emerald-600")}>
-                            {item.tipo === 'entrada' ? '-' : '+'}{currencyFormatter.format((item.costoUnitario || 0) * item.cantidad)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(item.createdAt), "PP p", { locale: es })}</p>
+                        <div className="flex items-center justify-between gap-6 sm:justify-end">
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(item.createdAt), "PP p", { locale: es })}
+                          </span>
+                          <span className="text-lg font-bold text-emerald-600">
+                            +{currencyFormatter.format((item.costoUnitario || 0) * item.cantidad)}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -1275,14 +1443,209 @@ export default function MovimientosPage() {
                 )}
               </TabsContent>
               <TabsContent value="egresos">
-                <div className="flex h-[200px] items-center justify-center text-muted-foreground">
-                  Sección de egresos en construcción
-                </div>
+                {loadingHistorial ? (
+                  <div className="flex h-[200px] items-center justify-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  </div>
+                ) : movimientosEgresos.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="mb-4 rounded-full bg-slate-100 p-6">
+                      <TrendingDown className="h-12 w-12 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground">No hay egresos registrados.</h3>
+                    <p className="text-sm text-muted-foreground">Tus gastos aparecerán aquí.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {movimientosEgresos.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex flex-col justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-foreground">
+                            {item.producto?.nombre || "Producto desconocido"}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {item.motivo || "Sin motivo"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-6 sm:justify-end">
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(item.createdAt), "PP p", { locale: es })}
+                          </span>
+                          <span className="text-lg font-bold text-rose-600">
+                            -{currencyFormatter.format((item.costoUnitario || 0) * item.cantidad)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="por_cobrar">
-                <div className="flex h-[200px] items-center justify-center text-muted-foreground">
-                  Sección por cobrar en construcción
-                </div>
+                {loadingCuentas ? (
+                  <div className="flex h-[200px] items-center justify-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  </div>
+                ) : cuentasPorCobrar.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="mb-4 rounded-full bg-slate-100 p-6">
+                      <Receipt className="h-12 w-12 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground">No hay cuentas por cobrar.</h3>
+                    <p className="text-sm text-muted-foreground">Todas las ventas a crédito están al día.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {cuentasPorCobrar.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex flex-col justify-between rounded-xl border bg-card p-5 shadow-sm transition-all hover:shadow-md"
+                      >
+                        <div className="mb-4 flex items-start justify-between">
+                          <div className="space-y-1">
+                            <h4 className="font-semibold text-foreground line-clamp-1" title={item.cliente?.nombre}>
+                              {item.cliente?.nombre || "Cliente desconocido"}
+                            </h4>
+                            <p className="text-xs text-muted-foreground">Folio: {item.folio}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="block text-lg font-bold text-rose-600">
+                              {currencyFormatter.format(item.saldoPendiente)}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              de {currencyFormatter.format(item.total)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mt-auto space-y-4">
+                          <div className="flex items-center justify-between border-t pt-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs text-muted-foreground">Vencimiento</span>
+                              {item.fechaPrimerVencimiento ? (
+                                <span className="text-sm font-medium text-rose-600">
+                                  {format(new Date(item.fechaPrimerVencimiento), "PP", { locale: es })}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full px-4"
+                              onClick={() => handleOpenDetails(item)}
+                            >
+                              Ver detalles
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Detalle de Deuda</DialogTitle>
+                      <DialogDescription>
+                        Folio: {selectedCuenta?.folio}
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    {selectedCuenta && (
+                      <div className="grid gap-4 py-4">
+                        <div className="space-y-1">
+                          <h4 className="font-medium leading-none">{selectedCuenta.cliente?.nombre}</h4>
+                          <div className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+                            <p>{selectedCuenta.cliente?.telefono || "Sin teléfono registrado"}</p>
+                            {selectedCuenta.cliente?.documento && (
+                              <p>ID: {selectedCuenta.cliente.documento}</p>
+                            )}
+                            {selectedCuenta.cliente?.direccion && (
+                              <p>Dir: {selectedCuenta.cliente.direccion}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 rounded-lg border p-3 bg-muted/50">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Saldo Pendiente</p>
+                            <p className="text-lg font-bold text-rose-600">
+                              {currencyFormatter.format(selectedCuenta.saldoPendiente)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Monto Cuota</p>
+                            <p className="font-medium">
+                              {currencyFormatter.format(selectedCuenta.montoCuota || selectedCuenta.saldoPendiente)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Cuotas Restantes</p>
+                            <p className="font-medium">
+                              {selectedCuenta.montoCuota > 0 
+                                ? Math.ceil(selectedCuenta.saldoPendiente / selectedCuenta.montoCuota) 
+                                : 1}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Frecuencia</p>
+                            <p className="font-medium capitalize">
+                              {selectedCuenta.frecuenciaPago || "Única"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Registrar Abono</Label>
+                          <div className="flex gap-2">
+                            <div className="relative flex-1">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                              <Input 
+                                type="number" 
+                                className="pl-6" 
+                                value={paymentAmount}
+                                onChange={(e) => setPaymentAmount(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <Textarea 
+                            placeholder="Nota del abono (opcional)" 
+                            value={paymentNote}
+                            onChange={(e) => setPaymentNote(e.target.value)}
+                            className="h-20"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:space-x-0">
+                      {selectedCuenta?.cliente?.telefono && (
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          className="w-full sm:w-auto text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
+                          onClick={handleWhatsApp}
+                        >
+                          <MessageCircle className="mr-2 h-4 w-4" />
+                          WhatsApp
+                        </Button>
+                      )}
+                      <Button 
+                        type="button" 
+                        className="w-full sm:w-auto"
+                        onClick={handleRegisterPayment}
+                        disabled={registeringPayment}
+                      >
+                        {registeringPayment ? "Registrando..." : "Registrar Pago"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </TabsContent>
               <TabsContent value="por_pagar">
                 <div className="flex h-[200px] items-center justify-center text-muted-foreground">
@@ -1293,69 +1656,75 @@ export default function MovimientosPage() {
           </TabsContent>
 
           <TabsContent value="cierres">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha Apertura</TableHead>
-                    <TableHead>Fecha Cierre</TableHead>
-                    <TableHead>Usuario</TableHead>
-                    <TableHead>Monto Inicial</TableHead>
-                    <TableHead>Ventas</TableHead>
-                    <TableHead>Diferencia</TableHead>
-                    <TableHead>Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingCierres ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
-                        Cargando cierres...
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredCierres.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
-                        No se encontraron cierres de caja.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredCierres.map((cierre) => (
-                      <TableRow key={cierre.id}>
-                        <TableCell>{format(new Date(cierre.fechaApertura), "PP p", { locale: es })}</TableCell>
-                        <TableCell>
-                          {cierre.fechaCierre
-                            ? format(new Date(cierre.fechaCierre), "PP p", { locale: es })
-                            : "-"}
-                        </TableCell>
-                        <TableCell>{cierre.usuarioNombre || "Usuario"}</TableCell>
-                        <TableCell>{currencyFormatter.format(cierre.montoInicial)}</TableCell>
-                        <TableCell>
+            {loadingCierres ? (
+              <div className="flex h-[200px] items-center justify-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : filteredCierres.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="mb-4 rounded-full bg-slate-100 p-6">
+                  <Receipt className="h-12 w-12 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-medium text-foreground">No hay cierres registrados.</h3>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredCierres.map((cierre) => (
+                  <div
+                    key={cierre.id}
+                    className="flex flex-col gap-4 rounded-xl border bg-card p-5 shadow-sm transition-all hover:shadow-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={cierre.estado === "abierta" ? "default" : "secondary"}>
+                          {cierre.estado === "abierta" ? "Abierta" : "Cerrada"}
+                        </Badge>
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {cierre.usuarioNombre || "Usuario"}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(cierre.fechaApertura), "PP", { locale: es })}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Monto Inicial</p>
+                        <p className="font-semibold">{currencyFormatter.format(cierre.montoInicial)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ventas del turno</p>
+                        <p className="font-semibold">
                           {cierre.montoFinalEsperado !== undefined && cierre.montoFinalEsperado !== null
                             ? currencyFormatter.format(cierre.montoFinalEsperado - cierre.montoInicial)
                             : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {cierre.diferencia !== undefined && cierre.diferencia !== null ? (
-                            <span className={cn(
-                              cierre.diferencia < 0 ? "text-rose-600" : "text-emerald-600",
-                              "font-medium"
+                        </p>
+                      </div>
+                      <div className="col-span-2 border-t pt-2">
+                        <div className="flex justify-between items-center">
+                           <span className="text-xs text-muted-foreground">Diferencia en caja</span>
+                           <span className={cn(
+                              "font-bold text-base",
+                              cierre.diferencia && cierre.diferencia < 0 ? "text-rose-600" : "text-emerald-600"
                             )}>
-                              {currencyFormatter.format(cierre.diferencia)}
+                              {cierre.diferencia !== undefined && cierre.diferencia !== null 
+                                ? currencyFormatter.format(cierre.diferencia) 
+                                : "-"}
                             </span>
-                          ) : "-"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={cierre.estado === "abierta" ? "default" : "secondary"}>
-                            {cierre.estado === "abierta" ? "Abierta" : "Cerrada"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {cierre.fechaCierre && (
+                      <div className="mt-auto pt-2 text-xs text-muted-foreground text-right">
+                        Cierre: {format(new Date(cierre.fechaCierre), "p", { locale: es })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>

@@ -29,6 +29,7 @@ export interface Producto {
   categoriaId: number
   descripcion: string | null
   precio: number
+  precio_base?: number | null
   descuento: number
   proveedor: string | null
   imagen: string | null
@@ -155,6 +156,11 @@ export interface Venta {
   usuarioId: string | null
   metodoPagoId?: number | null
   cajaSesionId?: number | null
+  numeroCuotas?: number
+  interesPorcentaje?: number
+  montoCuota?: number
+  frecuenciaPago?: 'semanal' | 'mensual'
+  fechaPrimerVencimiento?: string
   createdAt: string
 }
 
@@ -168,4 +174,31 @@ export interface VentaDetalle {
   precioUnitario: number
   descuento: number
   subtotal: number
+}
+
+export interface Cliente {
+  id: number
+  tiendaId: number
+  nombre: string
+  documento?: string | null
+  telefono?: string | null
+  direccion?: string | null
+  email?: string | null
+  limiteCredito: number
+  saldoActual: number
+  estado: EstadoRegistro
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Abono {
+  id: number
+  tiendaId: number
+  clienteId: number
+  ventaId?: number | null
+  monto: number
+  metodoPagoId?: number | null
+  usuarioId?: string | null
+  nota?: string | null
+  createdAt: string
 }
