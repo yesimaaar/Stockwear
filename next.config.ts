@@ -7,11 +7,8 @@ const enableTfjsNode = process.env.ENABLE_TFJS_NODE === "true";
 
 const nextConfig: NextConfig = {
   compress: true,
-  reactCompiler: true,
+  reactCompiler: false,
   modularizeImports: {
-    "lucide-react": {
-      transform: "lucide-react/dist/esm/icons/{{member}}",
-    },
     "@radix-ui/react-icons": {
       transform: "@radix-ui/react-icons/{{member}}",
     },
@@ -30,7 +27,7 @@ const nextConfig: NextConfig = {
     deviceSizes: [360, 640, 768, 1024, 1280, 1536, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     config.resolve ??= {};
     config.resolve.fallback = {
       ...config.resolve.fallback,
@@ -38,6 +35,16 @@ const nextConfig: NextConfig = {
       path: false,
       crypto: false,
     };
+
+    // Disable source maps in development to avoid "Invalid source map" errors
+    if (dev) {
+      config.devtool = false;
+      config.ignoreWarnings = [
+        ...(config.ignoreWarnings || []),
+        /Failed to parse source map/,
+        /Invalid source map/,
+      ];
+    }
 
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
@@ -63,9 +70,9 @@ const nextConfig: NextConfig = {
 
     if (isServer) {
       const externalModules = [
-        "aws-sdk", 
-        "mock-aws-s3", 
-        "nock", 
+        "aws-sdk",
+        "mock-aws-s3",
+        "nock",
         "rimraf",
       ];
       const existingExternals = config.externals ?? [];

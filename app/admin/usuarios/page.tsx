@@ -2,8 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import * as LucideIcons from "lucide-react"
-const {
+import {
   Users,
   Plus,
   Mail,
@@ -13,12 +12,13 @@ const {
   X,
   Filter,
   RefreshCw,
-} = LucideIcons
+} from "lucide-react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 
 import { AdminSectionLayout } from "@/components/admin-section-layout"
+import { InviteUserDialog } from "@/components/admin/invite-user-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -320,12 +320,7 @@ export default function UsuariosPage() {
               )}
               Actualizar
             </Button>
-            <Button size="sm" asChild>
-              <Link href="/admin/register">
-                <Plus className="mr-2 h-4 w-4" />
-                Invitar usuario
-              </Link>
-            </Button>
+            <InviteUserDialog onUserInvited={() => void fetchUsuarios(false)} />
           </div>
         }
         sidebar={

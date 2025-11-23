@@ -4,8 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import * as LucideIcons from "lucide-react";
-const { ArrowLeft } = LucideIcons;
+import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +23,7 @@ interface FormState {
   nombre: string;
   categoriaId: string;
   precio: string;
+  precio_base: string;
   descuento: string;
   proveedor: string;
   stockMinimo: string;
@@ -104,6 +104,7 @@ export default function EditarProductoPage() {
           nombre: producto.nombre,
           categoriaId: String(producto.categoriaId ?? ""),
           precio: String(producto.precio ?? ""),
+          precio_base: String(producto.precio_base ?? 0),
           descuento: String(producto.descuento ?? 0),
           proveedor: producto.proveedor ?? "",
           stockMinimo: String(producto.stockMinimo ?? 0),
@@ -144,7 +145,7 @@ export default function EditarProductoPage() {
     const precio = Number(formData.precio);
     const descuento = formData.descuento ? Number(formData.descuento) : 0;
     const stockMinimo = Number(formData.stockMinimo);
-  const categoriaId = Number(formData.categoriaId);
+    const categoriaId = Number(formData.categoriaId);
 
     if (Number.isNaN(precio) || precio <= 0) {
       toast({
@@ -169,9 +170,10 @@ export default function EditarProductoPage() {
       const payload = {
         codigo: formData.codigo.trim(),
         nombre: formData.nombre.trim(),
-  categoriaId: Number.isNaN(categoriaId) || categoriaId === 0 ? undefined : categoriaId,
+        categoriaId: Number.isNaN(categoriaId) || categoriaId === 0 ? undefined : categoriaId,
         descripcion: formData.descripcion.trim() || null,
         precio,
+        precio_base: Number(formData.precio_base) || 0,
         descuento: Number.isNaN(descuento) ? 0 : descuento,
         proveedor: formData.proveedor.trim() || null,
         imagen: formData.imagen.trim() || null,
@@ -236,9 +238,8 @@ export default function EditarProductoPage() {
       if (referenceSuccess > 0) {
         toast({
           title: referenceSuccess === 1 ? "Referencia registrada" : "Referencias registradas",
-          description: `${referenceSuccess} referencia${referenceSuccess === 1 ? "" : "s"} procesada${
-            referenceSuccess === 1 ? "" : "s"
-          } correctamente`,
+          description: `${referenceSuccess} referencia${referenceSuccess === 1 ? "" : "s"} procesada${referenceSuccess === 1 ? "" : "s"
+            } correctamente`,
         });
       }
 
@@ -323,9 +324,8 @@ export default function EditarProductoPage() {
         description:
           result.processed === 0
             ? "No se generaron embeddings porque no hay referencias."
-            : `${result.processed} referencia${result.processed === 1 ? "" : "s"} procesada${
-                result.processed === 1 ? "" : "s"
-              } correctamente`,
+            : `${result.processed} referencia${result.processed === 1 ? "" : "s"} procesada${result.processed === 1 ? "" : "s"
+            } correctamente`,
       });
     } catch (regenError) {
       console.error("Error regenerando embeddings", regenError);
@@ -481,6 +481,15 @@ export default function EditarProductoPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="precio_base">Costo Base (COP)</Label>
+                <Input
+                  id="precio_base"
+                  type="number"
+                  value={formData.precio_base}
+                  onChange={(event) => setFormData({ ...formData, precio_base: event.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="descuento">Descuento (%)</Label>
                 <Input
                   id="descuento"
@@ -600,24 +609,24 @@ export default function EditarProductoPage() {
                               </div>
                             )}
                           </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex-1 truncate text-xs text-muted-foreground">
-                            {reference.filename ?? reference.path}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteReference(reference.id)}
-                            disabled={
-                              removingReferenceId === reference.id ||
-                              uploadingReferences ||
-                              guardando
-                            }
-                          >
-                            {removingReferenceId === reference.id ? "Eliminando…" : "Eliminar"}
-                          </Button>
-                        </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="flex-1 truncate text-xs text-muted-foreground">
+                              {reference.filename ?? reference.path}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteReference(reference.id)}
+                              disabled={
+                                removingReferenceId === reference.id ||
+                                uploadingReferences ||
+                                guardando
+                              }
+                            >
+                              {removingReferenceId === reference.id ? "Eliminando…" : "Eliminar"}
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}

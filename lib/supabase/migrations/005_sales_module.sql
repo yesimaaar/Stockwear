@@ -1,2 +1,0 @@
--- Este archivo queda intencionalmente vacío.
--- El esquema de ventas se define ahora en 001_create_tables.sql para consolidar la creación base.

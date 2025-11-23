@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentTiendaId } from '@/lib/services/tenant-service'
 import type { ProductoEmbedding } from '@/lib/types'
 
 export interface CatalogEmbedding {
@@ -13,8 +14,8 @@ export interface CatalogEmbedding {
 }
 
 const CACHE_TTL_MS = 60 * 1000
-let cachedCatalog: CatalogEmbedding[] | null = null
-let cacheExpiresAt = 0
+type CatalogCacheEntry = { data: CatalogEmbedding[]; expiresAt: number }
+const catalogCache = new Map<number, CatalogCacheEntry>()
 
 const now = () => Date.now()
 
@@ -64,32 +65,40 @@ function mapEmbeddingRow(row: any): CatalogEmbedding | null {
 }
 
 export class ProductoEmbeddingService {
-  static invalidateCache() {
-    cachedCatalog = null
-    cacheExpiresAt = 0
+  static invalidateCache(tiendaId?: number) {
+    if (typeof tiendaId === 'number') {
+      catalogCache.delete(tiendaId)
+      return
+    }
+    catalogCache.clear()
   }
 
-  static async getCatalogEmbeddings(options?: { force?: boolean }): Promise<CatalogEmbedding[]> {
-    if (!options?.force && cachedCatalog && cacheExpiresAt > now()) {
-      return cachedCatalog
+  static async getCatalogEmbeddings(options?: { force?: boolean; tiendaId?: number }): Promise<CatalogEmbedding[]> {
+    const tiendaId = options?.tiendaId ?? (await getCurrentTiendaId())
+    const entry = catalogCache.get(tiendaId)
+    if (!options?.force && entry && entry.expiresAt > now()) {
+      return entry.data
     }
 
     const { data, error } = await supabase
       .from('productos')
       .select('id,codigo,nombre,descripcion,imagen,proveedor,embeddings:producto_embeddings(id,embedding,fuente,"createdAt","updatedAt")')
       .eq('estado', 'activo')
+      .eq('tienda_id', tiendaId)
 
     if (error) {
       console.error('No fue posible cargar embeddings de productos', error)
-      return cachedCatalog ?? []
+      return entry?.data ?? []
     }
 
     const mapped = (data ?? [])
       .map((row) => mapEmbeddingRow(row))
       .filter((item): item is CatalogEmbedding => item !== null)
 
-    cachedCatalog = mapped
-    cacheExpiresAt = now() + CACHE_TTL_MS
+    catalogCache.set(tiendaId, {
+      data: mapped,
+      expiresAt: now() + CACHE_TTL_MS,
+    })
     return mapped
   }
 
@@ -105,7 +114,8 @@ export class ProductoEmbeddingService {
       throw new Error(error.message || 'No se pudo registrar el embedding del producto')
     }
 
-    this.invalidateCache()
+    const tiendaId = await getCurrentTiendaId()
+    this.invalidateCache(tiendaId)
   }
 
   static async deleteEmbedding(id: number): Promise<void> {
@@ -114,6 +124,7 @@ export class ProductoEmbeddingService {
       throw new Error(error.message || 'No se pudo eliminar el embedding del producto')
     }
 
-    this.invalidateCache()
+    const tiendaId = await getCurrentTiendaId()
+    this.invalidateCache(tiendaId)
   }
 }

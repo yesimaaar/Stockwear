@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-// import { cookies } from "next/headers" // Si usas cookies() directamente, necesitas esta línea
+import { getCurrentTiendaId } from "@/lib/services/tenant-service"
 
-// *** SOLUCIÓN CRÍTICA: FORZAR DINÁMICO ***
-// Esto soluciona el error de "Dynamic server usage" 
-// y asegura que la ruta se ejecute en tiempo de solicitud (en lugar de ser estática).
-export const dynamic = 'force-dynamic'; 
-
-// La revalidación automática de Next.js es excelente, pero la propiedad 'dynamic'
-// es necesaria para el uso de recursos específicos del request como cookies().
+export const dynamic = 'force-dynamic';
 export const revalidate = 120
 
 interface VentaRow {
@@ -110,36 +104,47 @@ function formatRecent(producto: ProductoRow, index: number): HighlightProduct {
         precio: producto.precio ?? null,
         imagen: producto.imagen ?? null,
         etiqueta: producto.createdAt ? fechaRecienteFormatter.format(new Date(producto.createdAt)) : null,
-        tag: index === 0 ? "Mas reciente" : "Nuevo",
+        tag: "Nuevo",
     }
 }
 
 export async function GET() {
     try {
-        // En una ruta dinámica, Supabase crea un cliente que puede acceder
-        // a las cookies (necesario para el auth).
         const supabase = await createClient()
+        let tiendaId: number
+        try {
+            tiendaId = await getCurrentTiendaId({ client: supabase })
+        } catch (error) {
+            console.error("Error determinando tienda para highlights:", error)
+            const message = error instanceof Error ? error.message : 'Tienda no encontrada'
+            return NextResponse.json({ message }, { status: 403 })
+        }
 
         const [ventasResp, detallesResp, productosResp, historialResp] = await Promise.all([
             supabase
                 .from("ventas")
                 .select("id,total,\"createdAt\"")
+                .eq("tienda_id", tiendaId)
                 .order("createdAt", { ascending: false })
                 .limit(VENTAS_LIMIT),
             supabase
                 .from("ventasDetalle")
                 .select("\"ventaId\",\"productoId\",cantidad,\"precioUnitario\",descuento,subtotal")
+                .eq("tienda_id", tiendaId)
                 .limit(DETALLE_LIMIT),
             supabase
                 .from("productos")
                 .select(
                     `id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`
                 )
+                .eq("tienda_id", tiendaId)
+                .order("createdAt", { ascending: false })
                 .limit(PRODUCTOS_LIMIT),
             supabase
                 .from("historialStock")
                 .select("tipo,\"productoId\",cantidad,\"costoUnitario\",\"createdAt\"")
                 .eq("tipo", "venta")
+                .eq("tienda_id", tiendaId)
                 .order("createdAt", { ascending: false })
                 .limit(HISTORIAL_LIMIT),
         ])
@@ -154,8 +159,7 @@ export async function GET() {
 
             return NextResponse.json(
                 {
-                    topProducts: [],
-                    newProducts: [],
+                    destacados: [],
                     generatedAt: new Date().toISOString(),
                 },
                 { status: 500 },
@@ -263,29 +267,32 @@ export async function GET() {
                     imagen: productInfo?.imagen ?? null,
                     totalVendidas: stats.cantidad,
                     ingresos: stats.total,
-                    tag: index === 0 ? "Mas vendido" : `Top ${index + 1}`,
+                    tag: `Top ${index + 1}`,
                 }
             })
+
+        const topProductIds = new Set(topProducts.map(p => p.id))
 
         const activos = productos.filter((producto) => producto.estado === "activo")
         const baseRecientes = activos.length ? activos : productos
         const newProducts = baseRecientes
             .slice()
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .filter(p => !topProductIds.has(p.id))
             .slice(0, 4)
             .map((producto, index) => formatRecent(producto, index))
 
+        const destacados = [...topProducts, ...newProducts]
+
         return NextResponse.json({
-            topProducts: topProducts,
-            newProducts: newProducts,
+            destacados,
             generatedAt: new Date().toISOString(),
         })
     } catch (error) {
         console.error("Error inesperado generando destacados", error)
         return NextResponse.json(
             {
-                topProducts: [],
-                newProducts: [],
+                destacados: [],
                 generatedAt: new Date().toISOString(),
             },
             { status: 500 },

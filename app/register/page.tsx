@@ -5,8 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import * as LucideIcons from "lucide-react"
-const { UserPlus, ShieldCheck } = LucideIcons
+import { UserPlus, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,7 +37,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [telefono, setTelefono] = useState("")
   const [prefijo, setPrefijo] = useState("+52")
-  const [rol, setRol] = useState<"admin" | "empleado">("empleado")
+  const [rol] = useState<"admin" | "empleado">("admin")
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState("")
@@ -56,7 +55,7 @@ export default function RegisterPage() {
 
     setLoading(true)
 
-  const telefonoNormalizado = telefono.replace(/\D+/g, "")
+    const telefonoNormalizado = telefono.replace(/\D+/g, "")
     const telefonoConPrefijo = `${prefijo}${telefonoNormalizado}`
 
     const result = await AuthService.register({
@@ -73,12 +72,12 @@ export default function RegisterPage() {
       return
     }
 
-    setSuccess("Registro exitoso. Redirigiendo al inicio de sesión...")
+    setSuccess("Registro exitoso. Por favor verifica tu correo electrónico antes de iniciar sesión.")
     setLoading(false)
 
     setTimeout(() => {
       router.push("/login")
-    }, 1500)
+    }, 3000)
   }
 
   const handleGoogleSignup = async () => {
@@ -238,49 +237,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-slate-600">Tipo de cuenta</Label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {[{
-                  value: "empleado" as const,
-                  label: "Empleado",
-                  description: "Opera inventario y ventas",
-                  icon: UserPlus,
-                }, {
-                  value: "admin" as const,
-                  label: "Administrador",
-                  description: "Configura y supervisa",
-                  icon: ShieldCheck,
-                }].map(({ value, label, description, icon: Icon }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setRol(value)}
-                    disabled={loading}
-                    className={cn(
-                      "rounded-2xl border border-slate-200 bg-white/80 p-4 text-left transition-all hover:border-slate-300",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20",
-                      rol === value
-                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_20px_45px_rgba(15,23,42,0.25)]"
-                        : "text-slate-900",
-                    )}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-2xl border",
-                        rol === value ? "border-white/50 bg-white/20 text-white" : "border-slate-200 bg-slate-50 text-slate-600",
-                      )}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold">{label}</p>
-                        <p className={cn("text-xs", rol === value ? "text-white/80" : "text-slate-500")}>{description}</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
+
 
             {error ? (
               <p className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-600">{error}</p>

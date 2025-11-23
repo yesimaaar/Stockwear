@@ -21,6 +21,8 @@ import {
   Building2,
   FileText,
   ShoppingCart,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -30,6 +32,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { GoogleIcon } from "@/components/icons/google-icon"
 import { AuthService } from "@/lib/services/auth-service"
 import { supabase } from "@/lib/supabase"
+import type { Usuario } from "@/lib/types"
 
 const previewQuickStats = [
   { label: "Ventas del día", value: "$128K", trend: "+12%", icon: BarChart3 },
@@ -128,18 +131,27 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
 
-  const navigateByRole = useCallback((role?: string) => {
-    if (role === "admin") {
-      router.push("/admin")
-    } else if (role === "empleado") {
+
+
+  const navigateByRole = useCallback((user?: Usuario) => {
+    if (!user) return
+
+    if (user.rol === "admin") {
+      if (!user.tiendaId) {
+        router.push("/register-store")
+      } else {
+        router.push("/admin")
+      }
+    } else if (user.rol === "empleado") {
       router.push("/empleado")
-    } else if (role) {
+    } else {
       router.push("/")
     }
   }, [router])
@@ -147,7 +159,7 @@ export default function LoginPage() {
   const syncSession = useCallback(async () => {
     const currentUser = await AuthService.getCurrentUser()
     if (currentUser) {
-      navigateByRole(currentUser.rol)
+      navigateByRole(currentUser)
       setCheckingSession(false)
       return
     }
@@ -184,8 +196,7 @@ export default function LoginPage() {
         return
       }
 
-      const role = result.user?.rol
-      navigateByRole(role)
+      navigateByRole(result.user)
     } catch (_error) {
       setError("Ocurrió un problema al iniciar sesión")
     } finally {
@@ -252,16 +263,26 @@ export default function LoginPage() {
               <Label htmlFor="password" className="text-sm font-medium text-slate-600">
                 Contraseña
               </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                disabled={loading}
-                className="h-12 rounded-[16px] border-slate-200 bg-white/80 text-base text-slate-900 placeholder:text-slate-400"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  disabled={loading}
+                  className="h-12 rounded-[16px] border-slate-200 bg-white/80 text-base text-slate-900 placeholder:text-slate-400 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
             </div>
 
             {error ? (
@@ -278,9 +299,9 @@ export default function LoginPage() {
                 />
                 Recordar sesión
               </label>
-              <button type="button" className="font-medium text-slate-900 hover:underline">
+              <Link href="/forgot-password" className="font-medium text-slate-900 hover:underline">
                 ¿Olvidaste tu contraseña?
-              </button>
+              </Link>
             </div>
 
             <Button
@@ -339,9 +360,8 @@ export default function LoginPage() {
                   <button
                     key={label}
                     type="button"
-                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                      active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-                    }`}
+                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                      }`}
                   >
                     <Icon className={`h-5 w-5 ${active ? "text-white" : "text-slate-500"}`} />
                     <span>{label}</span>

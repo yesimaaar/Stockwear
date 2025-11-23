@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { GeocodingService } from '@/lib/services/geocoding-service'
+import { getCurrentTiendaId } from '@/lib/services/tenant-service'
 import type {
   Almacen,
   Categoria,
@@ -22,6 +23,7 @@ type CategoriaUpsertPayload = {
 
 type AlmacenUpsertPayload = {
   nombre: string
+  abreviatura: string
   direccion: string | null
   tipo: Almacen['tipo']
   estado: EstadoRegistro
@@ -192,9 +194,11 @@ export class InventarioService {
       return existente.id
     }
 
+    const tiendaId = await getCurrentTiendaId()
     const { data: insertData, error: insertError } = await supabase
       .from('stock')
       .insert({
+        tienda_id: tiendaId,
         productoId,
         tallaId,
         almacenId,
@@ -210,9 +214,17 @@ export class InventarioService {
     return (insertData as { id: number }).id
   }
   static async getCategoriasResumen(): Promise<CategoriaResumen[]> {
+    const tiendaId = await getCurrentTiendaId()
     const [categoriasResp, productosResp] = await Promise.all([
-      supabase.from('categorias').select('id,nombre,descripcion,estado').order('nombre', { ascending: true }),
-      supabase.from('productos').select('id,"categoriaId",estado')
+      supabase
+        .from('categorias')
+        .select('id,nombre,descripcion,estado')
+        .eq('tienda_id', tiendaId)
+        .order('nombre', { ascending: true }),
+      supabase
+        .from('productos')
+        .select('id,"categoriaId",estado')
+        .eq('tienda_id', tiendaId),
     ])
 
     if (categoriasResp.error) {
@@ -238,24 +250,27 @@ export class InventarioService {
   }
 
   static async createCategoria(payload: CategoriaUpsertPayload): Promise<Categoria> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('categorias')
       .insert({
+        tienda_id: tiendaId,
         nombre: payload.nombre,
         descripcion: payload.descripcion,
         estado: payload.estado,
       })
-      .select('id,nombre,descripcion,estado')
+      .select('id,nombre,descripcion,estado,tienda_id')
       .single()
 
     if (error) {
       throw new Error(error.message || 'No se pudo crear la categoría')
     }
 
-    return data as Categoria
+    return { ...data, tiendaId: data.tienda_id } as unknown as Categoria
   }
 
   static async updateCategoria(id: number, payload: CategoriaUpsertPayload): Promise<Categoria> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('categorias')
       .update({
@@ -264,6 +279,7 @@ export class InventarioService {
         estado: payload.estado,
       })
       .eq('id', id)
+      .eq('tienda_id', tiendaId)
       .select('id,nombre,descripcion,estado')
       .single()
 
@@ -275,7 +291,8 @@ export class InventarioService {
   }
 
   static async deleteCategoria(id: number): Promise<void> {
-    const { error } = await supabase.from('categorias').delete().eq('id', id)
+    const tiendaId = await getCurrentTiendaId()
+    const { error } = await supabase.from('categorias').delete().eq('id', id).eq('tienda_id', tiendaId)
 
     if (error) {
       throw new Error(error.message || 'No se pudo eliminar la categoría')
@@ -283,9 +300,11 @@ export class InventarioService {
   }
 
   static async getTallas(): Promise<Talla[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data } = await supabase
       .from('tallas')
       .select('id,nombre,tipo,estado')
+      .eq('tienda_id', tiendaId)
       .order('tipo', { ascending: true })
       .order('nombre', { ascending: true })
 
@@ -293,10 +312,12 @@ export class InventarioService {
   }
 
   static async getTallasActivas(): Promise<Talla[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('tallas')
       .select('id,nombre,tipo,estado')
       .eq('estado', 'activo')
+      .eq('tienda_id', tiendaId)
       .order('tipo', { ascending: true })
       .order('nombre', { ascending: true })
 
@@ -308,10 +329,12 @@ export class InventarioService {
   }
 
   static async getProductosActivosBasicos(): Promise<Array<{ id: number; nombre: string; codigo: string }>> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('productos')
       .select('id,nombre,codigo,estado')
       .eq('estado', 'activo')
+      .eq('tienda_id', tiendaId)
       .order('nombre', { ascending: true })
 
     if (error) {
@@ -326,13 +349,16 @@ export class InventarioService {
   }
 
   static async getAlmacenesActivos(): Promise<Almacen[]> {
-    const { data, error } = await this.executeAlmacenesFetch<Almacen[] | null>((fields) =>
-      supabase
+    const tiendaId = await getCurrentTiendaId()
+    const { data, error } = await this.executeAlmacenesFetch<Almacen[] | null>(async (fields) => {
+      const result = await supabase
         .from('almacenes')
         .select(fields)
         .eq('estado', 'activo')
-        .order('nombre', { ascending: true }),
-    )
+        .eq('tienda_id', tiendaId)
+        .order('nombre', { ascending: true })
+      return result as any
+    })
 
     if (error) {
       console.error('Error al cargar almacenes activos', error)
@@ -342,24 +368,27 @@ export class InventarioService {
   }
 
   static async createTalla(payload: TallaUpsertPayload): Promise<Talla> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('tallas')
       .insert({
+        tienda_id: tiendaId,
         nombre: payload.nombre,
         tipo: payload.tipo,
         estado: payload.estado,
       })
-      .select('id,nombre,tipo,estado')
+      .select('id,nombre,tipo,estado,tienda_id')
       .single()
 
     if (error) {
       throw new Error(error.message || 'No se pudo crear la talla')
     }
 
-    return data as Talla
+    return { ...data, tiendaId: data.tienda_id } as unknown as Talla
   }
 
   static async updateTalla(id: number, payload: TallaUpsertPayload): Promise<Talla> {
+    const tiendaId = await getCurrentTiendaId()
     const { data, error } = await supabase
       .from('tallas')
       .update({
@@ -368,6 +397,7 @@ export class InventarioService {
         estado: payload.estado,
       })
       .eq('id', id)
+      .eq('tienda_id', tiendaId)
       .select('id,nombre,tipo,estado')
       .single()
 
@@ -379,7 +409,8 @@ export class InventarioService {
   }
 
   static async deleteTalla(id: number): Promise<void> {
-    const { error } = await supabase.from('tallas').delete().eq('id', id)
+    const tiendaId = await getCurrentTiendaId()
+    const { error } = await supabase.from('tallas').delete().eq('id', id).eq('tienda_id', tiendaId)
 
     if (error) {
       throw new Error(error.message || 'No se pudo eliminar la talla')
@@ -401,7 +432,9 @@ export class InventarioService {
 
     await this.guardarStock(payload.productoId, payload.tallaId ?? null, payload.almacenId ?? null, stockNuevo)
 
+    const tiendaId = await getCurrentTiendaId()
     const { error: historialError } = await supabase.from('historialStock').insert({
+      tienda_id: tiendaId,
       tipo: 'entrada',
       productoId: payload.productoId,
       tallaId: payload.tallaId,
@@ -443,7 +476,9 @@ export class InventarioService {
 
     await this.guardarStock(payload.productoId, payload.tallaId ?? null, payload.almacenId ?? null, stockNuevo)
 
+    const tiendaId = await getCurrentTiendaId()
     const { error: historialError } = await supabase.from('historialStock').insert({
+      tienda_id: tiendaId,
       tipo: payload.tipo,
       productoId: payload.productoId,
       tallaId: payload.tallaId,
@@ -496,8 +531,10 @@ export class InventarioService {
       ? `${payload.motivo} (destino)`
       : `Transferencia desde almacén ${payload.origenId}`
 
+    const tiendaId = await getCurrentTiendaId()
     const { error: historialError } = await supabase.from('historialStock').insert([
       {
+        tienda_id: tiendaId,
         tipo: 'salida',
         productoId: payload.productoId,
         tallaId: payload.tallaId,
@@ -511,6 +548,7 @@ export class InventarioService {
         createdAt,
       },
       {
+        tienda_id: tiendaId,
         tipo: 'entrada',
         productoId: payload.productoId,
         tallaId: payload.tallaId,
@@ -531,11 +569,17 @@ export class InventarioService {
   }
 
   static async getAlmacenesResumen(): Promise<AlmacenResumen[]> {
+    const tiendaId = await getCurrentTiendaId()
     const [almacenesResp, stockResp] = await Promise.all([
-      this.executeAlmacenesFetch<Almacen[] | null>((fields) =>
-        supabase.from('almacenes').select(fields).order('nombre', { ascending: true }),
-      ),
-      supabase.from('stock').select('productoId,"almacenId",cantidad'),
+      this.executeAlmacenesFetch<Almacen[] | null>(async (fields) => {
+        const result = await supabase
+          .from('almacenes')
+          .select(fields)
+          .eq('tienda_id', tiendaId)
+          .order('nombre', { ascending: true })
+        return result as any
+      }),
+      supabase.from('stock').select('productoId,"almacenId",cantidad').eq('tienda_id', tiendaId),
     ])
 
     if (almacenesResp.error) {
@@ -571,10 +615,12 @@ export class InventarioService {
   }
 
   static async getAlmacenProductos(almacenId: number): Promise<AlmacenProductoDetalle[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data: stockData, error: stockError } = await supabase
       .from('stock')
       .select('productoId,tallaId,cantidad,almacenId')
       .eq('almacenId', almacenId)
+      .eq('tienda_id', tiendaId)
 
     if (stockError) {
       throw new Error(stockError.message || 'No se pudo obtener el inventario del almacén')
@@ -601,8 +647,15 @@ export class InventarioService {
 
     const [{ data: productosData, error: productosError }, { data: categoriasData, error: categoriasError }] =
       await Promise.all([
-        supabase.from('productos').select('id,nombre,codigo,categoriaId').in('id', productoIds),
-        supabase.from('categorias').select('id,nombre'),
+        supabase
+          .from('productos')
+          .select('id,nombre,codigo,categoriaId')
+          .eq('tienda_id', tiendaId)
+          .in('id', productoIds),
+        supabase
+          .from('categorias')
+          .select('id,nombre')
+          .eq('tienda_id', tiendaId),
       ])
 
     if (productosError) {
@@ -617,28 +670,29 @@ export class InventarioService {
       const { data: tallasData, error: tallasError } = await supabase
         .from('tallas')
         .select('id,nombre')
+        .eq('tienda_id', tiendaId)
         .in('id', tallaIds)
       if (tallasError) {
         throw new Error(tallasError.message || 'No se pudieron obtener las tallas asociadas')
       }
-      ;(tallasData ?? []).forEach((talla) => {
+      ; (tallasData ?? []).forEach((talla) => {
         tallasMap.set(talla.id, talla.nombre)
       })
     }
 
     const categoriasMap = new Map<number, string>()
-    ;(categoriasData ?? []).forEach((categoria) => {
-      categoriasMap.set(categoria.id, categoria.nombre)
-    })
+      ; (categoriasData ?? []).forEach((categoria) => {
+        categoriasMap.set(categoria.id, categoria.nombre)
+      })
 
     const productosMap = new Map<number, { nombre: string; codigo: string; categoriaId: number | null }>()
-    ;(productosData ?? []).forEach((producto) => {
-      productosMap.set(producto.id, {
-        nombre: producto.nombre,
-        codigo: producto.codigo,
-        categoriaId: producto.categoriaId ?? null,
+      ; (productosData ?? []).forEach((producto) => {
+        productosMap.set(producto.id, {
+          nombre: producto.nombre,
+          codigo: producto.codigo,
+          categoriaId: producto.categoriaId ?? null,
+        })
       })
-    })
 
     const agrupado = new Map<number, AlmacenProductoDetalle>()
 
@@ -672,12 +726,15 @@ export class InventarioService {
   }
 
   static async createAlmacen(payload: AlmacenUpsertPayload): Promise<Almacen> {
+    const tiendaId = await getCurrentTiendaId()
     const direccion = this.normalizeDireccion(payload.direccion)
     const geocodeResult = await this.geocodeDireccion(direccion)
 
     const attempt = (includeCoords: boolean) => {
       const insertPayload: Record<string, unknown> = {
+        tienda_id: tiendaId,
         nombre: payload.nombre,
+        abreviatura: payload.abreviatura,
         direccion,
         tipo: payload.tipo,
         estado: payload.estado,
@@ -689,8 +746,10 @@ export class InventarioService {
       }
 
       const fields = includeCoords ? this.ALMACEN_FIELDS_WITH_COORDS : this.ALMACEN_BASE_FIELDS
+      // Add tienda_id to selection if needed, but ALMACEN_BASE_FIELDS doesn't have it. 
+      // We should probably update ALMACEN_BASE_FIELDS or just cast it.
 
-      return supabase.from('almacenes').insert(insertPayload).select(fields).single()
+      return supabase.from('almacenes').insert(insertPayload).select(fields + ',tienda_id').single()
     }
 
     let includeCoords = this.shouldRequestAlmacenCoords()
@@ -698,7 +757,7 @@ export class InventarioService {
 
     if (error && includeCoords && this.handleCoordinateColumnError(error)) {
       includeCoords = false
-      ;({ data, error } = await attempt(includeCoords))
+        ; ({ data, error } = await attempt(includeCoords))
     } else if (includeCoords && !error) {
       this.almacenesCoordsAvailable = true
     }
@@ -707,16 +766,19 @@ export class InventarioService {
       throw new Error(error.message || 'No se pudo crear el almacén')
     }
 
-    return data as Almacen
+    const created = data as any
+    return { ...created, tiendaId: created.tienda_id } as unknown as Almacen
   }
 
   static async updateAlmacen(id: number, payload: AlmacenUpsertPayload): Promise<Almacen> {
+    const tiendaId = await getCurrentTiendaId()
     const direccion = this.normalizeDireccion(payload.direccion)
     const geocodeResult = await this.geocodeDireccion(direccion)
 
     const attempt = (includeCoords: boolean) => {
       const updateData: Record<string, unknown> = {
         nombre: payload.nombre,
+        abreviatura: payload.abreviatura,
         direccion,
         tipo: payload.tipo,
         estado: payload.estado,
@@ -734,7 +796,13 @@ export class InventarioService {
 
       const fields = includeCoords ? this.ALMACEN_FIELDS_WITH_COORDS : this.ALMACEN_BASE_FIELDS
 
-      return supabase.from('almacenes').update(updateData).eq('id', id).select(fields).single()
+      return supabase
+        .from('almacenes')
+        .update(updateData)
+        .eq('id', id)
+        .eq('tienda_id', tiendaId)
+        .select(fields)
+        .single()
     }
 
     let includeCoords = this.shouldRequestAlmacenCoords()
@@ -742,7 +810,7 @@ export class InventarioService {
 
     if (error && includeCoords && this.handleCoordinateColumnError(error)) {
       includeCoords = false
-      ;({ data, error } = await attempt(includeCoords))
+        ; ({ data, error } = await attempt(includeCoords))
     } else if (includeCoords && !error) {
       this.almacenesCoordsAvailable = true
     }
@@ -751,11 +819,12 @@ export class InventarioService {
       throw new Error(error.message || 'No se pudo actualizar el almacén')
     }
 
-    return data as Almacen
+    return data as unknown as Almacen
   }
 
   static async deleteAlmacen(id: number): Promise<void> {
-    const { error } = await supabase.from('almacenes').delete().eq('id', id)
+    const tiendaId = await getCurrentTiendaId()
+    const { error } = await supabase.from('almacenes').delete().eq('id', id).eq('tienda_id', tiendaId)
 
     if (error) {
       throw new Error(error.message || 'No se pudo eliminar el almacén')
@@ -763,9 +832,11 @@ export class InventarioService {
   }
 
   static async getHistorialDetallado(limit = 50): Promise<MovimientoDetallado[]> {
+    const tiendaId = await getCurrentTiendaId()
     const { data: movimientosData, error: movimientosError } = await supabase
       .from('historialStock')
       .select('id,tipo,productoId,tallaId,almacenId,cantidad,usuarioId,motivo,"createdAt"')
+      .eq('tienda_id', tiendaId)
       .order('createdAt', { ascending: false })
       .limit(limit)
 
@@ -773,7 +844,7 @@ export class InventarioService {
       console.error('Error al cargar historial de stock', movimientosError)
     }
 
-  const movimientos = (movimientosData as HistorialStock[] | null) || []
+    const movimientos = (movimientosData as HistorialStock[] | null) || []
 
     const productoIds = Array.from(
       new Set(
@@ -806,16 +877,24 @@ export class InventarioService {
 
     const [productosResp, tallasResp, almacenesResp, usuariosResp] = await Promise.all([
       productoIds.length
-        ? supabase.from('productos').select('id,nombre').in('id', productoIds)
+        ? supabase
+          .from('productos')
+          .select('id,nombre')
+          .eq('tienda_id', tiendaId)
+          .in('id', productoIds)
         : Promise.resolve({ data: [], error: null }),
       tallaIds.length
-        ? supabase.from('tallas').select('id,nombre').in('id', tallaIds)
+        ? supabase.from('tallas').select('id,nombre').eq('tienda_id', tiendaId).in('id', tallaIds)
         : Promise.resolve({ data: [], error: null }),
       almacenIds.length
-        ? supabase.from('almacenes').select('id,nombre').in('id', almacenIds)
+        ? supabase
+          .from('almacenes')
+          .select('id,nombre')
+          .eq('tienda_id', tiendaId)
+          .in('id', almacenIds)
         : Promise.resolve({ data: [], error: null }),
       usuarioIds.length
-        ? supabase.from('usuarios').select('id,nombre').in('id', usuarioIds)
+        ? supabase.from('usuarios').select('id,nombre').eq('tienda_id', tiendaId).in('id', usuarioIds)
         : Promise.resolve({ data: [], error: null }),
     ])
 
@@ -833,24 +912,24 @@ export class InventarioService {
     }
 
     const productosMap = new Map<number, string>()
-    ;(productosResp.data as Array<{ id: number; nombre: string }> | null || []).forEach((producto) => {
-      productosMap.set(producto.id, producto.nombre)
-    })
+      ; (productosResp.data as Array<{ id: number; nombre: string }> | null || []).forEach((producto) => {
+        productosMap.set(producto.id, producto.nombre)
+      })
 
     const tallasMap = new Map<number, string>()
-    ;(tallasResp.data as Array<{ id: number; nombre: string }> | null || []).forEach((talla) => {
-      tallasMap.set(talla.id, talla.nombre)
-    })
+      ; (tallasResp.data as Array<{ id: number; nombre: string }> | null || []).forEach((talla) => {
+        tallasMap.set(talla.id, talla.nombre)
+      })
 
     const almacenesMap = new Map<number, string>()
-    ;(almacenesResp.data as Array<{ id: number; nombre: string }> | null || []).forEach((almacen) => {
-      almacenesMap.set(almacen.id, almacen.nombre)
-    })
+      ; (almacenesResp.data as Array<{ id: number; nombre: string }> | null || []).forEach((almacen) => {
+        almacenesMap.set(almacen.id, almacen.nombre)
+      })
 
     const usuariosMap = new Map<string, string>()
-    ;(usuariosResp.data as Array<{ id: string; nombre: string }> | null || []).forEach((usuario) => {
-      usuariosMap.set(usuario.id, usuario.nombre)
-    })
+      ; (usuariosResp.data as Array<{ id: string; nombre: string }> | null || []).forEach((usuario) => {
+        usuariosMap.set(usuario.id, usuario.nombre)
+      })
 
     return movimientos.map((movimiento) => {
       const productoNombre =
@@ -870,7 +949,7 @@ export class InventarioService {
       return {
         id: movimiento.id,
         tipo: movimiento.tipo,
-  cantidad: movimiento.cantidad ?? 0,
+        cantidad: movimiento.cantidad ?? 0,
         motivo: movimiento.motivo ?? null,
         createdAt: createdAtIso,
         productoNombre,
