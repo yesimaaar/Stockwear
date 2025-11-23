@@ -202,3 +202,33 @@ export interface Abono {
   nota?: string | null
   createdAt: string
 }
+export interface Gasto {
+  id: number
+  tiendaId: number
+  usuarioId?: string | null
+  cajaSesionId?: number | null
+  descripcion: string
+  monto: number
+  categoria: string
+  metodoPago: string
+  proveedor?: string | null
+  estado: 'pagado' | 'pendiente'
+  saldoPendiente: number
+  fechaVencimiento?: string | null
+  fechaGasto: string
+  createdAt: string
+}
+
+export interface PagoGasto {
+  id: number
+  tiendaId: number
+  gastoId: number
+  usuarioId?: string | null
+  cajaSesionId?: number | null
+  monto: number
+  metodoPago: string
+  nota?: string | null
+  fechaPago: string
+  createdAt: string
+  gasto?: Gasto
+}
