@@ -146,9 +146,7 @@ export function SalesWorkspace({
   const [loadingClientes, setLoadingClientes] = useState(false)
 
   // Credit Details State
-  const [numeroCuotas, setNumeroCuotas] = useState<number | "">("")
-  const [interesPorcentaje, setInteresPorcentaje] = useState<number | "">("")
-  const [frecuenciaPago, setFrecuenciaPago] = useState<'semanal' | 'mensual'>('mensual')
+  const [tipoVenta, setTipoVenta] = useState<'contado' | 'credito'>('contado')
 
   // Customer Data Form State
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -471,114 +469,83 @@ export function SalesWorkspace({
   const renderMetodoPagoSelector = (id: string) => {
     const opciones: MetodoPago[] = metodosPago.length > 0 ? metodosPago : [
       { id: 1, nombre: "Efectivo", tipo: "efectivo", tiendaId: 0, estado: "activo" },
-      { id: 2, nombre: "Transferencia", tipo: "banco", tiendaId: 0, estado: "activo" }
+      { id: 2, nombre: "Transferencia", tipo: "banco", tiendaId: 0, estado: "activo" },
+      { id: 3, nombre: "Tarjeta de crédito", tipo: "otro", tiendaId: 0, estado: "activo" }
     ]
 
-    // Filter out "Tarjeta" if it comes from DB and add "Cuotas"
-    const displayOptions = opciones.filter(m => !m.nombre.toLowerCase().includes("tarjeta"))
+    // Ensure Tarjeta is visible if it exists in DB, or add it if missing and needed
+    // The user wants "Tarjeta de crédito" explicitly.
+    // If it's not in the DB list, we might want to inject it or just show what's there.
+    // Assuming standard behavior is to show all active methods.
+    // We will NOT filter out "Tarjeta" anymore.
 
-    // Add virtual "Cuotas" option
-    const cuotasOption = { id: 'cuotas', nombre: "Cuotas", tipo: "otro", tiendaId: 0, estado: "activo" }
-
-    const totalConInteres = useMemo(() => {
-      if (selectedMetodoPagoId !== 'cuotas') return total
-      const interes = typeof interesPorcentaje === 'number' ? Math.max(0, interesPorcentaje) : 0
-      return total * (1 + interes / 100)
-    }, [total, selectedMetodoPagoId, interesPorcentaje])
-
-    const montoPorCuota = useMemo(() => {
-      if (selectedMetodoPagoId !== 'cuotas') return 0
-      const cuotas = typeof numeroCuotas === 'number' ? Math.max(1, numeroCuotas) : 1
-      return totalConInteres / cuotas
-    }, [totalConInteres, numeroCuotas, selectedMetodoPagoId])
+    // We also do NOT add the virtual "Cuotas" option anymore.
 
     return (
-      <div className="space-y-2">
-        <Label htmlFor={id} className="text-sm font-medium text-foreground">
-          Método de Pago
-        </Label>
-        <Select
-          value={selectedMetodoPagoId ?? ""}
-          onValueChange={(value) => setSelectedMetodoPagoId(value)}
-        >
-          <SelectTrigger id={id}>
-            <SelectValue placeholder="Seleccionar método" />
-          </SelectTrigger>
-          <SelectContent>
-            {[...displayOptions, cuotasOption].map((metodo) => (
-              <SelectItem key={metodo.id} value={String(metodo.id)}>
-                <div className="flex items-center gap-2">
-                  {metodo.nombre === "Cuotas" ? (
-                    <Receipt className="h-4 w-4" />
-                  ) : metodo.nombre.toLowerCase().includes("transferencia") ? (
-                    <ArrowLeftRight className="h-4 w-4" />
-                  ) : (
-                    <Banknote className="h-4 w-4" />
-                  )}
-                  <span>{metodo.nombre}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="space-y-4">
+        {/* Toggle Switch for Pagada / A crédito */}
+        <div className="grid grid-cols-2 gap-2 p-1 bg-muted rounded-lg">
+          <button
+            type="button"
+            onClick={() => setTipoVenta('contado')}
+            className={cn(
+              "flex items-center justify-center py-2 text-sm font-medium rounded-md transition-all",
+              tipoVenta === 'contado'
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Pagada
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoVenta('credito')}
+            className={cn(
+              "flex items-center justify-center py-2 text-sm font-medium rounded-md transition-all",
+              tipoVenta === 'credito'
+                ? "bg-red-700 text-white shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            A crédito
+          </button>
+        </div>
 
-        {selectedMetodoPagoId === 'cuotas' && (
-          <div className="mt-3 space-y-3 rounded-md border bg-muted/30 p-3 animate-in slide-in-from-top-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="cuotas-input" className="text-xs">N° Cuotas</Label>
-                <Input
-                  id="cuotas-input"
-                  type="number"
-                  min={1}
-                  placeholder="Ej. 3"
-                  value={numeroCuotas}
-                  onChange={(e) => setNumeroCuotas(e.target.value === "" ? "" : Number(e.target.value))}
-                  className="h-8 bg-background"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="interes-input" className="text-xs">Interés %</Label>
-                <div className="relative">
-                  <Input
-                    id="interes-input"
-                    type="number"
-                    min={0}
-                    placeholder="Ej. 10"
-                    value={interesPorcentaje}
-                    onChange={(e) => setInteresPorcentaje(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="h-8 bg-background pr-6"
-                  />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                </div>
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label htmlFor="frecuencia-input" className="text-xs">Frecuencia de Pago</Label>
-                <Select value={frecuenciaPago} onValueChange={(val: 'semanal' | 'mensual') => setFrecuenciaPago(val)}>
-                  <SelectTrigger id="frecuencia-input" className="h-8 bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="semanal">Semanal</SelectItem>
-                    <SelectItem value="mensual">Mensual</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1 border-t pt-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Original:</span>
-                <span>{priceFormatter.format(total)}</span>
-              </div>
-              <div className="flex justify-between font-medium text-foreground">
-                <span>Total con Interés:</span>
-                <span>{priceFormatter.format(totalConInteres)}</span>
-              </div>
-              <div className="flex justify-between text-primary">
-                <span>Monto por Cuota:</span>
-                <span>{priceFormatter.format(montoPorCuota)}</span>
-              </div>
-            </div>
+        {tipoVenta === 'contado' && (
+          <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+            <Label htmlFor={id} className="text-sm font-medium text-foreground">
+              Método de Pago
+            </Label>
+            <Select
+              value={selectedMetodoPagoId ?? ""}
+              onValueChange={(value) => setSelectedMetodoPagoId(value)}
+            >
+              <SelectTrigger id={id}>
+                <SelectValue placeholder="Seleccionar método" />
+              </SelectTrigger>
+              <SelectContent>
+                {opciones.map((metodo) => (
+                  <SelectItem key={metodo.id} value={String(metodo.id)}>
+                    <div className="flex items-center gap-2">
+                      {metodo.nombre.toLowerCase().includes("tarjeta") ? (
+                        <Receipt className="h-4 w-4" />
+                      ) : metodo.nombre.toLowerCase().includes("transferencia") ? (
+                        <ArrowLeftRight className="h-4 w-4" />
+                      ) : (
+                        <Banknote className="h-4 w-4" />
+                      )}
+                      <span>{metodo.nombre}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {tipoVenta === 'credito' && (
+          <div className="p-3 rounded-md border bg-amber-50 text-amber-900 text-sm">
+            <p>La venta se registrará como <strong>pendiente de cobro</strong>.</p>
           </div>
         )}
 
@@ -660,7 +627,7 @@ export function SalesWorkspace({
       return
     }
 
-    const isCredito = selectedMetodoPagoId === 'cuotas'
+    const isCredito = tipoVenta === 'credito'
     let clienteIdParaVenta = selectedClienteId && selectedClienteId !== 'anonimo' ? Number(selectedClienteId) : null
 
     // Si es crédito y no hay cliente seleccionado, intentamos usar los datos del formulario
@@ -711,24 +678,33 @@ export function SalesWorkspace({
       }
     }
 
-    const interesValido = typeof interesPorcentaje === 'number' ? interesPorcentaje : 0
-    const cuotasValidas = typeof numeroCuotas === 'number' ? Math.max(1, numeroCuotas) : 1
-
-    const totalConInteres = isCredito ? total * (1 + Math.max(0, interesValido) / 100) : total
-    const montoCuotaFinal = isCredito ? totalConInteres / cuotasValidas : 0
-
     setRegistrando(true)
     try {
+      // Find a fallback payment method for credit sales if DB requires it
+      let metodoPagoIdCredito: number | undefined = undefined
+
+      if (isCredito) {
+        // Try to find a "Credito" or "Crédito" method
+        const metodoCredito = metodosPago.find(m =>
+          m.nombre.toLowerCase().includes('credito') ||
+          m.nombre.toLowerCase().includes('crédito')
+        )
+
+        if (metodoCredito) {
+          metodoPagoIdCredito = metodoCredito.id
+        } else if (metodosPago.length > 0) {
+          // Fallback to the first available method (usually Efectivo) if no specific credit method exists
+          // This is to satisfy potential NOT NULL constraints in the DB
+          metodoPagoIdCredito = metodosPago[0].id
+        }
+      }
+
       const venta = await VentaService.create({
         usuarioId: selectedEmpleadoId,
-        metodoPagoId: isCredito ? undefined : (selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined),
+        metodoPagoId: isCredito ? metodoPagoIdCredito : (selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined),
         cajaSesionId: sesionActual?.id,
         clienteId: clienteIdParaVenta,
         tipoVenta: isCredito ? 'credito' : 'contado',
-        numeroCuotas: isCredito ? cuotasValidas : undefined,
-        interesPorcentaje: isCredito ? interesValido : undefined,
-        montoCuota: isCredito ? montoCuotaFinal : undefined,
-        frecuenciaPago: isCredito ? frecuenciaPago : undefined,
         items: lineas.map((linea) => ({
           stockId: linea.stockId,
           cantidad: linea.cantidad,
@@ -910,12 +886,7 @@ export function SalesWorkspace({
           <div className="flex flex-col gap-2 border-t pt-4 text-right">
             <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} unidades</p>
             <p className="text-lg font-semibold text-foreground">
-              Total a pagar: ${
-                (selectedMetodoPagoId === 'cuotas'
-                  ? (total * (1 + (typeof interesPorcentaje === 'number' ? Math.max(0, interesPorcentaje) : 0) / 100))
-                  : total
-                ).toLocaleString("es-CO", { minimumFractionDigits: 0 })
-              }
+              Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
             </p>
           </div>
         ) : null}
