@@ -1190,15 +1190,16 @@ export default function MovimientosPage() {
   return (
     <AdminSectionLayout
       title="Movimientos"
+      description="Gestiona el flujo de caja, registra gastos y consulta el historial de transacciones."
       actions={
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            className={cn("gap-2 bg-background", sesionActual ? "border-rose-200 hover:bg-rose-50 text-rose-700" : "")}
+            className={cn("gap-2 bg-background", sesionActual ? "border-red-900/20 hover:bg-red-900/10 text-red-900" : "")}
             onClick={() => sesionActual ? prepareCierre() : setOpenCajaDialog(true)}
             disabled={loadingSesion}
           >
-            <Store className={cn("h-4 w-4", sesionActual ? "text-rose-500" : "text-amber-500")} />
+            <Store className={cn("h-4 w-4", sesionActual ? "text-red-900" : "text-amber-500")} />
             {loadingSesion ? "Cargando..." : sesionActual ? "Cerrar caja" : "Abrir caja"}
           </Button>
           <DropdownMenu>
@@ -1218,7 +1219,7 @@ export default function MovimientosPage() {
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
-            className="gap-2 bg-rose-600 hover:bg-rose-700 text-white"
+            className="gap-2 bg-red-900 hover:bg-red-900/90 text-white"
             onClick={() => setOpenGastosDialog(true)}
           >
             <Wallet className="h-4 w-4" />

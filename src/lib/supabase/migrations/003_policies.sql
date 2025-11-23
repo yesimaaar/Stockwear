@@ -19,6 +19,8 @@ ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE abonos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metodos_pago ENABLE ROW LEVEL SECURITY;
 ALTER TABLE caja_sesiones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."gastos" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."pagos_gastos" ENABLE ROW LEVEL SECURITY;
 
 -- 2. Policies
 
@@ -153,3 +155,35 @@ CREATE POLICY "Tenant Isolation" ON metodos_pago
 CREATE POLICY "Tenant Isolation" ON caja_sesiones
   USING (tienda_id = get_my_tienda_id())
   WITH CHECK (tienda_id = get_my_tienda_id());
+
+-- Gastos
+CREATE POLICY "Enable read access for all users" ON "public"."gastos"
+  AS PERMISSIVE
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Enable insert access for all users" ON "public"."gastos"
+  AS PERMISSIVE
+  FOR INSERT
+  TO public
+  WITH CHECK (true);
+
+CREATE POLICY "Enable update access for all users" ON "public"."gastos"
+  AS PERMISSIVE
+  FOR UPDATE
+  TO public
+  USING (true);
+
+-- Pagos Gastos
+CREATE POLICY "Enable read access for all users" ON "public"."pagos_gastos"
+  AS PERMISSIVE
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Enable insert access for all users" ON "public"."pagos_gastos"
+  AS PERMISSIVE
+  FOR INSERT
+  TO public
+  WITH CHECK (true);

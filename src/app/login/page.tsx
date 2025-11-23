@@ -73,13 +73,13 @@ const previewTasks = [
 const quickBillingTopSellers = [
   {
     id: "nike-coraline",
-    name: "Nike Coraline",
+    name: "Nike Air",
     category: "zapatillas",
     tag: "Más vendido",
     sales: "1 venta",
     revenue: "$ 450.000",
     price: "$ 450.000",
-    image: "https://images.unsplash.com/photo-1514986888952-8cd320577b68?auto=format&fit=crop&w=600&q=80",
+    image: "https://static.nike.com/a/images/t_web_pdp_535_v2/f_auto/44db7a6c-b9f7-4ed4-82a7-fb0bc5287836/AIR+MONARCH+IV+SE.png",
   },
   {
     id: "adidas-street",
@@ -333,7 +333,7 @@ export default function LoginPage() {
           </p>
         </section>
 
-        <section className="relative hidden h-[750px] overflow-hidden rounded-[44px] border border-white/80 bg-white shadow-[0_55px_140px_rgba(15,23,42,0.18)] lg:flex">
+        <section className="relative hidden h-[750px] overflow-hidden rounded-[44px] border border-white/80 bg-white shadow-[0_55px_140px_rgba(15,23,42,0.18)] lg:flex pointer-events-none select-none">
           <div className="flex w-full">
             <aside className="flex w-64 flex-col border-r border-slate-100 bg-white px-6 py-9">
               <div className="flex items-center gap-3">

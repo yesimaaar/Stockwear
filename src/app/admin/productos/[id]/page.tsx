@@ -308,7 +308,7 @@ export default function ProductoDetallePage() {
             <AlertDialogAction
               className={cn(
                 deleteMode === "hard"
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive"
+                  ? "bg-red-900 text-white hover:bg-red-900/90"
                   : "bg-primary text-primary-foreground hover:bg-primary/90",
               )}
               disabled={deleting}

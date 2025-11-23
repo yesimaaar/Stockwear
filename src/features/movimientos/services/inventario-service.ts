@@ -568,18 +568,19 @@ export class InventarioService {
     }
   }
 
-  static async getAlmacenesResumen(): Promise<AlmacenResumen[]> {
-    const tiendaId = await getCurrentTiendaId()
+  static async getAlmacenesResumen(client?: SupabaseClient): Promise<AlmacenResumen[]> {
+    const supabaseClient = client ?? supabase
+    const tiendaId = await getCurrentTiendaId({ client: supabaseClient })
     const [almacenesResp, stockResp] = await Promise.all([
       this.executeAlmacenesFetch<Almacen[] | null>(async (fields) => {
-        const result = await supabase
+        const result = await supabaseClient
           .from('almacenes')
           .select(fields)
           .eq('tienda_id', tiendaId)
           .order('nombre', { ascending: true })
         return result as any
       }),
-      supabase.from('stock').select('productoId,"almacenId",cantidad').eq('tienda_id', tiendaId),
+      supabaseClient.from('stock').select('productoId,"almacenId",cantidad').eq('tienda_id', tiendaId),
     ])
 
     if (almacenesResp.error) {

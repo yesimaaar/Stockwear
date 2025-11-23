@@ -115,8 +115,10 @@ export async function GET() {
         try {
             tiendaId = await getCurrentTiendaId({ client: supabase })
         } catch (error) {
-            console.error("Error determinando tienda para highlights:", error)
             const message = error instanceof Error ? error.message : 'Tienda no encontrada'
+            if (message !== 'Usuario no autenticado') {
+                console.error("Error determinando tienda para highlights:", error)
+            }
             return NextResponse.json({ message }, { status: 403 })
         }
 

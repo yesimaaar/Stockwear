@@ -61,7 +61,9 @@ export const GastoService = {
 
     async getAll(filters?: {
         estado?: 'pagado' | 'pendiente',
-        limit?: number
+        limit?: number,
+        startDate?: Date,
+        endDate?: Date
     }): Promise<Gasto[]> {
         const tiendaId = await getCurrentTiendaId()
 
@@ -73,6 +75,14 @@ export const GastoService = {
 
         if (filters?.estado) {
             query = query.eq("estado", filters.estado)
+        }
+
+        if (filters?.startDate) {
+            query = query.gte("fecha_gasto", filters.startDate.toISOString())
+        }
+
+        if (filters?.endDate) {
+            query = query.lte("fecha_gasto", filters.endDate.toISOString())
         }
 
         if (filters?.limit) {

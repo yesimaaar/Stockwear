@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format, endOfDay, startOfDay, subDays, startOfHour, eachHourOfInterval, isSameHour } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import type { WorkSheet } from "xlsx"
+import { GastosTab } from "@/features/gastos/components/gastos-tab"
 
 type TimeRange = "90d" | "30d" | "7d" | "1d"
 
@@ -383,8 +384,6 @@ export default function ReportesPage() {
   })
   const [exportingReport, setExportingReport] = useState(false)
   const [lowStockCount, setLowStockCount] = useState(0)
-  const [expensesMetrics, setExpensesMetrics] = useState({ total: 0, count: 0, average: 0 })
-  const [expensesChartData, setExpensesChartData] = useState<Array<{ date: string; value: number }>>([])
 
   const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null)
   const [topConsulted, setTopConsulted] = useState<TopConsultedProduct[]>([])
@@ -683,35 +682,6 @@ export default function ReportesPage() {
         })
 
         setAllSales(ventas)
-
-        // Expenses Logic
-        const expenses = historial.filter((item) => item.tipo === "entrada")
-        const expensesTotal = expenses.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
-        const expensesCount = expenses.length
-        const expensesAverage = expensesCount > 0 ? expensesTotal / expensesCount : 0
-
-        setExpensesMetrics({
-          total: expensesTotal,
-          count: expensesCount,
-          average: expensesAverage,
-        })
-
-        // Group expenses by date for chart
-        const expensesByDate = expenses.reduce<Record<string, number>>((acc, item) => {
-          const dateKey = new Date(item.createdAt).toISOString().split("T")[0]
-          const amount = (item.costoUnitario || 0) * item.cantidad
-          acc[dateKey] = (acc[dateKey] || 0) + amount
-          return acc
-        }, {})
-
-        const expensesChartPayload = Object.entries(expensesByDate)
-          .map(([date, value]) => ({ date, value }))
-          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-          .slice(-30) // Last 30 days
-
-        setExpensesChartData(expensesChartPayload)
-
-
 
         const monthSalesTrend = computeTrend(monthSalesValue, previousMonthSalesValue)
         const monthSalesCountTrend = computeTrend(monthSalesCount, previousMonthSalesCount)
@@ -1892,100 +1862,7 @@ export default function ReportesPage() {
         </TabsContent>
 
         <TabsContent value="gastos" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="border-none shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Gastos</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{currencyFormatter.format(expensesMetrics.total)}</div>
-                <p className="text-xs text-muted-foreground">
-                  Costo total de entradas de inventario
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Entradas Registradas</CardTitle>
-                <Boxes className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{expensesMetrics.count}</div>
-                <p className="text-xs text-muted-foreground">
-                  Número de movimientos de entrada
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Costo Promedio</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{currencyFormatter.format(expensesMetrics.average)}</div>
-                <p className="text-xs text-muted-foreground">
-                  Promedio por entrada
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="border-none shadow-sm">
-            <CardHeader>
-              <CardTitle>Historial de Gastos</CardTitle>
-              <CardDescription>
-                Visualiza los gastos acumulados por fecha basados en las entradas de inventario.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {expensesChartData.length > 0 ? (
-                <ChartContainer config={{ gastos: { label: "Gastos", color: "hsl(var(--destructive))" } }} className="h-[300px] w-full">
-                  <BarChart data={expensesChartData}>
-                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => {
-                        const date = new Date(value as string)
-                        return date.toLocaleDateString("es-CO", { day: "numeric", month: "short" })
-                      }}
-                      className="text-xs"
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => currencyFormatter.format(value as number).replace(/\u00a0/g, " ")}
-                      className="text-xs"
-                    />
-                    <ChartTooltip
-                      content={({ content, ...contentProps }) => (
-                        <ChartTooltipContent
-                          {...contentProps}
-                          labelFormatter={(label) => {
-                            return new Date(label as string).toLocaleDateString("es-CO", {
-                              weekday: "long",
-                              day: "numeric",
-                              month: "long",
-                            })
-                          }}
-                          formatter={(value) => currencyFormatter.format(value as number)}
-                        />
-                      )}
-                    />
-                    <Bar dataKey="value" fill="var(--color-gastos)" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                  </BarChart>
-                </ChartContainer>
-              ) : (
-                <div className="flex h-[300px] items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
-                  No hay registros de gastos para el periodo seleccionado.
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <GastosTab dateRange={appliedSalesRange} />
         </TabsContent>
       </Tabs>
     </div>

@@ -463,7 +463,7 @@ export default function CategoriasPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive"
+              className="bg-red-900 text-white hover:bg-red-900/90"
               disabled={isDeleting}
               onClick={() => {
                 void handleDelete();
