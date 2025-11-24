@@ -324,10 +324,9 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
   }
 }
 
-import { updateStoreWhatsApp, getStoreSettings } from "@/app/actions/store-actions"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { getStoreSettings } from "@/app/actions/store-actions"
 
+// Forced rebuild to clear cache
 export default function AdminHomePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -337,8 +336,6 @@ export default function AdminHomePage() {
   const [isHydratingHighlights, startHighlightsTransition] = useTransition()
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [showMobileNotice, setShowMobileNotice] = useState(false)
-  const [whatsappNumber, setWhatsappNumber] = useState("")
-  const [savingWhatsapp, setSavingWhatsapp] = useState(false)
   const [storeSlug, setStoreSlug] = useState<string | null>(null)
   const { toast } = useToast()
 
@@ -358,9 +355,6 @@ export default function AdminHomePage() {
 
       if (res.success && res.data) {
         setStoreSlug(res.data.slug ?? null)
-        if (res.data.whatsapp) {
-          setWhatsappNumber(res.data.whatsapp)
-        }
       } else if (!res.success && res.message) {
         toast({ title: "Error", description: res.message, variant: "destructive" })
       }
@@ -372,30 +366,6 @@ export default function AdminHomePage() {
       active = false
     }
   }, [toast])
-
-  const handleSaveWhatsapp = async () => {
-    setSavingWhatsapp(true)
-    try {
-      const { data } = await supabase.auth.getSession()
-      const accessToken = data.session?.access_token
-
-      if (!accessToken) {
-        toast({ title: "Sesión requerida", description: "Inicia sesión para actualizar el WhatsApp", variant: "destructive" })
-        return
-      }
-
-      const res = await updateStoreWhatsApp(whatsappNumber, accessToken)
-      if (res.success) {
-        toast({ title: "Guardado", description: "Número de WhatsApp actualizado" })
-      } else {
-        toast({ title: "Error", description: res.message, variant: "destructive" })
-      }
-    } catch (_error) {
-      toast({ title: "Error", description: "No se pudo guardar", variant: "destructive" })
-    } finally {
-      setSavingWhatsapp(false)
-    }
-  }
 
   const resolveCatalogUrl = () => {
     if (!storeSlug) {
@@ -687,7 +657,7 @@ export default function AdminHomePage() {
                 Compartir catálogo
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 p-4">
+            <DropdownMenuContent align="end" className="w-56 p-2">
               <DropdownMenuLabel>Acciones rápidas</DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => void copyCatalogLink()} className="cursor-pointer">
                 <Copy className="mr-2 size-4" />
@@ -697,36 +667,6 @@ export default function AdminHomePage() {
                 <ExternalLink className="mr-2 size-4" />
                 Abrir catálogo
               </DropdownMenuItem>
-
-              <div className="my-2 border-t border-border" />
-
-              <div className="space-y-3 pt-2">
-                <div className="space-y-1">
-                  <Label htmlFor="whatsapp-config" className="text-xs font-medium">WhatsApp de Pedidos</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="whatsapp-config"
-                      placeholder="Ej: 573001234567"
-                      className="h-8 text-xs"
-                      value={whatsappNumber}
-                      onChange={(e) => setWhatsappNumber(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    />
-                    <Button
-                      size="sm"
-                      className="h-8 px-3"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleSaveWhatsapp()
-                      }}
-                      disabled={savingWhatsapp}
-                    >
-                      {savingWhatsapp ? "..." : "OK"}
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">Este número recibirá los pedidos del catálogo.</p>
-                </div>
-              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         }
