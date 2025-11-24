@@ -398,11 +398,12 @@ export class ProductoService {
 
     const { data, error } = await supabase.from('productos').insert(payload).select().single()
     if (error || !data) {
-      console.error('Error al crear producto. Payload:', payload)
-      console.error('Detalles del error:', JSON.stringify(error, null, 2))
       if (error?.code === '23505') {
         throw new Error('El código del producto ya existe. Por favor utiliza uno diferente.')
       }
+
+      console.error('Error al crear producto. Payload:', payload)
+      console.error('Detalles del error:', JSON.stringify(error, null, 2))
       return null
     }
     invalidateProductosCache(tiendaId)
