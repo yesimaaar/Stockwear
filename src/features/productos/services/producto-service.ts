@@ -329,10 +329,11 @@ export class ProductoService {
     const tiendaId = await getCurrentTiendaId()
     if (!q) return this.getAll()
 
+    // 1. Get base results (text match)
     const catalogo = await this.getAll()
     const normalized = q.toLowerCase()
 
-    const resultados = catalogo.filter((producto) => {
+    let resultados = catalogo.filter((producto) => {
       const nombre = producto.nombre?.toLowerCase() ?? ''
       const codigo = producto.codigo?.toLowerCase() ?? ''
       const categoria = producto.categoria?.toLowerCase() ?? ''
@@ -343,21 +344,48 @@ export class ProductoService {
       )
     })
 
-    if (resultados.length > 0 || catalogo.length === 0) {
+    if (resultados.length === 0 && catalogo.length > 0) {
+      // Fallback to database ILIKE if memory search fails
+      const { data, error } = await supabase
+        .from('productos')
+        .select(PRODUCTO_SELECT)
+        .eq('tienda_id', tiendaId)
+        .or(`nombre.ilike.%${q}%,codigo.ilike.%${q}%`)
+
+      if (!error && data) {
+        resultados = (data as ProductoRow[]).map(mapProductoRow)
+      }
+    }
+
+    if (resultados.length === 0) return []
+
+    // 2. Fetch feedback stats for this query
+    // We get all feedback for this query string to calculate scores
+    const { data: feedbackData, error: feedbackError } = await supabase
+      .from('search_feedback')
+      .select('product_id, is_positive')
+      .eq('query', q)
+
+    if (feedbackError || !feedbackData || feedbackData.length === 0) {
       return resultados
     }
 
-    const { data, error } = await supabase
-      .from('productos')
-      .select(PRODUCTO_SELECT)
-      .eq('tienda_id', tiendaId)
-      .or(`nombre.ilike.%${q}%,codigo.ilike.%${q}%`)
+    // 3. Calculate scores
+    const scores = new Map<number, number>()
 
-    if (error || !data) {
-      return resultados
-    }
+    feedbackData.forEach(item => {
+      const current = scores.get(item.product_id) ?? 0
+      // +1 for positive, -1 for negative
+      const weight = item.is_positive ? 1 : -1
+      scores.set(item.product_id, current + weight)
+    })
 
-    return (data as ProductoRow[]).map(mapProductoRow)
+    // 4. Sort results by score (descending)
+    return resultados.sort((a, b) => {
+      const scoreA = scores.get(a.id) ?? 0
+      const scoreB = scores.get(b.id) ?? 0
+      return scoreB - scoreA // Higher score first
+    })
   }
 
   static async getByCategoria(categoriaId: number): Promise<ProductoConStock[]> {

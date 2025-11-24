@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AuthService } from "@/features/auth/services/auth-service"
 import { ReconocimientoService, type ReconocimientoResult } from "@/features/vision/services/reconocimiento-service"
+import { confirmVisualMatch } from "@/features/vision/actions/vision-actions"
 import { ProductoService, type ProductoConStock } from "@/features/productos/services/producto-service"
 import type { Usuario } from "@/lib/types"
 import { useShoeRecognizer } from "@/hooks/use-shoe-recognizer"
@@ -265,9 +266,20 @@ export default function EmpleadoDashboard() {
     persistThreshold(clamped)
   }, [threshold])
 
-  const handleConfirmarProducto = (confirmar: boolean) => {
+  const handleConfirmarProducto = async (confirmar: boolean) => {
     if (confirmar) {
       setResultado((prev) => (prev ? { ...prev, nivelConfianza: "alto" } : prev))
+
+      // Save the embedding as feedback if available
+      if (resultado?.producto && resultado.embedding) {
+        try {
+          await confirmVisualMatch(resultado.producto.id, resultado.embedding)
+          // Optional: Show a toast or small indicator that learning was recorded
+          console.log("Feedback visual registrado correctamente")
+        } catch (error) {
+          console.error("Error registrando feedback visual:", error)
+        }
+      }
     } else {
       setResultado(null)
       void startCamera()
