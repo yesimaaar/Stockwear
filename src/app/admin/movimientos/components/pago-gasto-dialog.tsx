@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Loader2, Check } from "lucide-react"
+import { Loader2, Check, Banknote, Building2, HelpCircle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -46,9 +46,9 @@ const pagoSchema = z.object({
 type PagoFormValues = z.infer<typeof pagoSchema>
 
 const METODOS_PAGO = [
-    { id: "efectivo", label: "Efectivo", icon: "💵" },
-    { id: "transferencia", label: "Transferencia bancaria", icon: "🏦" },
-    { id: "otro", label: "Otro", icon: "⚪" },
+    { id: "efectivo", label: "Efectivo", icon: Banknote },
+    { id: "transferencia", label: "Transferencia", icon: Building2 },
+    { id: "otro", label: "Otro", icon: HelpCircle },
 ]
 
 interface PagoGastoDialogProps {
@@ -132,19 +132,23 @@ export function PagoGastoDialog({ open, onOpenChange, gasto, onSuccess }: PagoGa
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
                             💰
                         </span>
                         Registrar pago de gasto
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="mb-4 rounded-lg bg-slate-50 p-3 text-sm text-muted-foreground">
-                    <p>Estás registrando un pago para:</p>
-                    <p className="font-medium text-foreground">{gasto.descripcion}</p>
-                    <div className="mt-2 flex justify-between border-t pt-2">
-                        <span>Saldo pendiente:</span>
-                        <span className="font-bold text-rose-600">{currencyFormatter.format(gasto.saldoPendiente)}</span>
+                <div className="mb-4 rounded-lg bg-muted/50 p-4 text-sm">
+                    <div className="flex flex-col gap-1">
+                        <span className="text-muted-foreground">Estás registrando un pago para:</span>
+                        <span className="font-medium text-foreground">{gasto.descripcion}</span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between border-t pt-3">
+                        <span className="text-muted-foreground">Saldo pendiente:</span>
+                        <span className="font-bold text-rose-600 dark:text-rose-400">
+                            {currencyFormatter.format(gasto.saldoPendiente)}
+                        </span>
                     </div>
                 </div>
 
@@ -157,7 +161,7 @@ export function PagoGastoDialog({ open, onOpenChange, gasto, onSuccess }: PagoGa
                             name="monto"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Monto a pagar*</FormLabel>
+                                    <FormLabel>Monto a pagar</FormLabel>
                                     <FormControl>
                                         <div className="relative">
                                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
@@ -180,33 +184,39 @@ export function PagoGastoDialog({ open, onOpenChange, gasto, onSuccess }: PagoGa
                             name="metodoPago"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Método de pago*</FormLabel>
+                                    <FormLabel>Método de pago</FormLabel>
                                     <FormControl>
                                         <div className="grid grid-cols-3 gap-2">
-                                            {METODOS_PAGO.map((metodo) => (
-                                                <div
-                                                    key={metodo.id}
-                                                    className={cn(
-                                                        "cursor-pointer rounded-xl border-2 p-2 transition-all hover:bg-accent",
-                                                        field.value === metodo.id
-                                                            ? "border-emerald-500 bg-emerald-50/50"
-                                                            : "border-transparent bg-card shadow-sm"
-                                                    )}
-                                                    onClick={() => field.onChange(metodo.id)}
-                                                >
-                                                    <div className="flex flex-col items-center gap-1 text-center">
-                                                        <span className="text-xl">{metodo.icon}</span>
-                                                        <span className="text-[10px] font-medium leading-tight">{metodo.label}</span>
-                                                        {field.value === metodo.id && (
-                                                            <div className="absolute top-1 right-1">
-                                                                <div className="flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white">
-                                                                    <Check className="h-2 w-2" />
-                                                                </div>
-                                                            </div>
+                                            {METODOS_PAGO.map((metodo) => {
+                                                const Icon = metodo.icon
+                                                return (
+                                                    <div
+                                                        key={metodo.id}
+                                                        className={cn(
+                                                            "cursor-pointer rounded-xl border-2 p-2 transition-all hover:bg-accent hover:text-accent-foreground",
+                                                            field.value === metodo.id
+                                                                ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20"
+                                                                : "border-transparent bg-card shadow-sm"
                                                         )}
+                                                        onClick={() => field.onChange(metodo.id)}
+                                                    >
+                                                        <div className="flex flex-col items-center gap-2 text-center py-1">
+                                                            <Icon className={cn(
+                                                                "h-5 w-5",
+                                                                field.value === metodo.id ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                                                            )} />
+                                                            <span className="text-[10px] font-medium leading-tight">{metodo.label}</span>
+                                                            {field.value === metodo.id && (
+                                                                <div className="absolute top-1 right-1">
+                                                                    <div className="flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white">
+                                                                        <Check className="h-2 w-2" />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                )
+                                            })}
                                         </div>
                                     </FormControl>
                                     <FormMessage />
@@ -222,7 +232,11 @@ export function PagoGastoDialog({ open, onOpenChange, gasto, onSuccess }: PagoGa
                                 <FormItem>
                                     <FormLabel>Nota (Opcional)</FormLabel>
                                     <FormControl>
-                                        <Textarea placeholder="Algún detalle sobre este pago..." {...field} />
+                                        <Textarea
+                                            placeholder="Algún detalle sobre este pago..."
+                                            className="resize-none"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -245,3 +259,4 @@ export function PagoGastoDialog({ open, onOpenChange, gasto, onSuccess }: PagoGa
         </Dialog>
     )
 }
+

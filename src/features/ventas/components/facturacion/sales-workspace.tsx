@@ -236,19 +236,34 @@ export function SalesWorkspace({
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [metodos, user] = await Promise.all([
-          CajaService.getMetodosPago(),
-          AuthService.getCurrentUser()
-        ])
-        setMetodosPago(metodos)
-        if (metodos.length > 0) {
-          const efectivo = metodos.find(m => m.tipo === 'efectivo')
-          setSelectedMetodoPagoId(String(efectivo?.id || metodos[0].id))
+        // 1. Get User first
+        let user = null
+        try {
+          user = await AuthService.getCurrentUser()
+        } catch (error) {
+          console.error("Error loading user", error)
         }
 
+        // 2. Get Payment Methods
+        try {
+          const metodos = await CajaService.getMetodosPago()
+          setMetodosPago(metodos)
+          if (metodos.length > 0) {
+            const efectivo = metodos.find(m => m.tipo === 'efectivo')
+            setSelectedMetodoPagoId(String(efectivo?.id || metodos[0].id))
+          }
+        } catch (error) {
+          console.error("Error loading payment methods", error)
+        }
+
+        // 3. Get Session if user exists
         if (user) {
-          const sesion = await CajaService.getSesionActual(user.id)
-          setSesionActual(sesion)
+          try {
+            const sesion = await CajaService.getSesionActual(user.id)
+            setSesionActual(sesion)
+          } catch (error) {
+            console.error("Error loading session", error)
+          }
         }
       } catch (error) {
         console.error("Error loading sales data", error)

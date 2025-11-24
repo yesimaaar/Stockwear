@@ -13,7 +13,7 @@ export const CajaService = {
             .order("id")
 
         if (error) throw error
-        return data.map((row) => ({
+        return (data || []).map((row) => ({
             id: row.id,
             tiendaId: row.tienda_id,
             nombre: row.nombre,
@@ -117,37 +117,77 @@ export const CajaService = {
     async getResumenSesion(sesionId: number) {
         const tiendaId = await getCurrentTiendaId()
 
-        // Obtener ventas de esta sesión
+        // 0. Obtener ID del método de pago "efectivo"
+        const { data: metodos, error: metodosError } = await supabase
+            .from("metodos_pago")
+            .select("id")
+            .eq("tienda_id", tiendaId)
+            .eq("tipo", "efectivo")
+            .single()
+
+        if (metodosError) throw metodosError
+        const efectivoId = metodos.id
+
+        // 1. Obtener ventas en EFECTIVO de esta sesión
         const { data: ventas, error } = await supabase
             .from("ventas")
             .select("total, metodo_pago_id, tipo_venta")
             .eq("caja_sesion_id", sesionId)
             .eq("tienda_id", tiendaId)
+            .eq("tipo_venta", "contado") // Solo contado
+            .eq("metodo_pago_id", efectivoId) // Usar ID numérico
 
         if (error) throw error
 
-        // Filter out credit sales from the total
-        const totalVentas = ventas?.reduce((sum, v) => {
-            if (v.tipo_venta === 'credito') return sum
-            return sum + Number(v.total)
-        }, 0) ?? 0
+        const totalVentasEfectivo = ventas?.reduce((sum, v) => sum + Number(v.total), 0) ?? 0
 
-        // Obtener abonos de esta sesión
+        // 2. Obtener abonos en EFECTIVO de esta sesión
         const { data: abonos, error: abonosError } = await supabase
             .from("abonos")
             .select("monto")
             .eq("caja_sesion_id", sesionId)
             .eq("tienda_id", tiendaId)
+            .eq("metodo_pago_id", efectivoId) // Usar ID numérico
 
         if (abonosError) throw abonosError
 
-        const totalAbonos = abonos?.reduce((sum, a) => sum + Number(a.monto), 0) ?? 0
+        const totalAbonosEfectivo = abonos?.reduce((sum, a) => sum + Number(a.monto), 0) ?? 0
+
+        // 3. Obtener GASTOS en EFECTIVO de esta sesión
+        // Nota: Gastos usa "metodo_pago" como string ("efectivo")
+        const { data: gastos, error: gastosError } = await supabase
+            .from("gastos")
+            .select("monto")
+            .eq("caja_sesion_id", sesionId)
+            .eq("tienda_id", tiendaId)
+            .ilike("metodo_pago", "efectivo")
+
+        if (gastosError) throw gastosError
+
+        const totalGastosEfectivo = gastos?.reduce((sum, g) => sum + Number(g.monto), 0) ?? 0
+
+        // 4. Obtener PAGOS DE GASTOS en EFECTIVO de esta sesión
+        // Nota: PagosGastos usa "metodo_pago" como string ("efectivo")
+        const { data: pagosGastos, error: pagosGastosError } = await supabase
+            .from("pagos_gastos")
+            .select("monto")
+            .eq("caja_sesion_id", sesionId)
+            .eq("tienda_id", tiendaId)
+            .ilike("metodo_pago", "efectivo")
+
+        if (pagosGastosError) throw pagosGastosError
+
+        const totalPagosGastosEfectivo = pagosGastos?.reduce((sum, p) => sum + Number(p.monto), 0) ?? 0
+
+        const totalEgresosEfectivo = totalGastosEfectivo + totalPagosGastosEfectivo
+        const totalIngresosEfectivo = totalVentasEfectivo + totalAbonosEfectivo
 
         return {
-            totalVentas,
-            totalAbonos,
-            totalIngresos: totalVentas + totalAbonos,
-            totalGastos: 0, // Placeholder
+            totalVentas: totalVentasEfectivo,
+            totalAbonos: totalAbonosEfectivo,
+            totalIngresos: totalIngresosEfectivo,
+            totalGastos: totalEgresosEfectivo,
+            balance: totalIngresosEfectivo - totalEgresosEfectivo
         }
     },
 

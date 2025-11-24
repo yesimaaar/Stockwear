@@ -16,6 +16,7 @@ import {
   Store,
   Receipt,
   MessageCircle,
+  RefreshCw,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -150,6 +151,7 @@ interface IngresoItem {
   descripcion: string
   secondaryDescription?: string
   referencia?: string
+  metodoPago?: string
 }
 
 interface CuentaPorCobrar {
@@ -311,112 +313,126 @@ export default function MovimientosPage() {
     }
 
     void loadCatalogos()
-
-    return () => {
-      active = false
-    }
-  }, [toast])
+  }, [])
 
   // Load History
-  useEffect(() => {
-    const loadHistorial = async () => {
-      setLoadingHistorial(true)
-      try {
-        const tiendaId = await getCurrentTiendaId()
-        // Fetching more records to allow client-side filtering for now
-        const { data, error } = await supabase
-          .from("historialStock")
-          .select("id, tipo, cantidad, costoUnitario, createdAt, motivo, producto:productos(nombre)")
-          .eq("tienda_id", tiendaId)
-          .order("createdAt", { ascending: false })
-          .limit(500)
+  const loadHistorial = async () => {
+    setLoadingHistorial(true)
+    try {
+      const tiendaId = await getCurrentTiendaId()
+      // Fetching more records to allow client-side filtering for now
+      const { data, error } = await supabase
+        .from("historialStock")
+        .select("id, tipo, cantidad, costoUnitario, createdAt, motivo, producto:productos(nombre)")
+        .eq("tienda_id", tiendaId)
+        .order("createdAt", { ascending: false })
+        .limit(500)
 
-        if (error) throw error
+      if (error) throw error
 
-        setHistorial(data as unknown as HistorialItem[])
-      } catch (error) {
-        console.error("Error loading historial", error)
-      } finally {
-        setLoadingHistorial(false)
-      }
+      setHistorial(data as unknown as HistorialItem[])
+    } catch (error) {
+      console.error("Error loading historial", error)
+    } finally {
+      setLoadingHistorial(false)
     }
+  }
+
+  useEffect(() => {
     loadHistorial()
   }, [])
 
   // Load Cash Flow (Sales & Abonos)
-  useEffect(() => {
-    const loadIngresos = async () => {
-      setLoadingIngresos(true)
-      try {
-        const tiendaId = await getCurrentTiendaId()
+  const loadIngresos = async () => {
+    setLoadingIngresos(true)
+    try {
+      const tiendaId = await getCurrentTiendaId()
 
-        // 1. Fetch Cash Sales
-        const { data: ventas, error: ventasError } = await supabase
-          .from("ventas")
-          .select("id, folio, total, createdAt, tipo_venta, ventasDetalle(producto:productos(nombre))")
-          .eq("tienda_id", tiendaId)
-          .eq("tipo_venta", "contado")
-          .order("createdAt", { ascending: false })
-          .limit(500)
+      // 1. Fetch Cash Sales
+      const { data: ventas, error: ventasError } = await supabase
+        .from("ventas")
+        .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id, ventasDetalle(producto:productos(nombre))")
+        .eq("tienda_id", tiendaId)
+        .eq("tipo_venta", "contado")
+        .order("createdAt", { ascending: false })
+        .limit(500)
 
-        if (ventasError) throw ventasError
+      if (ventasError) throw ventasError
 
-        // 2. Fetch Abonos
-        const { data: abonos, error: abonosError } = await supabase
-          .from("abonos")
-          .select("id, monto, createdAt, nota, cliente:clientes(nombre), venta:ventas(ventasDetalle(producto:productos(nombre)))")
-          .eq("tienda_id", tiendaId)
-          .order("createdAt", { ascending: false })
-          .limit(500)
+      // 2. Fetch Abonos
+      const { data: abonos, error: abonosError } = await supabase
+        .from("abonos")
+        .select("id, monto, createdAt, nota, metodo_pago_id, cliente:clientes(nombre), venta:ventas(ventasDetalle(producto:productos(nombre)))")
+        .eq("tienda_id", tiendaId)
+        .order("createdAt", { ascending: false })
+        .limit(500)
 
-        if (abonosError) throw abonosError
+      if (abonosError) throw abonosError
 
-        // 3. Map and Combine
-        const ventasMapped: IngresoItem[] = (ventas || []).map(v => {
-          // Extract product names
-          const productos = (v.ventasDetalle as any[])?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
-          const descripcion = productos.length > 0
-            ? productos.slice(0, 2).join(", ") + (productos.length > 2 ? ` y ${productos.length - 2} más` : "")
-            : 'Venta de contado'
+      // 3. Fetch payment methods
+      const { data: metodosPago, error: metodosError } = await supabase
+        .from("metodos_pago")
+        .select("id, nombre")
+        .eq("tienda_id", tiendaId)
 
-          return {
-            id: `v-${v.id}`,
-            tipo: 'venta_contado',
-            monto: v.total,
-            fecha: v.createdAt,
-            descripcion: descripcion,
-            referencia: v.folio
-          }
-        })
+      if (metodosError) throw metodosError
 
-        const abonosMapped: IngresoItem[] = (abonos || []).map(a => {
-          // Extract product names from the associated sale
-          const productos = (a.venta as any)?.ventasDetalle?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
-          const modelo = productos.length > 0 ? productos[0] : 'Producto'
-          const clienteNombre = (a.cliente as any)?.nombre || 'Cliente'
+      // Create a map for quick lookup
+      const metodosMap = new Map(metodosPago?.map(m => [m.id, m.nombre]) || [])
 
-          return {
-            id: `a-${a.id}`,
-            tipo: 'abono',
-            monto: a.monto,
-            fecha: a.createdAt,
-            descripcion: `Abono de ${modelo}`,
-            secondaryDescription: `(${clienteNombre})`,
-            referencia: a.nota
-          }
-        })
+      // 4. Map and Combine
+      const ventasMapped: IngresoItem[] = (ventas || []).map(v => {
+        // Extract product names
+        const productos = (v.ventasDetalle as any[])?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
+        const descripcion = productos.length > 0
+          ? productos.slice(0, 2).join(", ") + (productos.length > 2 ? ` y ${productos.length - 2} más` : "")
+          : 'Venta de contado'
 
-        const combined = [...ventasMapped, ...abonosMapped].sort((a, b) =>
-          new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-        )
+        const metodoPago = metodosMap.get(v.metodo_pago_id) || 'Efectivo'
 
-        setIngresos(combined)
-      } catch (error) {
-        console.error("Error loading ingresos", error)
-      } finally {
-        setLoadingIngresos(false)
-      }
+        return {
+          id: `v-${v.id}`,
+          tipo: 'venta_contado',
+          monto: v.total,
+          fecha: v.createdAt,
+          descripcion: descripcion,
+          referencia: v.folio,
+          metodoPago
+        }
+      })
+
+      const abonosMapped: IngresoItem[] = (abonos || []).map(a => {
+        // Extract product names from the associated sale
+        const productos = (a.venta as any)?.ventasDetalle?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
+        const modelo = productos.length > 0 ? productos[0] : 'Producto'
+        const clienteNombre = (a.cliente as any)?.nombre || 'Cliente'
+        const metodoPago = metodosMap.get(a.metodo_pago_id) || 'Efectivo'
+
+        return {
+          id: `a-${a.id}`,
+          tipo: 'abono',
+          monto: a.monto,
+          fecha: a.createdAt,
+          descripcion: `Abono de ${modelo}`,
+          secondaryDescription: `(${clienteNombre})`,
+          referencia: a.nota,
+          metodoPago
+        }
+      })
+
+      const combined = [...ventasMapped, ...abonosMapped].sort((a, b) =>
+        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      )
+
+      setIngresos(combined)
+    } catch (error) {
+      console.error("Error loading ingresos", error)
+    } finally {
+      setLoadingIngresos(false)
     }
+  }
+
+  useEffect(() => {
     void loadIngresos()
   }, [])
 
@@ -444,52 +460,54 @@ export default function MovimientosPage() {
   }, [])
 
   // Accounts Receivable
-  useEffect(() => {
-    const loadCuentasPorCobrar = async () => {
-      setLoadingCuentas(true)
-      try {
-        const tiendaId = await getCurrentTiendaId()
-        const { data, error } = await supabase
-          .from("ventas")
-          .select(`
-            id, 
-            folio, 
-            total, 
-            saldo_pendiente, 
-            fecha_primer_vencimiento, 
-            numero_cuotas,
-            monto_cuota,
-            frecuencia_pago,
-            createdAt,
-            cliente:clientes(id, nombre, telefono, documento, direccion)
-          `)
-          .eq("tienda_id", tiendaId)
-          .eq("tipo_venta", "credito")
-          .gt("saldo_pendiente", 0)
-          .order("fecha_primer_vencimiento", { ascending: true })
+  // Accounts Receivable
+  const loadCuentasPorCobrar = async () => {
+    setLoadingCuentas(true)
+    try {
+      const tiendaId = await getCurrentTiendaId()
+      const { data, error } = await supabase
+        .from("ventas")
+        .select(`
+          id, 
+          folio, 
+          total, 
+          saldo_pendiente, 
+          fecha_primer_vencimiento, 
+          numero_cuotas,
+          monto_cuota,
+          frecuencia_pago,
+          createdAt,
+          cliente:clientes(id, nombre, telefono, documento, direccion)
+        `)
+        .eq("tienda_id", tiendaId)
+        .eq("tipo_venta", "credito")
+        .gt("saldo_pendiente", 0)
+        .order("fecha_primer_vencimiento", { ascending: true })
 
-        if (error) throw error
+      if (error) throw error
 
-        const mapped = data.map((item: any) => ({
-          id: item.id,
-          folio: item.folio,
-          cliente: item.cliente,
-          total: item.total,
-          saldoPendiente: item.saldo_pendiente,
-          fechaPrimerVencimiento: item.fecha_primer_vencimiento,
-          numeroCuotas: item.numero_cuotas || 1,
-          montoCuota: item.monto_cuota || 0,
-          frecuenciaPago: item.frecuencia_pago,
-          createdAt: item.createdAt
-        }))
-        setCuentasPorCobrar(mapped)
-      } catch (error) {
-        console.error("Error loading accounts receivable", error)
-      } finally {
-        setLoadingCuentas(false)
-      }
+      const mapped = data.map((item: any) => ({
+        id: item.id,
+        folio: item.folio,
+        cliente: item.cliente,
+        total: item.total,
+        saldoPendiente: item.saldo_pendiente,
+        fechaPrimerVencimiento: item.fecha_primer_vencimiento,
+        numeroCuotas: item.numero_cuotas || 1,
+        montoCuota: item.monto_cuota || 0,
+        frecuenciaPago: item.frecuencia_pago,
+        createdAt: item.createdAt
+      }))
+      setCuentasPorCobrar(mapped)
+    } catch (error) {
+      console.error("Error loading accounts receivable", error)
+    } finally {
+      setLoadingCuentas(false)
     }
-    void loadCuentasPorCobrar()
+  }
+
+  useEffect(() => {
+    loadCuentasPorCobrar()
   }, [])
 
   // Load Cash Register Session
@@ -1338,16 +1356,20 @@ export default function MovimientosPage() {
                     <span>{currencyFormatter.format(sesionActual.montoInicial)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Ventas (Contado)</span>
+                    <span className="text-muted-foreground">Ventas (Efectivo)</span>
                     <span>{currencyFormatter.format(resumenCierre.totalVentas)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Abonos</span>
+                    <span className="text-muted-foreground">Abonos (Efectivo)</span>
                     <span>{currencyFormatter.format(resumenCierre.totalAbonos)}</span>
+                  </div>
+                  <div className="flex justify-between text-rose-600">
+                    <span className="text-muted-foreground">Egresos (Efectivo)</span>
+                    <span>-{currencyFormatter.format(resumenCierre.totalGastos)}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2 font-medium">
                     <span>Balance total esperado</span>
-                    <span>{currencyFormatter.format(sesionActual.montoInicial + resumenCierre.totalIngresos)}</span>
+                    <span>{currencyFormatter.format(sesionActual.montoInicial + resumenCierre.totalIngresos - resumenCierre.totalGastos)}</span>
                   </div>
                 </div>
 
@@ -1364,11 +1386,11 @@ export default function MovimientosPage() {
                 {montoFinal && (
                   <div className={cn(
                     "rounded-lg p-3 text-sm font-medium",
-                    (parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalIngresos)) < 0
+                    (parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalIngresos - resumenCierre.totalGastos)) < 0
                       ? "bg-amber-100 text-amber-800"
                       : "bg-emerald-100 text-emerald-800"
                   )}>
-                    Diferencia: {currencyFormatter.format(parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalIngresos))}
+                    Diferencia: {currencyFormatter.format(parseFloat(montoFinal) - (sesionActual.montoInicial + resumenCierre.totalIngresos - resumenCierre.totalGastos))}
                   </div>
                 )}
 
@@ -1434,48 +1456,41 @@ export default function MovimientosPage() {
                 </TabsTrigger>
               </TabsList>
             </div>
+            <Select value={periodo} onValueChange={(val: any) => setPeriodo(val)}>
+              <SelectTrigger className="w-[140px] bg-background">
+                <SelectValue placeholder="Periodo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="diario">Diario</SelectItem>
+                <SelectItem value="semanal">Semanal</SelectItem>
+                <SelectItem value="mensual">Mensual</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <div className="flex items-center gap-2">
-              <Button variant="outline" className="gap-2 bg-background">
-                <Filter className="h-4 w-4" />
-                Filtrar
-              </Button>
-
-              <Select value={periodo} onValueChange={(val: any) => setPeriodo(val)}>
-                <SelectTrigger className="w-[140px] bg-background">
-                  <SelectValue placeholder="Periodo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="diario">Diario</SelectItem>
-                  <SelectItem value="semanal">Semanal</SelectItem>
-                  <SelectItem value="mensual">Mensual</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-[240px] justify-start text-left font-normal bg-background",
-                      !date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={setDate}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "w-[240px] justify-start text-left font-normal bg-background",
+                    !date && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date ? format(date, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={setDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
           </div>
+
 
           <TabsContent value="transacciones" className="space-y-6">
 
@@ -1953,9 +1968,14 @@ export default function MovimientosPage() {
                           <span className="text-sm text-muted-foreground">
                             {item.referencia || "Sin referencia"}
                           </span>
-                          <Badge variant="outline" className="w-fit text-[10px]">
-                            {item.tipo === 'venta_contado' ? 'Venta Contado' : 'Abono'}
-                          </Badge>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="w-fit text-[10px]">
+                              {item.tipo === 'venta_contado' ? 'Venta Contado' : 'Abono'}
+                            </Badge>
+                            <Badge variant="secondary" className="w-fit text-[10px]">
+                              {item.metodoPago}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="flex items-center justify-between gap-6 sm:justify-end">
                           <span className="text-sm text-muted-foreground">
@@ -2320,8 +2340,8 @@ export default function MovimientosPage() {
               </div>
             )}
           </TabsContent>
-        </Tabs>
-      </div>
-    </ AdminSectionLayout>
+        </Tabs >
+      </div >
+    </AdminSectionLayout >
   )
 }
