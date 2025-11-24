@@ -514,11 +514,19 @@ export default function MovimientosPage() {
   useEffect(() => {
     const loadSesion = async () => {
       setLoadingSesion(true)
+      console.log("loadSesion: Starting")
       try {
+        console.log("loadSesion: Fetching user...")
         const user = await AuthService.getCurrentUser()
+        console.log("loadSesion: User fetched", user ? user.id : "null")
+
         if (user) {
+          console.log("loadSesion: Fetching session for user", user.id)
           const sesion = await CajaService.getSesionActual(user.id)
+          console.log("loadSesion: Session fetched", sesion ? sesion.id : "null")
           setSesionActual(sesion)
+        } else {
+          console.log("loadSesion: No user found")
         }
       } catch (error) {
         console.error("Error loading session", error)

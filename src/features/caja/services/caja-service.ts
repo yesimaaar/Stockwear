@@ -23,25 +23,43 @@ export const CajaService = {
     },
 
     async getSesionActual(usuarioId: string): Promise<CajaSesion | null> {
-        const tiendaId = await getCurrentTiendaId()
-        const { data, error } = await supabase
-            .from("caja_sesiones")
-            .select("*")
-            .eq("tienda_id", tiendaId)
-            .eq("usuario_id", usuarioId)
-            .eq("estado", "abierta")
-            .maybeSingle()
+        try {
+            const tiendaId = await getCurrentTiendaId()
+            console.log("getSesionActual: Checking for user", usuarioId, "in store", tiendaId)
 
-        if (error) throw error
-        if (!data) return null
+            const { data, error } = await supabase
+                .from("caja_sesiones")
+                .select("*")
+                .eq("tienda_id", tiendaId)
+                .eq("usuario_id", usuarioId)
+                .eq("estado", "abierta")
+                .order("fecha_apertura", { ascending: false })
+                .limit(1)
+                .maybeSingle()
 
-        return {
-            id: data.id,
-            tiendaId: data.tienda_id,
-            usuarioId: data.usuario_id,
-            fechaApertura: data.fecha_apertura,
-            montoInicial: Number(data.monto_inicial),
-            estado: data.estado,
+            if (error) {
+                console.error("getSesionActual: Supabase error RAW", error)
+                console.error("getSesionActual: Supabase error JSON", JSON.stringify(error))
+                throw error
+            }
+
+            if (!data) {
+                console.log("getSesionActual: No open session found")
+                return null
+            }
+
+            console.log("getSesionActual: Found session", data.id)
+            return {
+                id: data.id,
+                tiendaId: data.tienda_id,
+                usuarioId: data.usuario_id,
+                fechaApertura: data.fecha_apertura,
+                montoInicial: Number(data.monto_inicial),
+                estado: data.estado,
+            }
+        } catch (error) {
+            console.error("getSesionActual: Error", error)
+            throw error
         }
     },
 

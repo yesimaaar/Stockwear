@@ -50,21 +50,28 @@ export async function getCurrentTiendaId(options?: {
   client?: SupabaseClient
   force?: boolean
 }): Promise<number> {
+  // console.log("getCurrentTiendaId: called", options)
   if (!options?.client && !options?.force && cachedTenant && cachedTenant.expiresAt > Date.now()) {
+    // console.log("getCurrentTiendaId: returning cached", cachedTenant.tiendaId)
     return cachedTenant.tiendaId
   }
 
   const client = options?.client ?? supabase
-  const tiendaId = await fetchTenantId(client)
+  try {
+    const tiendaId = await fetchTenantId(client)
 
-  if (!options?.client) {
-    cachedTenant = {
-      tiendaId,
-      expiresAt: Date.now() + CACHE_TTL_MS,
+    if (!options?.client) {
+      cachedTenant = {
+        tiendaId,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      }
     }
+    // console.log("getCurrentTiendaId: fetched", tiendaId)
+    return tiendaId
+  } catch (error) {
+    console.error("getCurrentTiendaId: error", error)
+    throw error
   }
-
-  return tiendaId
 }
 
 export function invalidateTenantCache(): void {
