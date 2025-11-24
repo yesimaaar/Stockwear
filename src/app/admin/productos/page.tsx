@@ -77,6 +77,7 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group"
+import { PRODUCT_COLORS } from "@/lib/colors"
 
 type EstadoFiltro = "todos" | "activo" | "inactivo"
 type CategoriaFiltro = "todas" | string
@@ -99,6 +100,7 @@ const getDefaultNuevoProducto = () => ({
   stockMinimo: "",
   descripcion: "",
   imagen: "",
+  color: "",
 })
 
 type NuevoProductoForm = ReturnType<typeof getDefaultNuevoProducto>
@@ -247,6 +249,7 @@ export default function ProductosPage() {
     stockMinimo: String(producto.stockMinimo),
     descripcion: producto.descripcion ?? "",
     imagen: producto.imagen ?? "",
+    color: producto.color ?? "",
   }), [])
 
   const mapReferenceRecord = (record: any): ProductoReferenceImage | null => {
@@ -333,6 +336,7 @@ export default function ProductosPage() {
       proveedor: form.proveedor.trim() || null,
       imagen: form.imagen.trim() || null,
       stockMinimo,
+      color: form.color || null,
     }
   }
 
@@ -1588,6 +1592,28 @@ export default function ProductosPage() {
                         onChange={(event) => updateEditFormField("proveedor", event.target.value)}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label>Color</Label>
+                      <Select
+                        value={editForm.color || "none"}
+                        onValueChange={(value) => updateEditFormField("color", value === "none" ? "" : value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona un color" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin color</SelectItem>
+                          {PRODUCT_COLORS.map((color) => (
+                            <SelectItem key={color.name} value={color.name}>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-4 w-4 rounded-full border border-border ${color.class}`} />
+                                <span>{color.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </section>
               </div>
@@ -2187,6 +2213,28 @@ export default function ProductosPage() {
                       onChange={(event) => setNuevoProducto((prev) => ({ ...prev, proveedor: event.target.value }))}
                       placeholder="Nike, Adidas, Puma..."
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Color</Label>
+                    <Select
+                      value={nuevoProducto.color || "none"}
+                      onValueChange={(value) => setNuevoProducto((prev) => ({ ...prev, color: value === "none" ? "" : value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un color" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin color</SelectItem>
+                        {PRODUCT_COLORS.map((color) => (
+                          <SelectItem key={color.name} value={color.name}>
+                            <div className="flex items-center gap-2">
+                              <div className={`h-4 w-4 rounded-full border border-border ${color.class}`} />
+                              <span>{color.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </section>

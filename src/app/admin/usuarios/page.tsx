@@ -11,7 +11,10 @@ import {
   Search,
   X,
   Filter,
-  RefreshCw,
+  Trash2,
+  Moon,
+  MoreVertical,
+  Clock,
 } from "lucide-react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -39,6 +42,23 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -54,8 +74,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { AuthService } from "@/features/auth/services/auth-service"
+import { getCurrentTiendaId } from "@/features/auth/services/tenant-service"
+import { supabase } from "@/lib/supabase"
+import { cn } from "@/lib/utils"
 import type { Usuario } from "@/lib/types"
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("es-CO", {
@@ -132,54 +156,27 @@ export default function UsuariosPage() {
   const [rolFilter, setRolFilter] = useState<RolFilter>("todos")
   const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("todos")
   const [updatingEstadoId, setUpdatingEstadoId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deactivatingAll, setDeactivatingAll] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<Usuario | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deactivateAllDialogOpen, setDeactivateAllDialogOpen] = useState(false)
+  const [sleepScheduleDialogOpen, setSleepScheduleDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [usuarioToDelete, setUsuarioToDelete] = useState<Usuario | null>(null)
+  const [sleepScheduleEnabled, setSleepScheduleEnabled] = useState(false)
+  const [sleepScheduleTime, setSleepScheduleTime] = useState("22:00")
+  const [wakeScheduleTime, setWakeScheduleTime] = useState("07:00")
+  const [savingSleepSchedule, setSavingSleepSchedule] = useState(false)
+  const [owner, setOwner] = useState<Usuario | null>(null)
+  const [currentUser, setCurrentUser] = useState<Usuario | null>(null)
 
   const form = useForm<UsuarioFormValues>({
     resolver: zodResolver(usuarioFormSchema),
     mode: "onBlur",
     defaultValues: DEFAULT_FORM_VALUES,
   })
-
-  const [currentUser, setCurrentUser] = useState<Usuario | null>(null)
-
-  const fetchUsuarios = useCallback(
-    async (showFullLoader: boolean) => {
-      if (showFullLoader) {
-        setLoading(true)
-      } else {
-        setRefreshing(true)
-      }
-
-      try {
-        const [data, user] = await Promise.all([
-          AuthService.getAll(),
-          AuthService.getCurrentUser(),
-        ])
-        setUsuarios(data)
-        setCurrentUser(user)
-      } catch (error) {
-        console.error("Error al cargar usuarios", error)
-        toast({
-          title: "No se pudo cargar la lista",
-          description: "Intenta nuevamente en unos segundos.",
-          variant: "destructive",
-        })
-      } finally {
-        if (showFullLoader) {
-          setLoading(false)
-        } else {
-          setRefreshing(false)
-        }
-      }
-    },
-    [toast],
-  )
-
-  useEffect(() => {
-    void fetchUsuarios(true)
-  }, [fetchUsuarios])
 
   useEffect(() => {
     if (usuarioEnEdicion) {
@@ -223,6 +220,63 @@ export default function UsuariosPage() {
       return matchesSearch && matchesRol && matchesEstado
     })
   }, [usuarios, searchTerm, rolFilter, estadoFilter])
+
+  const fetchUsuarios = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
+    else setRefreshing(true)
+
+    try {
+      const [data, currentUserData] = await Promise.all([
+        AuthService.getAll(),
+        AuthService.getCurrentUser()
+      ])
+
+      setUsuarios(data)
+      setCurrentUser(currentUserData)
+
+      // Identify owner (earliest created user)
+      if (data.length > 0) {
+        const sortedUsers = [...data].sort((a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        )
+        setOwner(sortedUsers[0])
+      }
+
+      // Load sleep schedule
+      const tiendaId = await getCurrentTiendaId()
+      const { data: tienda, error } = await supabase
+        .from('tiendas')
+        .select('sleep_schedule_enabled, sleep_schedule_time, wake_schedule_time')
+        .eq('id', tiendaId)
+        .single()
+
+      if (!error && tienda) {
+        setSleepScheduleEnabled(tienda.sleep_schedule_enabled)
+        if (tienda.sleep_schedule_time) {
+          // Format time to HH:MM
+          setSleepScheduleTime(tienda.sleep_schedule_time.substring(0, 5))
+        }
+        if (tienda.wake_schedule_time) {
+          setWakeScheduleTime(tienda.wake_schedule_time.substring(0, 5))
+        }
+      }
+
+    } catch (error) {
+      console.error("Error al cargar usuarios", error)
+      toast({
+        title: "Error de conexión",
+        description: "No pudimos cargar la lista de usuarios.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    void fetchUsuarios()
+  }, [fetchUsuarios])
 
   const handleRefresh = () => {
     void fetchUsuarios(false)
@@ -268,6 +322,92 @@ export default function UsuariosPage() {
     }
   }
 
+  const handleDeleteUsuario = async () => {
+    if (!usuarioToDelete) return
+
+    setDeletingId(usuarioToDelete.id)
+    setDeleteDialogOpen(false)
+    try {
+      await AuthService.deleteUsuario(usuarioToDelete.id)
+      setUsuarios((previous) => previous.filter((entry) => entry.id !== usuarioToDelete.id))
+      toast({
+        title: "Usuario eliminado",
+        description: `${usuarioToDelete.nombre} ha sido eliminado permanentemente del sistema.`,
+      })
+    } catch (error) {
+      console.error("Error al eliminar usuario", error)
+      toast({
+        title: "No se pudo eliminar",
+        description: "Intenta de nuevo en unos segundos.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingId(null)
+      setUsuarioToDelete(null)
+    }
+  }
+
+  const openDeleteDialog = (usuario: Usuario) => {
+    setUsuarioToDelete(usuario)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeactivateAll = async () => {
+    setDeactivateAllDialogOpen(false)
+    setDeactivatingAll(true)
+    try {
+      const count = await AuthService.deactivateAllNonOwners()
+      await fetchUsuarios(false)
+      toast({
+        title: "Cuentas desactivadas",
+        description: `Se desactivaron ${count} cuenta(s) exitosamente.`,
+      })
+    } catch (error) {
+      console.error("Error al desactivar cuentas", error)
+      toast({
+        title: "No se pudo completar",
+        description: "Intenta de nuevo en unos segundos.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeactivatingAll(false)
+    }
+  }
+
+  const handleSaveSleepSchedule = async () => {
+    setSavingSleepSchedule(true)
+    try {
+      const tiendaId = await getCurrentTiendaId()
+      const { error } = await supabase
+        .from('tiendas')
+        .update({
+          sleep_schedule_enabled: sleepScheduleEnabled,
+          sleep_schedule_time: sleepScheduleTime,
+          wake_schedule_time: wakeScheduleTime,
+        })
+        .eq('id', tiendaId)
+
+      if (error) throw error
+
+      toast({
+        title: "Configuración guardada",
+        description: sleepScheduleEnabled
+          ? `Horario de sueño: ${sleepScheduleTime} - ${wakeScheduleTime}`
+          : "La desactivación automática ha sido deshabilitada.",
+      })
+      setSleepScheduleDialogOpen(false)
+    } catch (error) {
+      console.error('Error saving sleep schedule', error)
+      toast({
+        title: "No se pudo guardar",
+        description: "Intenta de nuevo en unos segundos.",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingSleepSchedule(false)
+    }
+  }
+
   const onSubmit = async (values: UsuarioFormValues) => {
     if (!usuarioEnEdicion) return
 
@@ -305,6 +445,8 @@ export default function UsuariosPage() {
     }
   }
 
+  const isCurrentUserOwner = currentUser?.id === owner?.id
+
   return (
     <>
       <AdminSectionLayout
@@ -313,19 +455,21 @@ export default function UsuariosPage() {
         icon={<Users className="h-5 w-5" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={refreshing || loading}
-            >
-              {refreshing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              Actualizar
-            </Button>
+            {isCurrentUserOwner && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeactivateAllDialogOpen(true)}
+                disabled={deactivatingAll || loading}
+              >
+                {deactivatingAll ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Moon className="mr-2 h-4 w-4" />
+                )}
+                Dormir
+              </Button>
+            )}
             <InviteUserDialog onUserInvited={() => void fetchUsuarios(false)} />
           </div>
         }
@@ -490,30 +634,10 @@ export default function UsuariosPage() {
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             {(() => {
-                              // Identify owner: earliest createdAt
-                              // We can do this globally or per render. Since users list is small, finding it here is okay,
-                              // but better to find it once. Let's rely on the sorted list or find it in the useMemo.
-                              // Actually, let's do it in the render for simplicity as we have the full list.
-                              // Wait, filtering inside map is inefficient.
-                              // Let's assume the owner is the one with the earliest createdAt in the entire 'usuarios' list.
-                              const owner = usuarios.reduce((prev, curr) =>
-                                new Date(prev.createdAt).getTime() < new Date(curr.createdAt).getTime() ? prev : curr
-                                , usuarios[0])
-
                               const isOwner = usuario.id === owner?.id
-                              const isCurrentUserOwner = currentUser?.id === owner?.id
-                              const isMe = currentUser?.id === usuario.id
-
-                              // Logic:
-                              // - Owner row:
-                              //   - Edit: Only if I am the owner.
-                              //   - Deactivate: NEVER.
-                              // - Other rows:
-                              //   - Edit: Always (as admin).
-                              //   - Deactivate: Always (as admin).
-
                               const showEdit = isOwner ? isCurrentUserOwner : true
-                              const showDeactivate = !isOwner
+                              // Only owner can see actions (delete/deactivate) for other users
+                              const showActions = isCurrentUserOwner && !isOwner
 
                               return (
                                 <>
@@ -526,18 +650,38 @@ export default function UsuariosPage() {
                                       Editar
                                     </Button>
                                   )}
-                                  {showDeactivate && (
-                                    <Button
-                                      variant={usuario.estado === "activo" ? "outline" : "secondary"}
-                                      size="sm"
-                                      onClick={() => void handleToggleEstado(usuario)}
-                                      disabled={updatingEstadoId === usuario.id}
-                                    >
-                                      {updatingEstadoId === usuario.id ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                      ) : null}
-                                      {usuario.estado === "activo" ? "Desactivar" : "Activar"}
-                                    </Button>
+                                  {showActions && (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          disabled={updatingEstadoId === usuario.id || deletingId === usuario.id}
+                                        >
+                                          {(updatingEstadoId === usuario.id || deletingId === usuario.id) ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Trash2 className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem
+                                          onClick={() => void handleToggleEstado(usuario)}
+                                          disabled={updatingEstadoId === usuario.id}
+                                        >
+                                          {usuario.estado === "activo" ? "Desactivar" : "Activar"}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onClick={() => openDeleteDialog(usuario)}
+                                          disabled={deletingId === usuario.id}
+                                          className="text-destructive focus:text-destructive"
+                                        >
+                                          Eliminar definitivamente
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
                                   )}
                                 </>
                               )
@@ -667,6 +811,147 @@ export default function UsuariosPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Delete User Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este usuario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de eliminar permanentemente a <strong>{usuarioToDelete?.nombre}</strong>? Esta acción no se puede deshacer y se eliminarán todos sus datos del sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUsuario}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Deactivate All Dialog */}
+      <AlertDialog open={deactivateAllDialogOpen} onOpenChange={setDeactivateAllDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desactivar todas las cuentas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Desactivar todas las cuentas excepto la del propietario? Los usuarios no podrán acceder hasta que los reactives manualmente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDeactivateAllDialogOpen(false)
+                setSleepScheduleDialogOpen(true)
+              }}
+              className="text-sm text-primary hover:underline flex items-center gap-1"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              O programa una hora de dormir
+            </button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeactivateAll}>
+              Aceptar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Sleep Schedule Dialog */}
+      <AlertDialog open={sleepScheduleDialogOpen} onOpenChange={setSleepScheduleDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Programar hora de dormir</AlertDialogTitle>
+            <AlertDialogDescription>
+              Configura el horario en el que las cuentas de empleados estarán desactivadas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="sleep-enabled" className="text-sm font-medium">
+                Activar horario de sueño
+              </Label>
+              <button
+                id="sleep-enabled"
+                type="button"
+                role="switch"
+                aria-checked={sleepScheduleEnabled}
+                onClick={() => setSleepScheduleEnabled(!sleepScheduleEnabled)}
+                className={cn(
+                  "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  sleepScheduleEnabled ? "bg-primary" : "bg-input"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-4 w-4 transform rounded-full bg-background transition-transform",
+                    sleepScheduleEnabled ? "translate-x-6" : "translate-x-1"
+                  )}
+                />
+              </button>
+            </div>
+            {sleepScheduleEnabled && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sleep-time" className="text-sm font-medium">
+                    Hora de dormir
+                  </Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="sleep-time"
+                      type="time"
+                      value={sleepScheduleTime}
+                      onChange={(e) => setSleepScheduleTime(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="wake-time" className="text-sm font-medium">
+                    Hora de despertar
+                  </Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="wake-time"
+                      type="time"
+                      value={wakeScheduleTime}
+                      onChange={(e) => setWakeScheduleTime(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground">
+                    Los empleados no podrán acceder al sistema entre estas horas.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={savingSleepSchedule}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveSleepSchedule} disabled={savingSleepSchedule}>
+              {savingSleepSchedule ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Guardar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

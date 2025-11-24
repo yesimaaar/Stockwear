@@ -511,9 +511,18 @@ export default function AdminHomePage() {
     const loadHighlights = async () => {
       setLoadingHighlights(true)
       try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+
+        const headers: HeadersInit = {}
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`
+        }
+
         const response = await fetch(`/api/admin/highlights?refresh=${refreshCounter}`, {
           cache: "no-store",
           signal: controller.signal,
+          headers,
         })
 
         if (!response.ok) {

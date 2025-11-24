@@ -59,7 +59,7 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
             src={product.imagen}
             alt={product.nombre ?? product.codigo ?? "Producto"}
             fill
-            className="object-contain p-2 transition-transform duration-500 group-hover:scale-105"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(min-width: 1280px) 240px, (min-width: 768px) 220px, 160px"
           />
         ) : (

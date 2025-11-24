@@ -183,14 +183,14 @@ export function SalesWorkspace({
             description: `El cliente con documento ${formData.identification} ya está registrado como ${existingClient.nombre}.`,
             variant: "destructive",
           })
-          
+
           // Optional: Select the existing client automatically
           if (!clientes.some(c => c.id === existingClient.id)) {
-             setClientes(prev => [...prev, existingClient])
+            setClientes(prev => [...prev, existingClient])
           }
           setSelectedClienteId(String(existingClient.id))
           setIsFormOpen(false)
-          
+
           return
         }
       } catch (error) {
@@ -744,18 +744,18 @@ export function SalesWorkspace({
         try {
           // Check if client exists first
           const existingClient = await ClienteService.getByDocument(formData.identification)
-          
+
           if (existingClient) {
-             clienteIdParaVenta = existingClient.id
-             // Update local state
-             if (!clientes.some(c => c.id === existingClient.id)) {
-                setClientes(prev => [...prev, existingClient])
-             }
-             setSelectedClienteId(String(existingClient.id))
-             toast({
-               title: "Cliente existente encontrado",
-               description: `Se usará el cliente ${existingClient.nombre} para esta venta.`,
-             })
+            clienteIdParaVenta = existingClient.id
+            // Update local state
+            if (!clientes.some(c => c.id === existingClient.id)) {
+              setClientes(prev => [...prev, existingClient])
+            }
+            setSelectedClienteId(String(existingClient.id))
+            toast({
+              title: "Cliente existente encontrado",
+              description: `Se usará el cliente ${existingClient.nombre} para esta venta.`,
+            })
           } else {
             // Intentar crear el cliente al vuelo
             const nuevoCliente = await ClienteService.create({
@@ -1185,10 +1185,10 @@ export function SalesWorkspace({
                                   className="h-8"
                                 />
                               </div>
-                              <Button 
-                                type="button" 
-                                variant="secondary" 
-                                size="sm" 
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
                                 className="w-full mt-2"
                                 onClick={handleCreateClient}
                               >
@@ -1458,7 +1458,7 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
             src={producto.imagen as string}
             alt={producto.nombre}
             fill
-            className="object-contain transition-transform duration-300 group-hover:scale-105"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(min-width: 1280px) 240px, (min-width: 768px) 200px, 160px"
           />
         ) : (

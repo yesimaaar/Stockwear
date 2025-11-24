@@ -167,6 +167,13 @@ export default function LoginPage() {
   }, [navigateByRole])
 
   useEffect(() => {
+    // Check for account switch request
+    const switchEmail = sessionStorage.getItem('switch_to_account')
+    if (switchEmail) {
+      setEmail(switchEmail)
+      sessionStorage.removeItem('switch_to_account')
+    }
+
     void syncSession()
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {

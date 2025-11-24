@@ -5,7 +5,7 @@ import { useTheme } from "next-themes"
 import { Bell, Shield, Database, Palette } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ExcelActions } from "@/features/productos/components/excel-actions"
+import { GlobalExcelActions } from "@/features/configuracion/components/global-excel-actions"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 
@@ -98,7 +98,7 @@ export default function ConfiguracionPage() {
             <div className="mb-4">
               <h4 className="text-sm font-medium mb-2">Inventario</h4>
               <div className="flex flex-col gap-2">
-                <ExcelActions />
+                <GlobalExcelActions />
               </div>
             </div>
             

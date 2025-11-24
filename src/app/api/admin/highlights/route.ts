@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { getCurrentTiendaId } from "@/features/auth/services/tenant-service"
+import { headers } from "next/headers"
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 120
@@ -110,7 +112,29 @@ function formatRecent(producto: ProductoRow, index: number): HighlightProduct {
 
 export async function GET() {
     try {
-        const supabase = await createClient()
+        const headersList = await headers()
+        const authHeader = headersList.get('authorization')
+
+        let supabase
+
+        if (authHeader) {
+            // Use standard client with the provided token
+            supabase = createSupabaseClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                {
+                    global: {
+                        headers: {
+                            Authorization: authHeader
+                        }
+                    }
+                }
+            )
+        } else {
+            // Fallback to cookie-based client
+            supabase = await createClient()
+        }
+
         let tiendaId: number
         try {
             tiendaId = await getCurrentTiendaId({ client: supabase })
