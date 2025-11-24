@@ -236,22 +236,48 @@ export function SalesWorkspace({
   // Load Payment Methods and Session
   useEffect(() => {
     const loadData = async () => {
+      console.log("loadData: Starting")
       try {
         // 1. Get User first
         let user = null
         try {
+          console.log("loadData: Fetching user...")
           user = await AuthService.getCurrentUser()
+          console.log("loadData: User fetched", user ? user.id : "null")
         } catch (error) {
           console.error("Error loading user", error)
         }
 
         // 2. Get Payment Methods
         try {
+          console.log("loadData: Fetching payment methods...")
           const metodos = await CajaService.getMetodosPago()
-          setMetodosPago(metodos)
-          if (metodos.length > 0) {
-            const efectivo = metodos.find(m => m.tipo === 'efectivo')
-            setSelectedMetodoPagoId(String(efectivo?.id || metodos[0].id))
+          console.log("loadData: Payment methods fetched", Array.isArray(metodos) ? metodos.length : "not array")
+
+          if (Array.isArray(metodos)) {
+            console.log("loadData: metodos is array, length", metodos.length)
+            try {
+              // Deep copy to ensure no references cause issues
+              const safeMetodos = JSON.parse(JSON.stringify(metodos))
+              setMetodosPago(safeMetodos)
+            } catch (e) {
+              console.error("loadData: CRITICAL ERROR setting metodosPago", e)
+            }
+
+            if (metodos.length > 0) {
+              const efectivo = metodos.find(m => m.tipo === 'efectivo')
+              const defaultId = efectivo?.id ?? metodos[0]?.id
+              if (defaultId) {
+                try {
+                  setSelectedMetodoPagoId(String(defaultId))
+                } catch (e) {
+                  console.error("loadData: CRITICAL ERROR setting selectedMetodoPagoId", e)
+                }
+              }
+            }
+          } else {
+            console.warn("getMetodosPago did not return an array", metodos)
+            setMetodosPago([])
           }
         } catch (error) {
           console.error("Error loading payment methods", error)
@@ -260,12 +286,17 @@ export function SalesWorkspace({
         // 3. Get Session if user exists
         if (user) {
           try {
+            console.log("loadData: Fetching session for user", user.id)
             const sesion = await CajaService.getSesionActual(user.id)
+            console.log("loadData: Session fetched", sesion ? sesion.id : "null")
             setSesionActual(sesion)
           } catch (error) {
             console.error("Error loading session", error)
           }
+        } else {
+          console.log("loadData: No user, skipping session fetch")
         }
+        console.log("loadData: Completed successfully")
       } catch (error) {
         console.error("Error loading sales data", error)
       }
