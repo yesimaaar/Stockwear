@@ -19,6 +19,7 @@ export interface ReconocimientoResult {
     similitud: number
   }>
   message?: string
+  embedding?: number[]
 }
 
 export interface ProcesarEmbeddingParams {
@@ -113,6 +114,7 @@ export class ReconocimientoService {
         nivelConfianza,
         coincidencias: coincidencias.slice(0, 3),
         message: 'No se encontró un zapato con suficiente similitud. Intenta capturar otra imagen.',
+        embedding: Array.from(embedding),
       }
     }
 
@@ -137,6 +139,7 @@ export class ReconocimientoService {
         nivelConfianza === 'alto'
           ? 'Producto identificado correctamente.'
           : 'Confirma que el producto sugerido coincide con la captura.',
+      embedding: Array.from(embedding),
     }
   }
 
