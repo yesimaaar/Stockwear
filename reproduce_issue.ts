@@ -1,7 +1,6 @@
-
-import { CajaService } from "@/lib/services/caja-service"
-import { VentaService } from "@/lib/services/venta-service"
-import { AuthService } from "@/lib/services/auth-service"
+import { CajaService } from "@/features/caja/services/caja-service"
+import { VentaService } from "@/features/ventas/services/venta-service"
+import { AuthService } from "@/features/auth/services/auth-service"
 import { supabase } from "@/lib/supabase"
 
 async function testCajaFlow() {
