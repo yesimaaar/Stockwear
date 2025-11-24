@@ -77,6 +77,7 @@ import { PagoGastoDialog } from "./components/pago-gasto-dialog"
 import { PagoGastoService } from "@/features/movimientos/services/pago-gasto-service"
 import type { PagoGasto } from "@/lib/types"
 import { PaymentMethodSelector } from "@/components/domain/payment-method-selector"
+import { VentaLibreDialog } from "./components/venta-libre-dialog"
 
 // --- Schemas (Existing) ---
 
@@ -230,6 +231,7 @@ export default function MovimientosPage() {
   const [openGastosDialog, setOpenGastosDialog] = useState(false)
   const [openPagoGastoDialog, setOpenPagoGastoDialog] = useState(false)
   const [selectedGastoPago, setSelectedGastoPago] = useState<Gasto | null>(null)
+  const [openVentaLibreDialog, setOpenVentaLibreDialog] = useState(false)
 
   useEffect(() => {
     setFilterTerm(searchQ)
@@ -1250,21 +1252,21 @@ export default function MovimientosPage() {
       title="Movimientos"
       description="Gestiona el flujo de caja, registra gastos y consulta el historial de transacciones."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <Button
             variant="outline"
-            className={cn("gap-2 bg-background", sesionActual ? "border-red-900/20 hover:bg-red-900/10 text-red-900" : "")}
+            className={cn("gap-2 bg-background w-full sm:w-auto", sesionActual ? "border-red-900/20 hover:bg-red-900/10 text-red-900" : "")}
             onClick={() => sesionActual ? prepareCierre() : setOpenCajaDialog(true)}
             disabled={loadingSesion}
           >
             <Store className={cn("h-4 w-4", sesionActual ? "text-red-900" : "text-amber-500")} />
-            {loadingSesion ? "Cargando..." : sesionActual ? "Cerrar caja" : "Abrir caja"}
+            <span className="truncate">{loadingSesion ? "Cargando..." : sesionActual ? "Cerrar caja" : "Abrir caja"}</span>
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2 bg-background">
+              <Button variant="outline" className="gap-2 bg-background w-full sm:w-auto">
                 <Download className="h-4 w-4 text-amber-500" />
-                Descargar reporte
+                <span className="truncate"><span className="hidden sm:inline">Descargar </span>Reporte</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -1277,11 +1279,18 @@ export default function MovimientosPage() {
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
-            className="gap-2 bg-red-900 hover:bg-red-900/90 text-white"
+            className="gap-2 bg-emerald-600 hover:bg-emerald-600/90 text-white w-full sm:w-auto"
+            onClick={() => setOpenVentaLibreDialog(true)}
+          >
+            <Receipt className="h-4 w-4" />
+            <span className="truncate"><span className="hidden sm:inline">Crear </span>Venta</span>
+          </Button>
+          <Button
+            className="gap-2 bg-red-900 hover:bg-red-900/90 text-white w-full sm:w-auto"
             onClick={() => setOpenGastosDialog(true)}
           >
             <Wallet className="h-4 w-4" />
-            Registrar Gasto
+            <span className="truncate"><span className="hidden sm:inline">Registrar </span>Gasto</span>
           </Button>
         </div>
       }
@@ -1291,7 +1300,6 @@ export default function MovimientosPage() {
         onOpenChange={setOpenGastosDialog}
         onSuccess={() => {
           loadGastos()
-          // Refresh session summary if needed
           if (sesionActual) prepareCierre()
         }}
       />
@@ -1301,6 +1309,14 @@ export default function MovimientosPage() {
         gasto={selectedGastoPago}
         onSuccess={() => {
           loadGastos()
+          if (sesionActual) prepareCierre()
+        }}
+      />
+      <VentaLibreDialog
+        open={openVentaLibreDialog}
+        onOpenChange={setOpenVentaLibreDialog}
+        onSuccess={() => {
+          loadIngresos()
           if (sesionActual) prepareCierre()
         }}
       />
@@ -1885,7 +1901,7 @@ export default function MovimientosPage() {
                                   name="tallaId"
                                   render={({ field }) => (
                                     <FormItem>
-                                                                           <FormLabel>Talla</FormLabel>
+                                      <FormLabel>Talla</FormLabel>
                                       <FormControl>
                                         <Select disabled={accionesDeshabilitadas} value={field.value} onValueChange={field.onChange}>
                                           <SelectTrigger>
