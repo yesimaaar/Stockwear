@@ -76,6 +76,7 @@ import { GastoService } from "@/features/movimientos/services/gasto-service"
 import { PagoGastoDialog } from "./components/pago-gasto-dialog"
 import { PagoGastoService } from "@/features/movimientos/services/pago-gasto-service"
 import type { PagoGasto } from "@/lib/types"
+import { PaymentMethodSelector } from "@/components/domain/payment-method-selector"
 
 // --- Schemas (Existing) ---
 
@@ -242,6 +243,8 @@ export default function MovimientosPage() {
   const [paymentAmount, setPaymentAmount] = useState("")
   const [paymentNote, setPaymentNote] = useState("")
   const [registeringPayment, setRegisteringPayment] = useState(false)
+  const [metodosPago, setMetodosPago] = useState<{ id: number; nombre: string }[]>([])
+  const [selectedMetodoPagoId, setSelectedMetodoPagoId] = useState<string | null>(null)
 
   // Cash Register State
   const [sesionActual, setSesionActual] = useState<CajaSesion | null>(null)
@@ -510,15 +513,43 @@ export default function MovimientosPage() {
     loadCuentasPorCobrar()
   }, [])
 
+  // Load payment methods for registering abonos
+  useEffect(() => {
+    let active = true
+    const loadMetodos = async () => {
+      try {
+        const methods = await CajaService.getMetodosPago()
+        if (!active) return
+        setMetodosPago(methods || [])
+        setSelectedMetodoPagoId(prev => prev ?? (methods && methods.length > 0 ? String(methods[0].id) : null))
+      } catch (error) {
+        console.error("Error loading payment methods", error)
+      }
+    }
+
+    void loadMetodos()
+    return () => { active = false }
+  }, [])
+
   // Load Cash Register Session
   useEffect(() => {
     const loadSesion = async () => {
       setLoadingSesion(true)
       try {
-        const user = await AuthService.getCurrentUser()
+        let user = null
+        try {
+          user = await AuthService.getCurrentUser()
+        } catch (error) {
+          console.error("Error loading user for session", error)
+        }
+
         if (user) {
-          const sesion = await CajaService.getSesionActual(user.id)
-          setSesionActual(sesion)
+          try {
+            const sesion = await CajaService.getSesionActual(user.id)
+            setSesionActual(sesion)
+          } catch (error) {
+            console.error("Error loading actual session", error)
+          }
         }
       } catch (error) {
         console.error("Error loading session", error)
@@ -733,6 +764,7 @@ export default function MovimientosPage() {
     setSelectedCuenta(cuenta)
     setPaymentAmount(String(cuenta.montoCuota || cuenta.saldoPendiente))
     setPaymentNote("")
+    setSelectedMetodoPagoId(prev => prev ?? (metodosPago.length ? String(metodosPago[0].id) : null))
     setDetailsOpen(true)
   }
 
@@ -759,12 +791,22 @@ export default function MovimientosPage() {
 
     setRegisteringPayment(true)
     try {
+      if (!selectedMetodoPagoId) {
+        toast({ title: "Selecciona un método de pago", description: "Debes indicar el método usado.", variant: "destructive" })
+        setRegisteringPayment(false)
+        return
+      }
+
+      const metodoPagoIdNum = Number(selectedMetodoPagoId)
+
       await ClienteService.registrarAbono({
         clienteId: selectedCuenta.cliente.id,
         monto: amount,
         nota: paymentNote || `Abono a venta ${selectedCuenta.folio}`,
         ventaId: selectedCuenta.id,
-        // If we had session, we could pass usuarioId from session or auth
+        metodoPagoId: Number.isFinite(metodoPagoIdNum) ? metodoPagoIdNum : undefined,
+        cajaSesionId: sesionActual?.id,
+        usuarioId: sesionActual?.usuarioId,
       })
 
       toast({
@@ -1845,7 +1887,7 @@ export default function MovimientosPage() {
                                   name="tallaId"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>Talla</FormLabel>
+                                                                           <FormLabel>Talla</FormLabel>
                                       <FormControl>
                                         <Select disabled={accionesDeshabilitadas} value={field.value} onValueChange={field.onChange}>
                                           <SelectTrigger>
@@ -2167,6 +2209,16 @@ export default function MovimientosPage() {
                               />
                             </div>
                           </div>
+                          <div className="mt-2">
+                            <Label>Método de pago</Label>
+                            <PaymentMethodSelector
+                              methods={metodosPago.filter(m => !['crédito', 'credito', 'por cobrar'].includes(m.nombre.toLowerCase()))}
+                              selectedMethodId={selectedMetodoPagoId}
+                              onSelect={setSelectedMetodoPagoId}
+                              disabled={metodosPago.length === 0}
+                            />
+                          </div>
+
                           <Textarea
                             placeholder="Nota del abono (opcional)"
                             value={paymentNote}

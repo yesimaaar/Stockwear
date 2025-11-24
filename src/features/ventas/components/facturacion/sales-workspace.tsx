@@ -45,6 +45,7 @@ import { ClienteService } from "@/features/ventas/services/cliente-service"
 import type { Usuario, MetodoPago, CajaSesion, Cliente } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED } from "@/lib/events"
+import { PaymentMethodSelector } from "@/components/domain/payment-method-selector"
 
 export interface LineaVentaForm {
   stockId: number
@@ -482,7 +483,7 @@ export function SalesWorkspace({
 
 
   const renderMetodoPagoSelector = (id: string) => {
-    const opciones: MetodoPago[] = metodosPago
+    const opciones: MetodoPago[] = metodosPago.filter(m => !['crédito', 'credito', 'por cobrar'].includes(m.nombre.toLowerCase()))
 
     // Ensure Tarjeta is visible if it exists in DB, or add it if missing and needed
     // The user wants "Tarjeta de crédito" explicitly.
@@ -548,36 +549,12 @@ export function SalesWorkspace({
             <Label htmlFor={id} className="text-sm font-medium text-foreground">
               Método de Pago
             </Label>
-            <Select
-              value={selectedMetodoPagoId ?? ""}
-              onValueChange={(value) => setSelectedMetodoPagoId(value)}
-            >
-              <SelectTrigger id={id}>
-                <SelectValue placeholder="Seleccionar método" />
-              </SelectTrigger>
-              <SelectContent>
-                {opciones.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground text-center">
-                    Cargando métodos...
-                  </div>
-                ) : (
-                  opciones.map((metodo) => (
-                    <SelectItem key={metodo.id} value={String(metodo.id)}>
-                      <div className="flex items-center gap-2">
-                        {metodo.nombre.toLowerCase().includes("tarjeta") ? (
-                          <Receipt className="h-4 w-4" />
-                        ) : metodo.nombre.toLowerCase().includes("transferencia") ? (
-                          <ArrowLeftRight className="h-4 w-4" />
-                        ) : (
-                          <Banknote className="h-4 w-4" />
-                        )}
-                        <span>{metodo.nombre}</span>
-                      </div>
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+            <PaymentMethodSelector
+              methods={opciones}
+              selectedMethodId={selectedMetodoPagoId}
+              onSelect={setSelectedMetodoPagoId}
+              disabled={opciones.length === 0}
+            />
           </div>
         )}
 
