@@ -16,7 +16,7 @@ async function resolveUser(accessToken?: string) {
     return data.user
 }
 
-export async function updateStoreWhatsApp(whatsapp: string, accessToken?: string) {
+export async function updateStoreSettings(settings: { whatsapp?: string; logo_url?: string }, accessToken?: string) {
     try {
         const user = await resolveUser(accessToken)
         if (!user) return { success: false, message: 'No autorizado' }
@@ -29,9 +29,16 @@ export async function updateStoreWhatsApp(whatsapp: string, accessToken?: string
 
         if (profileError || !userProfile?.tienda_id) return { success: false, message: 'No se encontró la tienda' }
 
-        const success = await StoreService.updateWhatsAppAdmin(userProfile.tienda_id, whatsapp)
+        const updates: any = {}
+        if (settings.whatsapp !== undefined) updates.whatsapp = settings.whatsapp
+        if (settings.logo_url !== undefined) updates.logo_url = settings.logo_url
 
-        if (success) {
+        const { error } = await supabaseAdmin
+            .from('tiendas')
+            .update(updates)
+            .eq('id', userProfile.tienda_id)
+
+        if (!error) {
             const { data: tienda } = await supabaseAdmin
                 .from('tiendas')
                 .select('slug')
@@ -39,15 +46,16 @@ export async function updateStoreWhatsApp(whatsapp: string, accessToken?: string
                 .single()
 
             revalidatePath('/admin')
+            revalidatePath('/admin/configuracion')
             if (tienda?.slug) {
                 revalidatePath(`/catalog/${tienda.slug}`)
             }
-            return { success: true, message: 'Número de WhatsApp actualizado' }
+            return { success: true, message: 'Configuración actualizada' }
         }
 
-        return { success: false, message: 'No se pudo actualizar el número' }
+        return { success: false, message: 'No se pudo actualizar la configuración' }
     } catch (error) {
-        console.error('Error updating whatsapp', error)
+        console.error('Error updating store settings', error)
         return { success: false, message: 'Error interno' }
     }
 }
@@ -71,7 +79,7 @@ export async function getStoreSettings(accessToken?: string) {
 
         const { data: settings, error } = await supabaseAdmin
             .from('tiendas')
-            .select('id, nombre, slug, whatsapp')
+            .select('id, nombre, slug, whatsapp, logo_url')
             .eq('id', userProfile.tienda_id)
             .single()
 
