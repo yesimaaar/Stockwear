@@ -968,7 +968,8 @@ export default function ProductosPage() {
         variant: "destructive",
       })
     } finally {
-      setSavingProducto(false)
+      setSavingProducto(false
+      )
     }
   }
 
@@ -1190,14 +1191,16 @@ export default function ProductosPage() {
         description="Gestión de productos y existencias"
         icon={<Package className="h-5 w-5" />}
         actions={
-          <Button
-            className="rounded-xl px-4"
-            onClick={() => handleDialogOpenChange(true)}
-            type="button"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo producto
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              className="rounded-xl px-4"
+              onClick={() => handleDialogOpenChange(true)}
+              type="button"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo producto
+            </Button>
+          </div>
         }
       >
 
@@ -2050,7 +2053,7 @@ export default function ProductosPage() {
               htmlFor="delete-mode-hard"
               className={cn(
                 "flex items-start gap-3 rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-left transition hover:bg-destructive/20",
-                deleteMode === "hard" ? "ring-2 ring-destructive" : undefined,
+                deleteMode === "hard" ? "ring-2 ring-red-500" : undefined,
               )}
             >
               <RadioGroupItem id="delete-mode-hard" value="hard" className="mt-1" />

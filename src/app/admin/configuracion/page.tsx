@@ -5,6 +5,7 @@ import { useTheme } from "next-themes"
 import { Bell, Shield, Database, Palette } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { ExcelActions } from "@/features/productos/components/excel-actions"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 
@@ -94,12 +95,24 @@ export default function ConfiguracionPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button variant="outline" className="w-full bg-transparent">
-              Crear respaldo
-            </Button>
-            <Button variant="outline" className="w-full bg-transparent">
-              Restaurar datos
-            </Button>
+            <div className="mb-4">
+              <h4 className="text-sm font-medium mb-2">Inventario</h4>
+              <div className="flex flex-col gap-2">
+                <ExcelActions />
+              </div>
+            </div>
+            
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-medium mb-2">Sistema</h4>
+              <div className="flex flex-col gap-2">
+                <Button variant="outline" className="w-full bg-transparent">
+                  Crear respaldo
+                </Button>
+                <Button variant="outline" className="w-full bg-transparent">
+                  Restaurar datos
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
