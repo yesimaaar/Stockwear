@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
-import { GeocodingService } from '@/lib/services/geocoding-service'
 import { getCurrentTiendaId } from '@/features/auth/services/tenant-service'
+import { GeocodingService } from '@/lib/services/geocoding-service'
+import { SupabaseClient } from '@supabase/supabase-js'
 import type {
   Almacen,
   Categoria,

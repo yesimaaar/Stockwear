@@ -77,6 +77,7 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group"
+import { PRODUCT_COLORS } from "@/lib/colors"
 
 type EstadoFiltro = "todos" | "activo" | "inactivo"
 type CategoriaFiltro = "todas" | string
@@ -99,6 +100,7 @@ const getDefaultNuevoProducto = () => ({
   stockMinimo: "",
   descripcion: "",
   imagen: "",
+  color: "",
 })
 
 type NuevoProductoForm = ReturnType<typeof getDefaultNuevoProducto>
@@ -247,6 +249,7 @@ export default function ProductosPage() {
     stockMinimo: String(producto.stockMinimo),
     descripcion: producto.descripcion ?? "",
     imagen: producto.imagen ?? "",
+    color: producto.color ?? "",
   }), [])
 
   const mapReferenceRecord = (record: any): ProductoReferenceImage | null => {
@@ -333,6 +336,7 @@ export default function ProductosPage() {
       proveedor: form.proveedor.trim() || null,
       imagen: form.imagen.trim() || null,
       stockMinimo,
+      color: form.color || null,
     }
   }
 
@@ -968,7 +972,8 @@ export default function ProductosPage() {
         variant: "destructive",
       })
     } finally {
-      setSavingProducto(false)
+      setSavingProducto(false
+      )
     }
   }
 
@@ -1190,14 +1195,16 @@ export default function ProductosPage() {
         description="Gestión de productos y existencias"
         icon={<Package className="h-5 w-5" />}
         actions={
-          <Button
-            className="rounded-xl px-4"
-            onClick={() => handleDialogOpenChange(true)}
-            type="button"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo producto
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              className="rounded-xl px-4"
+              onClick={() => handleDialogOpenChange(true)}
+              type="button"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo producto
+            </Button>
+          </div>
         }
       >
 
@@ -1584,6 +1591,28 @@ export default function ProductosPage() {
                         value={editForm.proveedor}
                         onChange={(event) => updateEditFormField("proveedor", event.target.value)}
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Color</Label>
+                      <Select
+                        value={editForm.color || "none"}
+                        onValueChange={(value) => updateEditFormField("color", value === "none" ? "" : value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona un color" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin color</SelectItem>
+                          {PRODUCT_COLORS.map((color) => (
+                            <SelectItem key={color.name} value={color.name}>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-4 w-4 rounded-full border border-border ${color.class}`} />
+                                <span>{color.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </section>
@@ -2050,7 +2079,7 @@ export default function ProductosPage() {
               htmlFor="delete-mode-hard"
               className={cn(
                 "flex items-start gap-3 rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-left transition hover:bg-destructive/20",
-                deleteMode === "hard" ? "ring-2 ring-destructive" : undefined,
+                deleteMode === "hard" ? "ring-2 ring-red-500" : undefined,
               )}
             >
               <RadioGroupItem id="delete-mode-hard" value="hard" className="mt-1" />
@@ -2184,6 +2213,28 @@ export default function ProductosPage() {
                       onChange={(event) => setNuevoProducto((prev) => ({ ...prev, proveedor: event.target.value }))}
                       placeholder="Nike, Adidas, Puma..."
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Color</Label>
+                    <Select
+                      value={nuevoProducto.color || "none"}
+                      onValueChange={(value) => setNuevoProducto((prev) => ({ ...prev, color: value === "none" ? "" : value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un color" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin color</SelectItem>
+                        {PRODUCT_COLORS.map((color) => (
+                          <SelectItem key={color.name} value={color.name}>
+                            <div className="flex items-center gap-2">
+                              <div className={`h-4 w-4 rounded-full border border-border ${color.class}`} />
+                              <span>{color.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </section>

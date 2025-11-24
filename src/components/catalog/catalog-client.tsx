@@ -1,13 +1,27 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
-import { Search, ShoppingBag, Sparkles } from "lucide-react"
+import { Search, ShoppingBag, Sparkles, Filter, X } from "lucide-react"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Slider } from "@/components/ui/slider"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import ProductCard from "@/features/productos/components/ProductCard"
 import type { ProductoConStock } from "@/features/productos/services/producto-service"
 import { useCart } from "@/hooks/useCart"
+import { formatCurrency } from "@/lib/whatsapp"
+import { PRODUCT_COLORS } from "@/lib/colors"
 
 interface CatalogClientProps {
     initialProducts: ProductoConStock[]
@@ -18,9 +32,215 @@ interface CatalogClientProps {
     storeSlug?: string
 }
 
+interface FilterContentProps {
+    categories: string[]
+    selectedCategory: string | null
+    setSelectedCategory: (c: string | null) => void
+    allColors: string[]
+    selectedColors: string[]
+    setSelectedColors: React.Dispatch<React.SetStateAction<string[]>>
+    allSizes: string[]
+    selectedSizes: string[]
+    setSelectedSizes: React.Dispatch<React.SetStateAction<string[]>>
+    priceRange: [number, number]
+    setPriceRange: (val: [number, number]) => void
+    minPrice: number
+    maxPrice: number
+    allProviders: string[]
+    selectedProviders: string[]
+    setSelectedProviders: React.Dispatch<React.SetStateAction<string[]>>
+    hasActiveFilters: boolean
+    clearFilters: () => void
+}
+
+function FilterContent({
+    categories,
+    selectedCategory,
+    setSelectedCategory,
+    allColors,
+    selectedColors,
+    setSelectedColors,
+    allSizes,
+    selectedSizes,
+    setSelectedSizes,
+    priceRange,
+    setPriceRange,
+    minPrice,
+    maxPrice,
+    allProviders,
+    selectedProviders,
+    setSelectedProviders,
+    hasActiveFilters,
+    clearFilters
+}: FilterContentProps) {
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <Filter className="h-4 w-4" /> Filtros
+                </h3>
+                {hasActiveFilters && (
+                    <button
+                        onClick={clearFilters}
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                        <X className="h-3 w-3" /> Limpiar
+                    </button>
+                )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">Categorías</h4>
+                <div className="flex flex-wrap gap-2">
+                    {categories.length > 0 ? (
+                        categories.map((categoria) => (
+                            <Badge
+                                key={categoria}
+                                variant={selectedCategory === categoria ? "secondary" : "outline"}
+                                className={`cursor-pointer rounded-lg border px-3 py-1.5 text-sm transition 
+                                    ${selectedCategory === categoria
+                                        ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                                        : "bg-card text-muted-foreground border-border hover:border-ring hover:bg-accent"
+                                    }`}
+                                onClick={() => setSelectedCategory(selectedCategory === categoria ? null : categoria)}
+                            >
+                                {categoria}
+                            </Badge>
+                        ))
+                    ) : (
+                        <p className="text-xs text-muted-foreground">Sin categorías.</p>
+                    )}
+                </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">Colores</h4>
+                <div className="flex flex-wrap gap-2">
+                    {allColors.length > 0 ? (
+                        allColors.map((colorName) => {
+                            const colorDef = PRODUCT_COLORS.find(c => c.name === colorName)
+                            const isSelected = selectedColors.includes(colorName)
+                            if (!colorDef) return null
+                            
+                            return (
+                                <div 
+                                    key={colorName}
+                                    className={`cursor-pointer rounded-full p-0.5 border-2 transition-all ${isSelected ? 'border-primary scale-110' : 'border-transparent hover:scale-105'}`}
+                                    onClick={() => {
+                                        setSelectedColors(prev => 
+                                            isSelected ? prev.filter(c => c !== colorName) : [...prev, colorName]
+                                        )
+                                    }}
+                                    title={colorName}
+                                >
+                                    <div className={`h-6 w-6 rounded-full border border-border/20 shadow-sm ${colorDef.class}`} />
+                                </div>
+                            )
+                        })
+                    ) : (
+                        <p className="text-xs text-muted-foreground">Sin colores.</p>
+                    )}
+                </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">Tallas</h4>
+                <div className="flex flex-wrap gap-2">
+                    {allSizes.length > 0 ? (
+                        allSizes.map((talla) => {
+                            const isSelected = selectedSizes.includes(talla)
+                            return (
+                                <Badge
+                                    key={talla}
+                                    variant={isSelected ? "secondary" : "outline"}
+                                    className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs transition
+                                        ${isSelected
+                                            ? "bg-slate-800 text-white border-slate-800 hover:bg-slate-700"
+                                            : "bg-card text-muted-foreground border-border hover:border-ring hover:bg-accent"
+                                        }`}
+                                    onClick={() => {
+                                        setSelectedSizes(prev => 
+                                            isSelected ? prev.filter(s => s !== talla) : [...prev, talla]
+                                        )
+                                    }}
+                                >
+                                    {talla}
+                                </Badge>
+                            )
+                        })
+                    ) : (
+                        <p className="text-xs text-muted-foreground">Sin tallas.</p>
+                    )}
+                </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-muted-foreground">Precio</h4>
+                    <span className="text-xs font-medium text-foreground">
+                        {formatCurrency(priceRange[0])} - {formatCurrency(priceRange[1])}
+                    </span>
+                </div>
+                <Slider
+                    defaultValue={[minPrice, maxPrice]}
+                    value={[priceRange[0], priceRange[1]]}
+                    min={minPrice}
+                    max={maxPrice}
+                    step={100}
+                    onValueChange={(val) => setPriceRange([val[0], val[1]])}
+                    className="py-4"
+                />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">Marcas / Proveedores</h4>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-border">
+                    {allProviders.length > 0 ? (
+                        allProviders.map((provider) => (
+                            <div key={provider} className="flex items-center space-x-2">
+                                <Checkbox 
+                                    id={`provider-${provider}`} 
+                                    checked={selectedProviders.includes(provider)}
+                                    onCheckedChange={(checked) => {
+                                        setSelectedProviders(prev => 
+                                            checked ? [...prev, provider] : prev.filter(p => p !== provider)
+                                        )
+                                    }}
+                                />
+                                <Label 
+                                    htmlFor={`provider-${provider}`}
+                                    className="text-sm font-normal cursor-pointer leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                >
+                                    {provider}
+                                </Label>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs text-muted-foreground">Sin proveedores.</p>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 export function CatalogClient({ initialProducts, categories, totalStock, storeName, storeLogoUrl, storeSlug }: CatalogClientProps) {
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+    const [selectedColors, setSelectedColors] = useState<string[]>([])
+    const [selectedSizes, setSelectedSizes] = useState<string[]>([])
+    const [selectedProviders, setSelectedProviders] = useState<string[]>([])
+    const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000000])
 
     const { setStoreScope } = useCart()
 
@@ -29,6 +249,43 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
             setStoreScope(storeSlug)
         }
     }, [storeSlug, setStoreScope])
+
+    const { allSizes, allProviders, allColors, minPrice, maxPrice } = useMemo(() => {
+        const sizes = new Set<string>()
+        const providers = new Set<string>()
+        const colors = new Set<string>()
+        let min = Infinity
+        let max = -Infinity
+
+        if (initialProducts.length === 0) return { allSizes: [], allProviders: [], allColors: [], minPrice: 0, maxPrice: 1000 }
+
+        initialProducts.forEach(p => {
+            p.stockPorTalla.forEach(s => {
+                if (s.talla && s.talla !== 'none') sizes.add(s.talla)
+            })
+            if (p.proveedor) providers.add(p.proveedor)
+            if (p.color) colors.add(p.color)
+            if (p.precio < min) min = p.precio
+            if (p.precio > max) max = p.precio
+        })
+
+        return {
+            allSizes: Array.from(sizes).sort((a, b) => {
+                const numA = parseFloat(a)
+                const numB = parseFloat(b)
+                if (!isNaN(numA) && !isNaN(numB)) return numA - numB
+                return a.localeCompare(b)
+            }),
+            allProviders: Array.from(providers).sort(),
+            allColors: Array.from(colors).sort(),
+            minPrice: min === Infinity ? 0 : min,
+            maxPrice: max === -Infinity ? 1000 : max
+        }
+    }, [initialProducts])
+
+    useEffect(() => {
+        setPriceRange([minPrice, maxPrice])
+    }, [minPrice, maxPrice])
 
     const filteredProducts = useMemo(() => {
         return initialProducts.filter((product) => {
@@ -40,13 +297,32 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                 ? product.categoria === selectedCategory
                 : true
 
-            return matchesSearch && matchesCategory
+            const matchesPrice = product.precio >= priceRange[0] && product.precio <= priceRange[1]
+            
+            const matchesSize = selectedSizes.length === 0 || product.stockPorTalla.some(s => selectedSizes.includes(s.talla))
+            
+            const matchesProvider = selectedProviders.length === 0 || (product.proveedor && selectedProviders.includes(product.proveedor))
+
+            const matchesColor = selectedColors.length === 0 || (product.color && selectedColors.includes(product.color))
+
+            return matchesSearch && matchesCategory && matchesPrice && matchesSize && matchesProvider && matchesColor
         })
-    }, [initialProducts, searchQuery, selectedCategory])
+    }, [initialProducts, searchQuery, selectedCategory, priceRange, selectedSizes, selectedProviders, selectedColors])
 
     const numberFormatter = new Intl.NumberFormat("es-MX")
     const displayName = storeName ?? "StockWear"
     const logoSrc = storeLogoUrl && storeLogoUrl.length > 0 ? storeLogoUrl : "/stockwear-icon.png"
+
+    const clearFilters = () => {
+        setSearchQuery("")
+        setSelectedCategory(null)
+        setSelectedSizes([])
+        setSelectedProviders([])
+        setSelectedColors([])
+        setPriceRange([minPrice, maxPrice])
+    }
+
+    const hasActiveFilters = searchQuery || selectedCategory || selectedSizes.length > 0 || selectedProviders.length > 0 || selectedColors.length > 0 || priceRange[0] > minPrice || priceRange[1] < maxPrice
 
     return (
         <main className="relative mx-auto flex w-full max-w-7xl flex-col px-4 py-8 lg:px-8">
@@ -58,18 +334,54 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-foreground">{displayName}</h1>
-                            <p className="text-sm text-muted-foreground">Catálogo en tiempo real</p>
+                            <p className="text-sm text-muted-foreground">Catalog by Stockwear</p>
                         </div>
                     </div>
 
-                    <div className="relative w-full max-w-md">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="Buscar por código o nombre..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-11 rounded-full border-border bg-card pl-10 shadow-sm focus-visible:ring-ring"
-                        />
+                    <div className="relative w-full max-w-md flex gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Buscar por código o nombre..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="h-11 rounded-full border-border bg-card pl-10 shadow-sm focus-visible:ring-ring"
+                            />
+                        </div>
+
+                        {/* Mobile Filter Trigger */}
+                        <Sheet>
+                            <SheetTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-full lg:hidden">
+                                    <Filter className="h-4 w-4" />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="left" className="w-[300px] sm:w-[400px] overflow-y-auto">
+                                <SheetHeader className="mb-4">
+                                    <SheetTitle>Filtros</SheetTitle>
+                                </SheetHeader>
+                                <FilterContent
+                                    categories={categories}
+                                    selectedCategory={selectedCategory}
+                                    setSelectedCategory={setSelectedCategory}
+                                    allColors={allColors}
+                                    selectedColors={selectedColors}
+                                    setSelectedColors={setSelectedColors}
+                                    allSizes={allSizes}
+                                    selectedSizes={selectedSizes}
+                                    setSelectedSizes={setSelectedSizes}
+                                    priceRange={priceRange}
+                                    setPriceRange={setPriceRange}
+                                    minPrice={minPrice}
+                                    maxPrice={maxPrice}
+                                    allProviders={allProviders}
+                                    selectedProviders={selectedProviders}
+                                    setSelectedProviders={setSelectedProviders}
+                                    hasActiveFilters={!!hasActiveFilters}
+                                    clearFilters={clearFilters}
+                                />
+                            </SheetContent>
+                        </Sheet>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
@@ -87,43 +399,30 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                 </div>
             </header>
 
-            <section className="grid gap-8 lg:grid-cols-[240px_1fr]">
-                <aside className="h-fit space-y-6 lg:sticky lg:top-8">
-                    <div className="rounded-2xl border border-border/60 bg-card/50 p-5 shadow-sm backdrop-blur-md">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="font-semibold text-foreground">Categorías</h3>
-                            {selectedCategory && (
-                                <button
-                                    onClick={() => setSelectedCategory(null)}
-                                    className="text-xs text-blue-600 hover:underline"
-                                >
-                                    Limpiar
-                                </button>
-                            )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {categories.length > 0 ? (
-                                categories.map((categoria) => (
-                                    <Badge
-                                        key={categoria}
-                                        variant={selectedCategory === categoria ? "secondary" : "outline"}
-                                        className={`cursor-pointer rounded-lg border px-3 py-1.5 text-sm transition 
-                      ${selectedCategory === categoria
-                                                ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                                                : "bg-card text-muted-foreground border-border hover:border-ring hover:bg-accent"
-                                            }`}
-                                        onClick={() => setSelectedCategory(selectedCategory === categoria ? null : categoria)}
-                                    >
-                                        {categoria}
-                                    </Badge>
-                                ))
-                            ) : (
-                                <p className="text-sm text-slate-500">Sin categorías.</p>
-                            )}
-                        </div>
+            <section className="grid gap-8 lg:grid-cols-[260px_1fr]">
+                <aside className="hidden h-fit space-y-6 lg:sticky lg:top-8 lg:block">
+                    <div className="rounded-2xl border border-border/60 bg-card/50 p-5 shadow-sm backdrop-blur-md space-y-6">
+                        <FilterContent
+                            categories={categories}
+                            selectedCategory={selectedCategory}
+                            setSelectedCategory={setSelectedCategory}
+                            allColors={allColors}
+                            selectedColors={selectedColors}
+                            setSelectedColors={setSelectedColors}
+                            allSizes={allSizes}
+                            selectedSizes={selectedSizes}
+                            setSelectedSizes={setSelectedSizes}
+                            priceRange={priceRange}
+                            setPriceRange={setPriceRange}
+                            minPrice={minPrice}
+                            maxPrice={maxPrice}
+                            allProviders={allProviders}
+                            selectedProviders={selectedProviders}
+                            setSelectedProviders={setSelectedProviders}
+                            hasActiveFilters={!!hasActiveFilters}
+                            clearFilters={clearFilters}
+                        />
                     </div>
-
-
                 </aside>
 
                 <div id="catalogo" className="space-y-6">
@@ -136,12 +435,9 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                             <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                                 Intenta ajustar tu búsqueda o los filtros seleccionados.
                             </p>
-                            {(searchQuery || selectedCategory) && (
+                            {(hasActiveFilters) && (
                                 <button
-                                    onClick={() => {
-                                        setSearchQuery("")
-                                        setSelectedCategory(null)
-                                    }}
+                                    onClick={clearFilters}
                                     className="mt-4 text-sm font-medium text-blue-600 hover:underline"
                                 >
                                     Limpiar filtros

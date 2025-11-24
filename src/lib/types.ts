@@ -33,6 +33,7 @@ export interface Producto {
   descuento: number
   proveedor: string | null
   imagen: string | null
+  color: string | null
   stockMinimo: number
   estado: EstadoRegistro
   createdAt: string

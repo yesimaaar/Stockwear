@@ -9,7 +9,7 @@
     "start": "next start",
     "test": "vitest",
     "generate:embeddings": "node scripts/generate-reference-embeddings.js",
-    "check-all": "tsc --noEmit && npm run lint && npm run build"
+    "check-all": "tsc --noEmit && pnpm run lint && pnpm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

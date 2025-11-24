@@ -36,6 +36,25 @@ export class ClienteService {
         return (data as any[]).map(mapClienteFromDB)
     }
 
+    static async getByDocument(documento: string): Promise<Cliente | null> {
+        const tiendaId = await getCurrentTiendaId()
+        const { data, error } = await supabase
+            .from('clientes')
+            .select('*')
+            .eq('tienda_id', tiendaId)
+            .eq('documento', documento)
+            .single()
+
+        if (error) {
+            if (error.code !== 'PGRST116') { // PGRST116 is "The result contains 0 rows"
+                console.error('Error fetching client by document', error)
+            }
+            return null
+        }
+
+        return mapClienteFromDB(data)
+    }
+
     static async create(payload: Partial<Cliente>): Promise<Cliente | null> {
         const tiendaId = await getCurrentTiendaId()
         const { data, error } = await supabase

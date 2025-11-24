@@ -71,6 +71,36 @@ export class AuthService {
       }
 
       const mapped = mapUsuario(profile as UsuarioRow)
+
+      if (mapped) {
+        // Check sleep mode
+        const { isSleepMode, message } = await this.checkSleepMode(mapped.tiendaId)
+
+        if (isSleepMode) {
+          // Check if user is owner
+          // We need to fetch all users to find the owner
+          // This might be slightly inefficient but necessary for security
+          const { data: allUsers } = await supabase
+            .from('usuarios')
+            .select('id, "createdAt"')
+            .eq('tienda_id', mapped.tiendaId)
+            .order('createdAt', { ascending: true })
+
+          if (allUsers && allUsers.length > 0) {
+            const owner = allUsers[0] // First user created is owner
+
+            if (mapped.id !== owner.id) {
+              // User is NOT owner, and it is sleep time.
+              await this.logout()
+              return {
+                success: false,
+                message: message || 'Es hora de dormir, puedes continuar mañana a las 7:00 AM',
+              }
+            }
+          }
+        }
+      }
+
       return { success: true, user: mapped }
     }
 
@@ -220,8 +250,19 @@ export class AuthService {
     return { success: true, message: 'Contraseña actualizada correctamente.' }
   }
 
-  static async logout(): Promise<void> {
-    await supabase.auth.signOut()
+  static async logout(scope: 'global' | 'local' | 'others' = 'global'): Promise<void> {
+    if (scope === 'local') {
+      // Manually clear Supabase keys from localStorage to preserve server session
+      if (typeof window !== 'undefined') {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+      return;
+    }
+    await supabase.auth.signOut({ scope })
   }
 
   static async getCurrentUser(): Promise<Usuario | null> {
@@ -317,5 +358,105 @@ export class AuthService {
     }
 
     return mapUsuario(data as UsuarioRow) ?? null
+  }
+
+  static async deleteUsuario(id: string): Promise<boolean> {
+    if (!id) {
+      throw new Error('El identificador del usuario es obligatorio.')
+    }
+
+    const { error } = await supabase
+      .from('usuarios')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      throw new Error(error.message || 'No se pudo eliminar el usuario.')
+    }
+
+    return true
+  }
+
+  static async deactivateAllNonOwners(): Promise<number> {
+    const tiendaId = await getCurrentTiendaId()
+
+    // Get all users for this store
+    const { data: usuarios, error: fetchError } = await supabase
+      .from('usuarios')
+      .select('*')
+      .eq('tienda_id', tiendaId)
+      .order('createdAt', { ascending: true })
+
+    if (fetchError || !usuarios || usuarios.length === 0) {
+      throw new Error('No se pudieron obtener los usuarios.')
+    }
+
+    // The owner is the first user created (earliest created_at)
+    const owner = usuarios[0]
+
+    // Deactivate all users except the owner
+    const { error: updateError, count } = await supabase
+      .from('usuarios')
+      .update({ estado: 'inactivo' })
+      .eq('tienda_id', tiendaId)
+      .neq('id', owner.id)
+      .eq('estado', 'activo')
+
+    if (updateError) {
+      throw new Error(updateError.message || 'No se pudieron desactivar los usuarios.')
+    }
+
+    return count ?? 0
+  }
+
+  static async checkSleepMode(tiendaId: number): Promise<{ isSleepMode: boolean; message?: string }> {
+    const { data: tienda, error } = await supabase
+      .from('tiendas')
+      .select('sleep_schedule_enabled, sleep_schedule_time, wake_schedule_time')
+      .eq('id', tiendaId)
+      .single()
+
+    if (error || !tienda || !tienda.sleep_schedule_enabled || !tienda.sleep_schedule_time) {
+      return { isSleepMode: false }
+    }
+
+    const now = new Date()
+    const currentHours = now.getHours()
+    const currentMinutes = now.getMinutes()
+    const currentTimeValue = currentHours * 60 + currentMinutes
+
+    const [sleepHours, sleepMinutes] = tienda.sleep_schedule_time.split(':').map(Number)
+    const sleepTimeValue = sleepHours * 60 + sleepMinutes
+
+    // Use configured wake time or default to 7:00 AM if not set (for backward compatibility)
+    const wakeTimeStr = tienda.wake_schedule_time || '07:00:00'
+    const [wakeHours, wakeMinutes] = wakeTimeStr.split(':').map(Number)
+    const wakeTimeValue = wakeHours * 60 + wakeMinutes
+
+    let isSleepTime = false
+
+    if (sleepTimeValue > wakeTimeValue) {
+      // Example: Sleep at 22:00, Wake at 07:00
+      // Sleep if time >= 22:00 OR time < 07:00
+      isSleepTime = currentTimeValue >= sleepTimeValue || currentTimeValue < wakeTimeValue
+    } else {
+      // Example: Sleep at 01:00, Wake at 07:00
+      // Sleep if time >= 01:00 AND time < 07:00
+      isSleepTime = currentTimeValue >= sleepTimeValue && currentTimeValue < wakeTimeValue
+    }
+
+    if (isSleepTime) {
+      // Format wake time for message (e.g., "7:00 AM")
+      const wakeTimeDate = new Date()
+      wakeTimeDate.setHours(wakeHours, wakeMinutes)
+      const formattedWakeTime = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true }).format(wakeTimeDate)
+
+      return {
+        isSleepMode: true,
+        message: `Es hora de dormir, puedes continuar mañana a las ${formattedWakeTime}`,
+      }
+    }
+
+    return { isSleepMode: false }
   }
 }

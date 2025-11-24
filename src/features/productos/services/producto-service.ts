@@ -46,6 +46,7 @@ export type ProductoRow = {
   descuento: number
   proveedor: string | null
   imagen: string | null
+  color: string | null
   stockMinimo: number
   estado: 'activo' | 'inactivo'
   createdAt: string
@@ -93,6 +94,7 @@ export const PRODUCTO_SELECT = `
   descuento,
   proveedor,
   imagen,
+  color,
   stockMinimo,
   estado,
   createdAt,

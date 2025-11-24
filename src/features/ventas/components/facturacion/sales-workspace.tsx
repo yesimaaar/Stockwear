@@ -164,6 +164,68 @@ export function SalesWorkspace({
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const handleCreateClient = async () => {
+    if (!formData.name) {
+      toast({
+        title: "Nombre requerido",
+        description: "Ingresa el nombre del cliente para guardarlo.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.identification) {
+      try {
+        const existingClient = await ClienteService.getByDocument(formData.identification)
+        if (existingClient) {
+          toast({
+            title: "Cliente ya existe",
+            description: `El cliente con documento ${formData.identification} ya está registrado como ${existingClient.nombre}.`,
+            variant: "destructive",
+          })
+
+          // Optional: Select the existing client automatically
+          if (!clientes.some(c => c.id === existingClient.id)) {
+            setClientes(prev => [...prev, existingClient])
+          }
+          setSelectedClienteId(String(existingClient.id))
+          setIsFormOpen(false)
+
+          return
+        }
+      } catch (error) {
+        console.error("Error verificando cliente existente", error)
+      }
+    }
+
+    try {
+      const nuevoCliente = await ClienteService.create({
+        nombre: formData.name,
+        documento: formData.identification,
+        telefono: formData.phone,
+        direccion: formData.address,
+      })
+
+      if (nuevoCliente) {
+        setClientes((prev) => [...prev, nuevoCliente])
+        setSelectedClienteId(String(nuevoCliente.id))
+        toast({
+          title: "Cliente creado",
+          description: `Se ha registrado a ${nuevoCliente.nombre} correctamente.`,
+        })
+        // Close form or keep open? Maybe close to indicate success
+        setIsFormOpen(false)
+      }
+    } catch (error) {
+      console.error("Error creando cliente", error)
+      toast({
+        title: "Error",
+        description: "No se pudo crear el cliente.",
+        variant: "destructive",
+      })
+    }
+  }
+
   const dashboardTitle = title ?? "Facturación rápida"
   const dashboardDescription = description ?? "Añade productos destacados rápidamente a tu carrito de facturación."
   const inputPlaceholder = searchPlaceholder ?? "Código o nombre del producto"
@@ -680,30 +742,46 @@ export function SalesWorkspace({
     if (isCredito && !clienteIdParaVenta) {
       if (formData.name && formData.identification) {
         try {
-          // Intentar crear el cliente al vuelo
-          const nuevoCliente = await ClienteService.create({
-            nombre: formData.name,
-            documento: formData.identification,
-            telefono: formData.phone,
-            direccion: formData.address,
-          })
+          // Check if client exists first
+          const existingClient = await ClienteService.getByDocument(formData.identification)
 
-          if (nuevoCliente) {
-            clienteIdParaVenta = nuevoCliente.id
-            // Actualizar estado local para que se refleje en la UI
-            setClientes((prev) => [...prev, nuevoCliente])
-            setSelectedClienteId(String(nuevoCliente.id))
+          if (existingClient) {
+            clienteIdParaVenta = existingClient.id
+            // Update local state
+            if (!clientes.some(c => c.id === existingClient.id)) {
+              setClientes(prev => [...prev, existingClient])
+            }
+            setSelectedClienteId(String(existingClient.id))
             toast({
-              title: "Cliente registrado",
-              description: `Se creó el cliente ${nuevoCliente.nombre} automáticamente.`,
+              title: "Cliente existente encontrado",
+              description: `Se usará el cliente ${existingClient.nombre} para esta venta.`,
             })
           } else {
-            toast({
-              title: "Error al crear cliente",
-              description: "No se pudo registrar el cliente con los datos proporcionados.",
-              variant: "destructive",
+            // Intentar crear el cliente al vuelo
+            const nuevoCliente = await ClienteService.create({
+              nombre: formData.name,
+              documento: formData.identification,
+              telefono: formData.phone,
+              direccion: formData.address,
             })
-            return
+
+            if (nuevoCliente) {
+              clienteIdParaVenta = nuevoCliente.id
+              // Actualizar estado local para que se refleje en la UI
+              setClientes((prev) => [...prev, nuevoCliente])
+              setSelectedClienteId(String(nuevoCliente.id))
+              toast({
+                title: "Cliente registrado",
+                description: `Se creó el cliente ${nuevoCliente.nombre} automáticamente.`,
+              })
+            } else {
+              toast({
+                title: "Error al crear cliente",
+                description: "No se pudo registrar el cliente con los datos proporcionados.",
+                variant: "destructive",
+              })
+              return
+            }
           }
         } catch (error) {
           console.error("Error creando cliente desde venta", error)
@@ -1107,8 +1185,17 @@ export function SalesWorkspace({
                                   className="h-8"
                                 />
                               </div>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="w-full mt-2"
+                                onClick={handleCreateClient}
+                              >
+                                Guardar como Cliente
+                              </Button>
                               <p className="text-[10px] text-muted-foreground italic">
-                                * Estos datos son informativos y no se guardarán en la base de datos por ahora.
+                                * Puedes guardar estos datos como un nuevo cliente para futuras ventas.
                               </p>
                             </div>
                           )}
@@ -1371,7 +1458,7 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
             src={producto.imagen as string}
             alt={producto.nombre}
             fill
-            className="object-contain transition-transform duration-300 group-hover:scale-105"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(min-width: 1280px) 240px, (min-width: 768px) 200px, 160px"
           />
         ) : (
