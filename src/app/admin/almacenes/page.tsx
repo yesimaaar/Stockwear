@@ -1,3 +1,5 @@
+import { Suspense } from "react"
+
 import { InventarioService } from "@/features/movimientos/services/inventario-service"
 import { createClient } from "@/lib/supabase/server"
 
@@ -19,5 +21,9 @@ async function loadInitialAlmacenes() {
 export default async function AlmacenesPage() {
   const initialAlmacenes = await loadInitialAlmacenes()
 
-  return <AlmacenesPageClient initialAlmacenes={initialAlmacenes} />
+  return (
+    <Suspense fallback={<div>Cargando...</div>}>
+      <AlmacenesPageClient initialAlmacenes={initialAlmacenes} />
+    </Suspense>
+  )
 }
