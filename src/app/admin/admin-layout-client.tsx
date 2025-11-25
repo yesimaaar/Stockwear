@@ -65,12 +65,22 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
     const [notificationsError, setNotificationsError] = useState<string | null>(null);
     const [notificationsBadge, setNotificationsBadge] = useState<number | null>(null);
     const [formattedUpdatedAt, setFormattedUpdatedAt] = useState<string | null>(null);
+    const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
     // Mobile menu state
     const [mobileMenuView, setMobileMenuView] = useState<"main" | "notifications">("main");
 
     useEffect(() => {
         setMounted(true);
+        // Load dismissed notifications from local storage
+        const savedDismissed = localStorage.getItem("dismissedNotifications");
+        if (savedDismissed) {
+            try {
+                setDismissedIds(JSON.parse(savedDismissed));
+            } catch (e) {
+                console.error("Error parsing dismissed notifications", e);
+            }
+        }
     }, []);
 
     useEffect(() => {
@@ -94,16 +104,23 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
     }, []);
 
     const loadNotifications = useCallback(async () => {
+        if (!user?.tiendaId) return;
+
         setNotificationsLoading(true);
         setNotificationsError(null);
         try {
             // Fetch products with their stock entries
+            // Increased limit to ensure we catch all low stock items
             const { data, error } = await supabase
                 .from('productos')
                 .select('id, nombre, stockMinimo, stock(cantidad)')
-                .limit(50);
+                .eq('tienda_id', user.tiendaId)
+                .eq('estado', 'activo')
+                .limit(1000);
 
             if (error) throw error;
+
+            const currentLowStockIds = new Set<string>();
 
             const alerts = (data || [])
                 .map((p: any) => {
@@ -115,17 +132,28 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                     };
                 })
                 .filter(p => p.stock_actual < p.stockMinimo)
-                .slice(0, 5)
-                .map(p => ({
-                    id: `stock-${p.id}`,
-                    title: "Stock bajo",
-                    description: `El producto ${p.nombre} tiene pocas unidades.`,
-                    productId: p.id,
-                    meta: {
-                        stockActual: p.stock_actual,
-                        stockMinimo: p.stockMinimo
-                    }
-                }));
+                .map(p => {
+                    const notificationId = `stock-${p.id}`;
+                    currentLowStockIds.add(notificationId);
+                    return {
+                        id: notificationId,
+                        title: "Stock bajo",
+                        description: `El producto ${p.nombre} tiene pocas unidades.`,
+                        productId: p.id,
+                        meta: {
+                            stockActual: p.stock_actual,
+                            stockMinimo: p.stockMinimo
+                        }
+                    };
+                })
+                .filter(n => !dismissedIds.includes(n.id));
+
+            // Cleanup dismissed IDs that are no longer low stock
+            const newDismissedIds = dismissedIds.filter(id => currentLowStockIds.has(id));
+            if (newDismissedIds.length !== dismissedIds.length) {
+                setDismissedIds(newDismissedIds);
+                localStorage.setItem("dismissedNotifications", JSON.stringify(newDismissedIds));
+            }
 
             setNotifications(alerts);
             setNotificationsBadge(alerts.length > 0 ? alerts.length : null);
@@ -136,11 +164,37 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
         } finally {
             setNotificationsLoading(false);
         }
-    }, []);
+    }, [user, dismissedIds]);
 
     useEffect(() => {
-        void loadNotifications();
-    }, [loadNotifications]);
+        if (user?.tiendaId) {
+            void loadNotifications();
+        }
+
+        // Listen for refresh events
+        const handleRefresh = () => {
+            if (user?.tiendaId) {
+                void loadNotifications();
+            }
+        };
+
+        window.addEventListener("REFRESH_NOTIFICATIONS", handleRefresh);
+        return () => {
+            window.removeEventListener("REFRESH_NOTIFICATIONS", handleRefresh);
+        };
+    }, [loadNotifications, user]);
+
+    const handleDismissNotification = (e: React.MouseEvent, notificationId: string) => {
+        e.stopPropagation();
+        const newDismissed = [...dismissedIds, notificationId];
+        setDismissedIds(newDismissed);
+        localStorage.setItem("dismissedNotifications", JSON.stringify(newDismissed));
+
+        // Optimistically remove from current view
+        const updatedNotifications = notifications.filter(n => n.id !== notificationId);
+        setNotifications(updatedNotifications);
+        setNotificationsBadge(updatedNotifications.length > 0 ? updatedNotifications.length : null);
+    };
 
     const handleSearchSubmit = (e: FormEvent) => {
         e.preventDefault();
@@ -307,11 +361,11 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                                         ) : (
                                             <ul className="divide-y divide-border">
                                                 {notifications.map(notification => (
-                                                    <li key={notification.id} className="flex items-start gap-3 px-4 py-4 hover:bg-muted/40">
+                                                    <li key={notification.id} className="group flex items-start gap-3 px-4 py-4 hover:bg-muted/40 relative">
                                                         <span className="mt-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-amber-100 text-amber-700">
                                                             <AlertTriangle className="h-4 w-4" />
                                                         </span>
-                                                        <div className="flex-1 text-sm">
+                                                        <div className="flex-1 text-sm pr-6">
                                                             <p className="font-medium text-foreground">{notification.title}</p>
                                                             <p className="mt-1 text-xs text-muted-foreground">{notification.description}</p>
                                                             {notification.meta && (
@@ -322,6 +376,14 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                                                             )}
                                                             <button type="button" onClick={() => handleNotificationClick(notification.productId)} className="mt-2 inline-flex text-xs font-semibold text-primary transition hover:underline">Revisar producto</button>
                                                         </div>
+                                                        <button
+                                                            onClick={(e) => handleDismissNotification(e, notification.id)}
+                                                            className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
+                                                            title="Descartar notificación"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                            <span className="sr-only">Descartar</span>
+                                                        </button>
                                                     </li>
                                                 ))}
                                             </ul>
@@ -447,11 +509,11 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                                             ) : (
                                                 <ul className="divide-y divide-border/60">
                                                     {notifications.map((notification) => (
-                                                        <li key={notification.id} className="flex gap-3 px-4 py-3 transition hover:bg-muted/50">
+                                                        <li key={notification.id} className="group flex gap-3 px-4 py-3 transition hover:bg-muted/50 relative">
                                                             <span className="mt-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-amber-100 text-amber-700">
                                                                 <AlertTriangle className="h-4 w-4" />
                                                             </span>
-                                                            <div className="flex-1 text-sm">
+                                                            <div className="flex-1 text-sm pr-8">
                                                                 <p className="font-medium text-foreground">{notification.title}</p>
                                                                 <p className="mt-1 text-xs text-muted-foreground">{notification.description}</p>
                                                                 {notification.meta && (
@@ -462,6 +524,14 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                                                                 )}
                                                                 <button type="button" onClick={() => handleNotificationClick(notification.productId)} className="mt-2 inline-flex text-xs font-semibold text-primary transition hover:underline">Revisar producto</button>
                                                             </div>
+                                                            <button
+                                                                onClick={(e) => handleDismissNotification(e, notification.id)}
+                                                                className="absolute right-2 top-2 p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                                                                title="Descartar notificación"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                                <span className="sr-only">Descartar</span>
+                                                            </button>
                                                         </li>
                                                     ))}
                                                 </ul>

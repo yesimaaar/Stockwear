@@ -445,6 +445,10 @@ export class ProductoService {
       referenceImages: []
     }
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('REFRESH_NOTIFICATIONS'))
+    }
+
     return newProduct
   }
 
@@ -482,6 +486,9 @@ export class ProductoService {
       .single()
     if (error || !updated) return null
     invalidateProductosCache(tiendaId)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('REFRESH_NOTIFICATIONS'))
+    }
     return mapProductoRow(updated as ProductoRow)
   }
 
@@ -525,6 +532,9 @@ export class ProductoService {
       }
 
       invalidateProductosCache(tiendaId)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('REFRESH_NOTIFICATIONS'))
+      }
       return true
     } catch (error) {
       console.error('Falló la solicitud para eliminar producto', error)

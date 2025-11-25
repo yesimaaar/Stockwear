@@ -452,6 +452,10 @@ export class InventarioService {
     if (historialError) {
       throw new Error(historialError.message || 'El stock se actualizó, pero falló el registro del historial')
     }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('REFRESH_NOTIFICATIONS'))
+    }
   }
 
   static async registrarAjuste(payload: MovimientoAjustePayload): Promise<void> {
@@ -495,6 +499,10 @@ export class InventarioService {
 
     if (historialError) {
       throw new Error(historialError.message || 'El ajuste se aplicó, pero no se registró el historial')
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('REFRESH_NOTIFICATIONS'))
     }
   }
 
@@ -566,6 +574,10 @@ export class InventarioService {
 
     if (historialError) {
       throw new Error(historialError.message || 'La transferencia se aplicó, pero no se registró en el historial')
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('REFRESH_NOTIFICATIONS'))
     }
   }
 
