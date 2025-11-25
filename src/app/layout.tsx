@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ThemeProvider } from "@/components/theme-provider"
 import { CartProvider } from "@/hooks/useCart"
 import { StoreGuard } from "@/features/auth/components/auth/StoreGuard"
@@ -30,10 +31,10 @@ export const viewport: Viewport = {
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es">
       <body className={`min-h-screen bg-background text-foreground antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <CartProvider>
@@ -41,10 +42,11 @@ export default function RootLayout({
               {children}
             </StoreGuard>
             <Analytics />
+            <SpeedInsights />
             <Toaster />
           </CartProvider>
         </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }
