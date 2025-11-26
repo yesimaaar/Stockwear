@@ -69,6 +69,7 @@ export default function EmpleadoDashboard() {
   const cameraRequestedRef = useRef(false)
   const countdownIntervalRef = useRef<number | null>(null)
   const [resultado, setResultado] = useState<ReconocimientoResult | null>(null)
+  const [feedbackGiven, setFeedbackGiven] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<ProductoConStock[]>([])
   const [recommendedProducts, setRecommendedProducts] = useState<ProductoConStock[]>([])
@@ -128,19 +129,20 @@ export default function EmpleadoDashboard() {
     }
   }, [recognizerError])
 
-  useEffect(() => {
-    if (!user || cameraRequestedRef.current || cameraActive || cameraLoading) {
-      return
-    }
+  // Estado para rastrear la talla seleccionada y mostrar sus almacenes
+  const [selectedTalla, setSelectedTalla] = useState<{
+    productoId: number
+    talla: string
+    almacenes: Array<{ almacen: string; cantidad: number }>
+  } | null>(null)
 
+  useEffect(() => {
+    // No abrir la cámara automáticamente - el usuario debe iniciarla manualmente
+    // Solo verificamos soporte de cámara para mostrar errores si es necesario
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCameraError("Tu navegador no soporta acceso a la cámara.")
-      return
     }
-
-    cameraRequestedRef.current = true
-    void startCamera()
-  }, [user, cameraActive, cameraLoading])
+  }, [])
 
   const loadRecommendations = useCallback(
     async (categoria?: string, excludeId?: number) => {
@@ -275,6 +277,9 @@ export default function EmpleadoDashboard() {
 
     const productoId = resultado.producto.id
 
+    // Marcar que se dio feedback para ocultar los botones
+    setFeedbackGiven(true)
+
     // Registrar feedback (positivo o negativo) para mejorar el modelo
     try {
       await registrarFeedbackVisual({
@@ -317,7 +322,7 @@ export default function EmpleadoDashboard() {
       // Si tenemos el embedding guardado, reintentar automáticamente con el producto excluido
       if (ultimoEmbedding && user) {
         setScanning(true)
-        setResultado(null)
+        // No limpiar resultado hasta tener el nuevo para evitar parpadeo de cámara
         
         try {
           const nuevoResultado = await ReconocimientoService.procesarEmbedding({
@@ -328,20 +333,34 @@ export default function EmpleadoDashboard() {
             productosExcluidos: [...productosExcluidos, productoId],
           })
           setResultado(nuevoResultado)
+          setFeedbackGiven(false)
           
-          if (!nuevoResultado.success) {
-            // Si no hay más coincidencias, reiniciar cámara
-            void startCamera()
-          }
+          // No abrir cámara automáticamente - el usuario decide si quiere escanear de nuevo
         } catch (error) {
           console.error("Error al reprocesar con exclusiones:", error)
-          void startCamera()
+          // Mostrar mensaje de error pero no abrir cámara automáticamente
+          setResultado({
+            success: false,
+            similitud: 0,
+            umbral: threshold,
+            nivelConfianza: "bajo",
+            producto: null,
+            message: "Error al buscar más coincidencias. Intenta escanear de nuevo.",
+          })
         } finally {
           setScanning(false)
         }
       } else {
-        setResultado(null)
-        void startCamera()
+        // Sin embedding guardado, mostrar mensaje para que el usuario escanee de nuevo
+        setResultado({
+          success: false,
+          similitud: 0,
+          umbral: threshold,
+          nivelConfianza: "bajo",
+          producto: null,
+          message: "No hay más coincidencias disponibles. Intenta escanear de nuevo.",
+        })
+        setFeedbackGiven(false)
       }
     }
   }
@@ -434,6 +453,7 @@ export default function EmpleadoDashboard() {
       setCameraError(null)
       resetError()
       setResultado(null)
+      setFeedbackGiven(false)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facing },
@@ -494,6 +514,49 @@ export default function EmpleadoDashboard() {
 
   const toggleProductAvailability = (productId: number) => {
     setExpandedProductId((current) => (current === productId ? null : productId))
+    // Limpiar talla seleccionada al cambiar de producto
+    setSelectedTalla(null)
+  }
+
+  // Función para manejar el click en una talla y mostrar los almacenes donde está disponible
+  const handleTallaClick = (producto: ProductoConStock, tallaName: string) => {
+    if (selectedTalla?.productoId === producto.id && selectedTalla?.talla === tallaName) {
+      // Si ya está seleccionada, deseleccionar
+      setSelectedTalla(null)
+      return
+    }
+
+    // Agrupar por almacén para esta talla específica
+    const almacenesConStock = producto.stockPorTalla
+      ?.filter((s) => s.talla === tallaName)
+      .reduce<Array<{ almacen: string; cantidad: number }>>((acc, stock) => {
+        const existing = acc.find((a) => a.almacen === (stock.almacen || "General"))
+        if (existing) {
+          existing.cantidad += stock.cantidad
+        } else {
+          acc.push({ almacen: stock.almacen || "General", cantidad: stock.cantidad })
+        }
+        return acc
+      }, []) || []
+
+    setSelectedTalla({
+      productoId: producto.id,
+      talla: tallaName,
+      almacenes: almacenesConStock,
+    })
+  }
+
+  // Función para obtener tallas agrupadas (suma de cantidades por talla)
+  const getTallasAgrupadas = (stockPorTalla: ProductoConStock["stockPorTalla"]) => {
+    if (!stockPorTalla?.length) return []
+    
+    const agrupadas = stockPorTalla.reduce<Record<string, number>>((acc, stock) => {
+      const talla = stock.talla || "-"
+      acc[talla] = (acc[talla] || 0) + (stock.cantidad ?? 0)
+      return acc
+    }, {})
+
+    return Object.entries(agrupadas).map(([talla, cantidad]) => ({ talla, cantidad }))
   }
 
   const showProductDetail = (producto: ProductoConStock | null, origin: "search" | "recommendation" = "search") => {
@@ -511,14 +574,42 @@ export default function EmpleadoDashboard() {
         origin === "search" ? "Resultado de búsqueda manual" : "Producto sugerido similar basado en tu búsqueda",
     })
     stopCamera()
+    // Limpiar talla seleccionada al mostrar nuevo producto
+    setSelectedTalla(null)
+  }
+
+  // Función para seleccionar un producto desde las coincidencias cercanas
+  const handleSelectCoincidencia = async (productoId: number, similitud: number) => {
+    try {
+      setScanning(true)
+      const producto = await ProductoService.getById(productoId)
+      if (producto) {
+        setResultado({
+          success: true,
+          similitud,
+          umbral: threshold,
+          nivelConfianza: similitud >= threshold ? "alto" : "medio",
+          producto,
+          message: "Producto seleccionado de coincidencias cercanas",
+          embedding: resultado?.embedding,
+        })
+        setFeedbackGiven(false)
+        setSelectedTalla(null)
+      }
+    } catch (error) {
+      console.error("Error al cargar producto:", error)
+    } finally {
+      setScanning(false)
+    }
   }
 
   const capturePhoto = async () => {
     if (!videoRef.current || !user || scanning) return
 
     setScanning(true)
-    // Limpiar productos excluidos en una nueva captura
-    setProductosExcluidos([])
+    // Mantener productos excluidos - solo se limpian al confirmar un producto correcto
+    // Resetear feedback para el nuevo escaneo
+    setFeedbackGiven(false)
 
     try {
       const canvas = document.createElement("canvas")
@@ -541,7 +632,7 @@ export default function EmpleadoDashboard() {
         empleadoId: user.id,
         umbral: threshold,
         tiendaId: user.tiendaId,
-        productosExcluidos: [],
+        productosExcluidos, // Respetar productos con feedback negativo previo
       })
 
       setResultado(result)
@@ -606,8 +697,9 @@ export default function EmpleadoDashboard() {
     if (!file) return
 
     setScanning(true)
-    // Limpiar productos excluidos en una nueva carga de imagen
-    setProductosExcluidos([])
+    // Mantener productos excluidos - solo se limpian al confirmar un producto correcto
+    // Resetear feedback para el nuevo escaneo
+    setFeedbackGiven(false)
 
     try {
       let imageSource: ImageBitmap | HTMLImageElement
@@ -638,7 +730,7 @@ export default function EmpleadoDashboard() {
         empleadoId: user?.id ?? null,
         umbral: threshold,
         tiendaId: user?.tiendaId,
-        productosExcluidos: [],
+        productosExcluidos, // Respetar productos con feedback negativo previo
       })
 
       setResultado(result)
@@ -921,6 +1013,23 @@ export default function EmpleadoDashboard() {
                 <span className="sr-only">Abrir cámara</span>
               </Button>
             </div>
+            {/* Indicador de productos excluidos */}
+            {productosExcluidos.length > 0 && (
+              <div className="mt-3 flex items-center justify-between rounded-xl bg-amber-500/20 border border-amber-500/30 px-3 py-2">
+                <p className="text-xs text-amber-200">
+                  {productosExcluidos.length} producto{productosExcluidos.length > 1 ? 's' : ''} excluido{productosExcluidos.length > 1 ? 's' : ''} de resultados
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setProductosExcluidos([])}
+                  className="h-7 text-xs text-amber-200 hover:text-white hover:bg-amber-500/30"
+                >
+                  Limpiar
+                </Button>
+              </div>
+            )}
           </div>
         </header>
 
@@ -1164,43 +1273,98 @@ export default function EmpleadoDashboard() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-sm font-medium text-foreground">Disponibilidad por talla</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {resultado.producto.stockPorTalla.map((s, i) => (
-                          <div key={i} className="rounded-xl bg-muted p-2 text-xs">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">Talla {s.talla}</span>
-                              <span className={s.cantidad > 0 ? "text-foreground" : "text-destructive"}>
-                                {s.cantidad > 0 ? `${s.cantidad} uds` : "Sin stock"}
-                              </span>
-                            </div>
+                      <p className="text-sm font-medium text-foreground">Disponibilidad por talla <span className="text-xs text-muted-foreground font-normal">(toca una talla para ver almacenes)</span></p>
+                      {resultado.producto.stockPorTalla?.length ? (
+                        <>
+                          <div className="grid grid-cols-3 gap-2">
+                            {getTallasAgrupadas(resultado.producto.stockPorTalla).map((s, i) => (
+                              <button
+                                key={i}
+                                onClick={() => handleTallaClick(resultado.producto!, s.talla)}
+                                className={cn(
+                                  "rounded-xl p-2 text-xs transition-all text-left",
+                                  selectedTalla?.productoId === resultado.producto!.id && selectedTalla?.talla === s.talla
+                                    ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2"
+                                    : "bg-muted hover:bg-muted/80"
+                                )}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium">Talla {s.talla}</span>
+                                  <span className={cn(
+                                    selectedTalla?.productoId === resultado.producto!.id && selectedTalla?.talla === s.talla
+                                      ? "text-primary-foreground"
+                                      : s.cantidad > 0 ? "text-foreground" : "text-destructive"
+                                  )}>
+                                    {s.cantidad > 0 ? `${s.cantidad}` : "0"}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                          {/* Mostrar almacenes de la talla seleccionada */}
+                          {selectedTalla?.productoId === resultado.producto.id && (
+                            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2 animate-in fade-in slide-in-from-top-2">
+                              <p className="text-xs font-medium text-primary">
+                                Talla {selectedTalla.talla} disponible en:
+                              </p>
+                              {selectedTalla.almacenes.length > 0 ? (
+                                <div className="space-y-1">
+                                  {selectedTalla.almacenes.map((a, idx) => (
+                                    <div key={idx} className="flex items-center justify-between text-xs bg-background rounded-lg px-2 py-1.5">
+                                      <span className="font-medium">{a.almacen}</span>
+                                      <span className={a.cantidad > 0 ? "text-green-600 font-semibold" : "text-destructive"}>
+                                        {a.cantidad} {a.cantidad === 1 ? "unidad" : "unidades"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">Sin stock en ningún almacén</p>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="rounded-xl bg-muted p-3 text-center">
+                          <p className="text-xs text-muted-foreground">Sin datos de inventario disponibles</p>
+                        </div>
+                      )}
                     </div>
-                    {resultado.nivelConfianza === "medio" && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Button onClick={() => handleConfirmarProducto(true)} variant="default">
+                    {/* Botones de feedback - visibles hasta que se confirme */}
+                    {!feedbackGiven && (
+                      <div className="grid gap-2 sm:grid-cols-2 pt-2">
+                        <Button onClick={() => handleConfirmarProducto(true)} variant="default" className="w-full">
                           <CheckCircle className="mr-2 h-4 w-4" />
-                          Confirmar producto
+                          {resultado.nivelConfianza === "alto" ? "Es correcto" : "Confirmar producto"}
                         </Button>
-                        <Button onClick={() => handleConfirmarProducto(false)} variant="outline">
+                        <Button onClick={() => handleConfirmarProducto(false)} variant="outline" className="w-full">
                           <XCircle className="mr-2 h-4 w-4" />
-                          Volver a escanear
+                          {resultado.nivelConfianza === "alto" ? "No es correcto" : "Volver a escanear"}
                         </Button>
+                      </div>
+                    )}
+                    {feedbackGiven && (
+                      <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-center">
+                        <p className="text-sm text-green-700 dark:text-green-400 font-medium">✓ Gracias por tu feedback</p>
                       </div>
                     )}
                   </>
                 ) : (
                   <div className="space-y-3 text-sm text-muted-foreground">
-                    <p>Intenta nuevamente con otro ángulo o usa la búsqueda manual.</p>
+                    <p>Intenta nuevamente con otro ángulo, baja el umbral de similitud, o selecciona una coincidencia:</p>
                     {resultado?.coincidencias?.length ? (
-                      <div className="space-y-1 rounded-xl border border-dashed border-muted-foreground/40 p-3">
+                      <div className="space-y-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-3">
+                        <p className="text-xs font-medium text-primary mb-2">Toca para seleccionar:</p>
                         {resultado.coincidencias.map((item) => (
-                          <div key={item.productoId} className="flex justify-between text-xs">
-                            <span>{item.nombre}</span>
-                            <span>{Math.round(item.similitud * 100)}%</span>
-                          </div>
+                          <button
+                            key={item.productoId}
+                            onClick={() => handleSelectCoincidencia(item.productoId, item.similitud)}
+                            disabled={scanning}
+                            className="w-full flex justify-between items-center text-xs p-2 rounded-lg bg-background hover:bg-primary/10 transition-colors text-left"
+                          >
+                            <span className="font-medium text-foreground">{item.nombre}</span>
+                            <span className="text-primary font-semibold">{Math.round(item.similitud * 100)}%</span>
+                          </button>
                         ))}
                       </div>
                     ) : null}
@@ -1262,16 +1426,19 @@ export default function EmpleadoDashboard() {
                 </div>
               ) : resultado?.coincidencias?.length ? (
                 <div className="space-y-2 text-sm">
+                  <p className="text-xs text-muted-foreground mb-2">Coincidencias cercanas - toca para ver detalles:</p>
                   {resultado.coincidencias.map((coincidencia) => (
-                    <div
+                    <button
                       key={coincidencia.productoId}
-                      className="flex items-center justify-between rounded-xl border border-border/50 bg-background/70 px-3 py-2"
+                      onClick={() => handleSelectCoincidencia(coincidencia.productoId, coincidencia.similitud)}
+                      disabled={scanning}
+                      className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-background/70 px-3 py-2 hover:bg-primary/10 hover:border-primary/30 transition-colors text-left"
                     >
                       <span className="font-medium text-foreground">{coincidencia.nombre}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {Math.round(coincidencia.similitud * 100)}% similitud
+                      <span className="text-xs text-primary font-semibold">
+                        {Math.round(coincidencia.similitud * 100)}%
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : (
@@ -1289,67 +1456,277 @@ export default function EmpleadoDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-background dark:from-gray-950 dark:to-background">
+      {/* Header moderno con gradiente */}
+      <header className="relative overflow-hidden border-b border-border/40 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(var(--primary-rgb),0.15),_transparent_50%)]" />
+        <div className="container mx-auto px-6 py-5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-900 p-2">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm ring-1 ring-white/20">
                 <Image
                   src="/stockwear-icon.png"
                   alt="StockWear"
-                  width={24}
-                  height={24}
+                  width={28}
+                  height={28}
                   className="object-contain brightness-0 invert"
                 />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">StockWear</h1>
-                <p className="text-sm text-muted-foreground">Portal de Empleado</p>
+                <h1 className="text-xl font-bold text-white">StockWear</h1>
+                <p className="text-sm text-white/60">Portal de Empleado</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm font-medium">{user?.nombre}</p>
-                <p className="text-xs text-muted-foreground">{user?.email}</p>
+            <div className="flex items-center gap-6">
+              {/* Stats rápidos */}
+              <div className="hidden lg:flex items-center gap-6 text-white/80">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-white">{salesSummary.totalVentas}</p>
+                  <p className="text-xs text-white/50">Ventas hoy</p>
+                </div>
+                <div className="h-8 w-px bg-white/20" />
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-white">{currencyFormatter.format(salesSummary.montoTotal)}</p>
+                  <p className="text-xs text-white/50">Total del día</p>
+                </div>
               </div>
-              {renderUserMenu("desktop")}
+              <div className="h-8 w-px bg-white/20 hidden lg:block" />
+              <div className="flex items-center gap-3">
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium text-white">{user?.nombre}</p>
+                  <p className="text-xs text-white/50">{user?.email}</p>
+                </div>
+                {renderUserMenu("desktop")}
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full px-4 py-8 lg:px-8 xl:px-12">
-        <div className="flex flex-col gap-8 xl:flex-row">
-          <div className="flex-1 space-y-8">
-            <div className="text-center xl:text-left">
-              <h2 className="mb-2 text-3xl font-bold text-foreground">Consulta de Productos</h2>
-              <p className="text-muted-foreground">
-                Escanea un producto o busca manualmente para ver su disponibilidad
-              </p>
-            </div>
+      <main className="container mx-auto px-6 py-8">
+        {/* Título con badge de estado */}
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground">Consulta de Productos</h2>
+            <p className="mt-1 text-muted-foreground">
+              Escanea un producto o busca manualmente para ver su disponibilidad
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={loadingModel ? "secondary" : "default"} className="px-3 py-1.5">
+              {loadingModel ? (
+                <>
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  Cargando modelo
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="mr-2 h-3 w-3" />
+                  Sistema listo
+                </>
+              )}
+            </Badge>
+          </div>
+        </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Camera className="h-5 w-5" />
-                  Reconocimiento Visual
-                </CardTitle>
-                <CardDescription>Captura una foto del producto para identificarlo automáticamente</CardDescription>
+        {/* Barra de búsqueda manual - Simple y prominente */}
+        <div className="mb-6">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <Input
+                ref={manualSearchRef}
+                placeholder="Buscar producto por nombre o código..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="pl-10 pr-10 h-12 text-base"
+              />
+              {searchQuery && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearManualSearch}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            <Button onClick={handleSearch} size="lg" className="h-12 px-6">
+              <Search className="h-4 w-4 mr-2" />
+              Buscar
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-8 xl:grid-cols-3">
+          {/* Columna principal - Cámara y resultados */}
+          <div className="space-y-6 xl:col-span-2">
+            
+            {/* Resultados de búsqueda manual */}
+            {searchResults.length > 0 && (
+              <Card className="border-border/50 shadow-lg">
+                <CardHeader className="border-b border-border/50 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+                        <Search className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Resultados de búsqueda</CardTitle>
+                        <CardDescription>{searchResults.length} producto{searchResults.length > 1 ? 's' : ''} encontrado{searchResults.length > 1 ? 's' : ''}</CardDescription>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={clearManualSearch}>
+                      <X className="h-4 w-4 mr-1" />
+                      Limpiar
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  {searchResults.map((producto) => (
+                    <div key={producto.id} className="rounded-xl border border-border/60 bg-card overflow-hidden">
+                      <div className="flex gap-4 p-4">
+                        <div className="relative h-24 w-24 overflow-hidden rounded-lg bg-muted flex-shrink-0">
+                          <Image
+                            src={producto.imagen || "/placeholder.svg"}
+                            alt={producto.nombre}
+                            fill
+                            sizes="96px"
+                            loading="lazy"
+                            className="object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-foreground text-lg">{producto.nombre}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {producto.codigo} · {producto.categoria}
+                          </p>
+                          <div className="mt-2 flex items-center gap-3">
+                            <span className="text-xl font-bold text-primary">${producto.precio.toLocaleString()}</span>
+                            {producto.descuento > 0 && (
+                              <Badge variant="destructive">{producto.descuento}% OFF</Badge>
+                            )}
+                            <Badge variant="secondary">{producto.stockTotal} uds total</Badge>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Tallas y almacenes para búsqueda manual */}
+                      <div className="border-t border-border/50 bg-muted/20 p-4 space-y-3">
+                        <p className="text-sm font-medium">
+                          Disponibilidad por talla 
+                          <span className="text-xs text-muted-foreground font-normal ml-1">(click para ver almacenes)</span>
+                        </p>
+                        {producto.stockPorTalla?.length ? (
+                          <>
+                            <div className="grid grid-cols-4 lg:grid-cols-6 gap-2">
+                              {getTallasAgrupadas(producto.stockPorTalla).map((s, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => handleTallaClick(producto, s.talla)}
+                                  className={cn(
+                                    "flex flex-col items-center text-sm p-2 rounded-lg transition-all",
+                                    selectedTalla?.productoId === producto.id && selectedTalla?.talla === s.talla
+                                      ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2"
+                                      : "bg-background border border-border/60 hover:border-primary/40"
+                                  )}
+                                >
+                                  <span className="font-medium">{s.talla}</span>
+                                  <span className={cn(
+                                    "text-xs",
+                                    selectedTalla?.productoId === producto.id && selectedTalla?.talla === s.talla
+                                      ? "text-primary-foreground"
+                                      : s.cantidad > 0 ? "text-muted-foreground" : "text-destructive"
+                                  )}>
+                                    {s.cantidad} uds
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                            {selectedTalla?.productoId === producto.id && (
+                              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2 animate-in fade-in slide-in-from-top-2">
+                                <p className="text-sm font-medium text-primary">
+                                  Talla {selectedTalla.talla} disponible en:
+                                </p>
+                                {selectedTalla.almacenes.length > 0 ? (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {selectedTalla.almacenes.map((a, idx) => (
+                                      <div key={idx} className="flex items-center justify-between text-sm bg-background rounded-lg px-3 py-2">
+                                        <span className="font-medium">{a.almacen}</span>
+                                        <span className={a.cantidad > 0 ? "text-green-600 font-semibold" : "text-destructive"}>
+                                          {a.cantidad} {a.cantidad === 1 ? "ud" : "uds"}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Sin stock en ningún almacén</p>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No hay información de tallas disponible</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {searchQuery && searchResults.length === 0 && (
+              <Card className="border-border/50 shadow-lg">
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium">No se encontraron productos</p>
+                  <p className="text-sm mt-1">Intenta con otro término de búsqueda</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Card de Reconocimiento Visual */}
+            <Card className="overflow-hidden border-border/50 shadow-lg">
+              <CardHeader className="border-b border-border/50 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                      <Camera className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Reconocimiento Visual</CardTitle>
+                      <CardDescription>Captura una foto del producto para identificarlo</CardDescription>
+                    </div>
+                  </div>
+                  {!cameraActive && (
+                    <Button
+                      onClick={() => void startCamera()}
+                      disabled={cameraLoading}
+                      size="sm"
+                    >
+                      {cameraLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                      Activar cámara
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <CardContent className="p-0">
+                {/* Controles de umbral */}
+                <div className="border-b border-border/50 bg-muted/20 p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-center gap-3">
                       <Gauge className="h-5 w-5 text-primary" />
                       <div>
-                        <p className="text-sm font-medium text-foreground">Umbral de similitud</p>
+                        <p className="text-sm font-medium">Umbral de similitud: <span className="text-primary">{(threshold * 100).toFixed(0)}%</span></p>
                         <p className="text-xs text-muted-foreground">
-                          Ajusta la sensibilidad del reconocimiento. Valor actual: {(threshold * 100).toFixed(0)}%
+                          Ajusta la sensibilidad del reconocimiento
                         </p>
                       </div>
                     </div>
-                    <div className="flex w-full max-w-md flex-col gap-2">
+                    <div className="flex w-full max-w-sm flex-col gap-2">
                       <Slider
                         value={[threshold]}
                         min={0.5}
@@ -1359,349 +1736,356 @@ export default function EmpleadoDashboard() {
                         onValueCommit={handleThresholdCommit}
                       />
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>0.50</span>
-                        <span>0.75</span>
-                        <span>0.99</span>
+                        <span>Más resultados</span>
+                        <span>Más precisión</span>
                       </div>
                     </div>
                   </div>
-                  {loadingModel && (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Cargando modelo de reconocimiento, esto puede tardar unos segundos…</span>
+                  
+                  {/* Indicador de productos excluidos */}
+                  {productosExcluidos.length > 0 && (
+                    <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        {productosExcluidos.length} producto{productosExcluidos.length > 1 ? 's' : ''} excluido{productosExcluidos.length > 1 ? 's' : ''} por feedback negativo
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setProductosExcluidos([])}
+                        className="h-7 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200"
+                      >
+                        Reiniciar
+                      </Button>
                     </div>
                   )}
                 </div>
 
-                {/* Vista de cámara en tiempo real integrada en el dashboard */}
-                <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
+                {/* Vista de cámara con resultado superpuesto */}
+                <div className="relative aspect-video bg-gray-950">
+                  {/* Resultado superpuesto */}
+                  {resultado ? (
+                    <div className="absolute inset-0 z-20 overflow-y-auto bg-background/95 backdrop-blur-sm">
+                      <div className="p-4 space-y-4">
+                        {/* Header del resultado */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {resultado.success ? (
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-destructive" />
+                            )}
+                            <div>
+                              <p className="font-semibold text-sm">{resultado.message}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Similitud: {Math.round(resultado.similitud * 100)}% · Umbral: {Math.round(resultado.umbral * 100)}%
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setResultado(null)
+                              setSelectedTalla(null)
+                              setFeedbackGiven(false)
+                            }}
+                            className="h-8 w-8 rounded-full"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        {resultado.success && resultado.producto ? (
+                          <div className="space-y-3">
+                            {/* Info del producto */}
+                            <div className="flex gap-3">
+                              <div className="relative h-20 w-20 overflow-hidden rounded-lg bg-muted flex-shrink-0">
+                                <Image
+                                  src={resultado.producto.imagen || "/placeholder.svg"}
+                                  alt={resultado.producto.nombre}
+                                  fill
+                                  sizes="80px"
+                                  loading="lazy"
+                                  className="object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-bold text-base truncate">{resultado.producto.nombre}</h3>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {resultado.producto.codigo} · {resultado.producto.categoria}
+                                </p>
+                                <div className="mt-1 flex items-baseline gap-2">
+                                  <span className="text-lg font-bold text-primary">
+                                    ${resultado.producto.precio.toLocaleString()}
+                                  </span>
+                                  {resultado.producto.descuento > 0 && (
+                                    <Badge variant="destructive" className="text-xs">{resultado.producto.descuento}% OFF</Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Tallas */}
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium">
+                                Tallas disponibles 
+                                <span className="text-muted-foreground font-normal ml-1">(click para ver almacenes)</span>
+                              </p>
+                              {resultado.producto.stockPorTalla?.length ? (
+                                <>
+                                  <div className="grid grid-cols-4 gap-1.5">
+                                    {getTallasAgrupadas(resultado.producto.stockPorTalla).map((s, i) => (
+                                      <button
+                                        key={i}
+                                        onClick={() => handleTallaClick(resultado.producto!, s.talla)}
+                                        className={cn(
+                                          "flex flex-col items-center text-xs p-1.5 rounded-md transition-all",
+                                          selectedTalla?.productoId === resultado.producto!.id && selectedTalla?.talla === s.talla
+                                            ? "bg-primary text-primary-foreground ring-1 ring-primary"
+                                            : "bg-muted hover:bg-muted/80"
+                                        )}
+                                      >
+                                        <span className="font-medium">{s.talla}</span>
+                                        <span className={cn(
+                                          selectedTalla?.productoId === resultado.producto!.id && selectedTalla?.talla === s.talla
+                                            ? "text-primary-foreground"
+                                            : s.cantidad > 0 ? "text-muted-foreground" : "text-destructive"
+                                        )}>
+                                          {s.cantidad}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {selectedTalla?.productoId === resultado.producto.id && (
+                                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 space-y-1 animate-in fade-in slide-in-from-top-1">
+                                      <p className="text-xs font-medium text-primary">
+                                        Talla {selectedTalla.talla} en:
+                                      </p>
+                                      {selectedTalla.almacenes.length > 0 ? (
+                                        <div className="space-y-1">
+                                          {selectedTalla.almacenes.map((a, idx) => (
+                                            <div key={idx} className="flex items-center justify-between text-xs bg-background rounded px-2 py-1">
+                                              <span className="font-medium">{a.almacen}</span>
+                                              <span className={a.cantidad > 0 ? "text-green-600 font-semibold" : "text-destructive"}>
+                                                {a.cantidad} uds
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-xs text-muted-foreground">Sin stock</p>
+                                      )}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">No hay información de tallas</p>
+                              )}
+                            </div>
+
+                            {/* Feedback */}
+                            {!feedbackGiven ? (
+                              <div className="flex gap-2 pt-1">
+                                <Button onClick={() => handleConfirmarProducto(true)} size="sm" className="flex-1">
+                                  <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                                  Correcto
+                                </Button>
+                                <Button onClick={() => handleConfirmarProducto(false)} variant="outline" size="sm" className="flex-1">
+                                  <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                                  Incorrecto
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-2 text-center">
+                                <p className="text-xs text-green-700 dark:text-green-400 font-medium">✓ Gracias por tu feedback</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <p className="text-xs text-muted-foreground">
+                              Intenta con otro ángulo, baja el umbral, o selecciona:
+                            </p>
+                            {resultado.coincidencias && resultado.coincidencias.length > 0 && (
+                              <div className="space-y-1.5">
+                                {resultado.coincidencias.map((item) => (
+                                  <button
+                                    key={item.productoId}
+                                    onClick={() => handleSelectCoincidencia(item.productoId, item.similitud)}
+                                    disabled={scanning}
+                                    className="w-full flex justify-between items-center text-xs p-2 rounded-md bg-muted hover:bg-primary/10 border border-border/50 hover:border-primary/30 transition-colors text-left"
+                                  >
+                                    <span className="font-medium">{item.nombre}</span>
+                                    <span className="text-primary font-semibold">{Math.round(item.similitud * 100)}%</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Botón para nuevo escaneo */}
+                        <Button
+                          onClick={() => {
+                            setResultado(null)
+                            setSelectedTalla(null)
+                            setFeedbackGiven(false)
+                            void startCamera()
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                        >
+                          <Camera className="mr-2 h-4 w-4" />
+                          Nuevo escaneo
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Video de cámara */}
                   {cameraActive ? (
                     <>
-                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                      <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
 
                       {captureCountdown !== null && captureCountdown > 0 && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="rounded-full border border-white/40 bg-black/70 px-10 py-6 text-4xl font-semibold text-white">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+                          <div className="rounded-full border-4 border-white bg-black/70 px-12 py-8 text-5xl font-bold text-white shadow-2xl">
                             {captureCountdown}
                           </div>
                         </div>
                       )}
 
                       {/* Overlay de controles */}
-                      <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                        <div className="flex items-center gap-4 rounded-full bg-black/60 px-6 py-4 backdrop-blur">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={stopCamera}
-                            className="h-12 w-12 rounded-full text-white hover:bg-white/20"
-                          >
-                            <X className="h-5 w-5" />
-                          </Button>
+                      {!resultado && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6 z-10">
+                          <div className="flex items-center justify-center gap-6">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={stopCamera}
+                              className="h-12 w-12 rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/20"
+                            >
+                              <X className="h-5 w-5" />
+                            </Button>
 
-                          <Button
-                            type="button"
-                            onClick={() => void handleCaptureRequest()}
-                            disabled={scanning || loadingModel || captureCountdown !== null}
-                            className="flex h-20 w-20 items-center justify-center rounded-full bg-white text-primary hover:bg-white/90"
-                          >
-                            {scanning ? (
-                              <Loader2 className="h-6 w-6 animate-spin" />
-                            ) : loadingModel ? (
-                              <Loader2 className="h-6 w-6 animate-spin text-secondary" />
-                            ) : (
-                              <Search className="h-6 w-6" />
-                            )}
-                          </Button>
+                            <Button
+                              type="button"
+                              onClick={() => void handleCaptureRequest()}
+                              disabled={scanning || loadingModel || captureCountdown !== null}
+                              className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-gray-900 shadow-lg hover:bg-white/90 disabled:opacity-50"
+                            >
+                              {scanning ? (
+                                <Loader2 className="h-6 w-6 animate-spin" />
+                              ) : (
+                                <Camera className="h-6 w-6" />
+                              )}
+                            </Button>
 
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="flex h-12 w-12 items-center justify-center rounded-full text-white hover:bg-white/20"
-                            onClick={() => fileInputRef.current?.click()}
-                          >
-                            <Package className="h-5 w-5" />
-                          </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-12 w-12 rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/20"
+                              onClick={() => fileInputRef.current?.click()}
+                            >
+                              <Upload className="h-5 w-5" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Indicador de escaneo */}
-                      {scanning && (
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow">
-                          Procesando imagen...
+                      {scanning && !resultado && (
+                        <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg z-10">
+                          <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                          Analizando imagen...
                         </div>
                       )}
                     </>
-                  ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center text-white">
-                      <Camera className="mb-4 h-16 w-16 text-gray-400" />
-                      <p className="mb-4 text-lg">Cámara no activa</p>
-                      <Button
-                        onClick={() => void startCamera()}
-                        disabled={cameraLoading}
-                        className="bg-gray-900 hover:bg-gray-800 disabled:opacity-70"
-                      >
-                        {cameraLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-                        {cameraLoading ? "Abriendo cámara" : "Activar cámara"}
-                      </Button>
+                  ) : !resultado && (
+                    <div className="flex h-full w-full flex-col items-center justify-center text-white/60">
+                      <div className="rounded-2xl border-2 border-dashed border-white/20 p-12 text-center">
+                        <Camera className="mx-auto mb-4 h-12 w-12" />
+                        <p className="mb-2 text-lg font-medium text-white/80">Cámara no activa</p>
+                        <p className="mb-4 text-sm">Activa la cámara para escanear productos</p>
+                        <Button
+                          onClick={() => void startCamera()}
+                          disabled={cameraLoading}
+                          variant="secondary"
+                        >
+                          {cameraLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                          {cameraLoading ? "Abriendo..." : "Activar cámara"}
+                        </Button>
+                      </div>
                     </div>
                   )}
 
                   {cameraError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-red-600/90 text-white p-4">
+                    <div className="absolute inset-0 flex items-center justify-center bg-destructive/90 p-4 text-white z-30">
                       <div className="text-center">
-                        <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                        <p>{cameraError}</p>
-                        <Button onClick={() => void startCamera()} className="mt-2 bg-white text-red-600 hover:bg-white/90">
+                        <AlertCircle className="mx-auto mb-2 h-8 w-8" />
+                        <p className="mb-4">{cameraError}</p>
+                        <Button onClick={() => void startCamera()} variant="secondary">
                           Reintentar
                         </Button>
                       </div>
                     </div>
                   )}
                 </div>
-
-                {resultado && (
-                  <div className="mt-6 space-y-4">
-                    {resultado.success ? (
-                      <>
-                        <div className="flex items-center gap-2 text-gray-900">
-                          <CheckCircle className="h-5 w-5" />
-                          <span className="font-medium">{resultado.message}</span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Sparkles className="h-4 w-4 text-primary" />
-                            <span>Similitud {Math.round(resultado.similitud * 100)}%</span>
-                          </div>
-                          <Badge variant="secondary">Umbral {Math.round(resultado.umbral * 100)}%</Badge>
-                          <Badge variant="secondary" className="capitalize">
-                            Confianza {resultado.nivelConfianza}
-                          </Badge>
-                        </div>
-
-                        {resultado.producto && (
-                          <Card>
-                            <CardContent className="pt-6">
-                              <div className="flex gap-4">
-                                <div className="relative h-32 w-32 overflow-hidden rounded-lg">
-                                  <Image
-                                    src={resultado.producto.imagen || "/placeholder.svg"}
-                                    alt={resultado.producto.nombre}
-                                    fill
-                                    sizes="128px"
-                                    loading="lazy"
-                                    className="object-cover"
-                                  />
-                                </div>
-                                <div className="flex-1">
-                                  <h3 className="text-xl font-bold mb-2">{resultado.producto.nombre}</h3>
-                                  <p className="text-sm text-muted-foreground mb-1">Código: {resultado.producto.codigo}</p>
-                                  <p className="text-sm text-muted-foreground mb-3">
-                                    Categoría: {resultado.producto.categoria}
-                                  </p>
-                                  <div className="flex items-baseline gap-2 mb-4">
-                                    <span className="text-3xl font-bold text-primary">
-                                      ${resultado.producto.precio.toLocaleString()}
-                                    </span>
-                                    {resultado.producto.descuento > 0 && (
-                                      <Badge variant="destructive">{resultado.producto.descuento}% OFF</Badge>
-                                    )}
-                                  </div>
-
-                                  <div className="space-y-2">
-                                    <p className="font-medium">Disponibilidad por talla:</p>
-                                    {resultado.producto.stockPorTalla.length > 0 ? (
-                                      <div className="grid grid-cols-2 gap-2">
-                                        {resultado.producto.stockPorTalla.map((s, i) => (
-                                          <div key={i} className="flex justify-between text-sm p-2 bg-muted rounded">
-                                            <span>Talla {s.talla}</span>
-                                            <span className={s.cantidad > 0 ? "text-gray-900 font-medium" : "text-red-600"}>
-                                              {s.cantidad > 0 ? `${s.cantidad} unidades` : "Sin stock"}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <p className="text-sm text-muted-foreground">No hay información de tallas registrada para este producto.</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="mt-4 flex gap-2">
-                                <Button
-                                  onClick={() => handleConfirmarProducto(true)}
-                                  className="flex-1"
-                                  variant="default"
-                                >
-                                  <CheckCircle className="mr-2 h-4 w-4" />
-                                  {resultado.nivelConfianza === "alto" ? "Correcto" : "Sí, es correcto"}
-                                </Button>
-                                <Button
-                                  onClick={() => handleConfirmarProducto(false)}
-                                  className="flex-1"
-                                  variant="outline"
-                                >
-                                  <XCircle className="mr-2 h-4 w-4" />
-                                  No, intentar de nuevo
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )}
-                      </>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-red-600">
-                          <XCircle className="h-5 w-5" />
-                          <span className="font-medium">{resultado.message}</span>
-                        </div>
-                        {resultado.coincidencias && resultado.coincidencias.length > 0 && (
-                          <div className="rounded-lg border border-dashed border-muted-foreground/40 p-4">
-                            <p className="text-sm font-medium text-foreground mb-2">Coincidencias más cercanas</p>
-                            <ul className="space-y-1 text-sm text-muted-foreground">
-                              {resultado.coincidencias.map((item) => (
-                                <li key={item.productoId} className="flex justify-between">
-                                  <span>{item.nombre}</span>
-                                  <span>{Math.round(item.similitud * 100)}%</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Search className="h-5 w-5" />
-                  Búsqueda Manual
-                </CardTitle>
-                <CardDescription>Busca productos por nombre o código</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      ref={manualSearchRef}
-                      placeholder="Buscar por nombre o código..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                      className="pr-11"
-                    />
-                    {searchQuery && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={clearManualSearch}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <Button onClick={handleSearch}>
-                    <Search className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {searchResults.length > 0 && (
-                  <div className="space-y-3">
-                    {searchResults.map((producto) => (
-                      <Card key={producto.id}>
-                        <CardContent className="pt-6">
-                          <div className="flex gap-4">
-                            <div className="relative h-20 w-20 overflow-hidden rounded-lg">
-                              <Image
-                                src={producto.imagen || "/placeholder.svg"}
-                                alt={producto.nombre}
-                                fill
-                                sizes="80px"
-                                loading="lazy"
-                                className="object-cover"
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-bold">{producto.nombre}</h4>
-                              <p className="text-sm text-muted-foreground">
-                                {producto.codigo} - {producto.categoria}
-                              </p>
-                              <p className="text-lg font-bold text-primary mt-1">${producto.precio.toLocaleString()}</p>
-                              <p className="text-sm text-muted-foreground">Stock total: {producto.stockTotal} unidades</p>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-
-                {searchQuery && searchResults.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>No se encontraron productos</p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
 
-          <aside className="xl:w-[360px] space-y-6">
-            <Card className="xl:sticky xl:top-24">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Sparkles className="h-5 w-5" />
-                  Recomendaciones según tu búsqueda
-                </CardTitle>
-                <CardDescription>Productos relacionados para sugerir al cliente</CardDescription>
+          {/* Sidebar - Recomendaciones (fijo, no sticky) */}
+          <aside className="space-y-6">
+            <Card className="border-border/50 shadow-lg">
+              <CardHeader className="border-b border-border/50 bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
+                    <Sparkles className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Productos Similares</CardTitle>
+                    <CardDescription>Sugerencias basadas en tu búsqueda</CardDescription>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
                 {recommendedProducts.length > 0 ? (
                   recommendedProducts.map((producto) => (
                     <div
                       key={producto.id}
-                      className="flex gap-3 rounded-xl border border-border/60 p-3 transition hover:border-primary/40 hover:shadow-sm"
+                      className="group flex gap-3 rounded-xl border border-border/60 bg-card p-3 transition hover:border-primary/40 hover:shadow-sm cursor-pointer"
+                      onClick={() => setSearchResults([producto])}
                     >
-                      <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-muted">
+                      <div className="relative h-14 w-14 overflow-hidden rounded-lg bg-muted flex-shrink-0">
                         <Image
                           src={producto.imagen || "/placeholder.svg"}
                           alt={producto.nombre}
                           fill
-                          sizes="64px"
+                          sizes="56px"
                           loading="lazy"
                           className="object-cover"
                         />
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-foreground">{producto.nombre}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{producto.nombre}</p>
                         <p className="text-xs text-muted-foreground">{producto.categoria}</p>
-                        <p className="mt-1 text-sm font-medium text-primary">
+                        <p className="text-sm font-bold text-primary mt-1">
                           ${Number(producto.precio || 0).toLocaleString()}
                         </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="mt-2 px-0 text-xs"
-                          onClick={() => setSearchResults([producto])}
-                        >
-                          Ver disponibilidad
-                        </Button>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Aún no hay recomendaciones. Escanea un producto o realiza una búsqueda para ver sugerencias similares.
-                  </p>
+                  <div className="text-center py-6">
+                    <Sparkles className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">
+                      Escanea o busca un producto para ver sugerencias
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
