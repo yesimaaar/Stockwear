@@ -361,3 +361,56 @@ ALTER TABLE ventas ADD CONSTRAINT "ventas_usuarioId_fkey" FOREIGN KEY ("usuarioI
 -- Tiendas
 ALTER TABLE tiendas DROP CONSTRAINT IF EXISTS tiendas_owner_id_fkey;
 ALTER TABLE tiendas ADD CONSTRAINT tiendas_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+-- =============================================================================
+-- 7. Sleep Schedule Configuration (Consolidated from 020)
+-- =============================================================================
+
+ALTER TABLE tiendas
+  ADD COLUMN IF NOT EXISTS sleep_schedule_enabled BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS sleep_schedule_time TIME DEFAULT '22:00:00',
+  ADD COLUMN IF NOT EXISTS wake_schedule_time TIME DEFAULT '07:00:00';
+
+COMMENT ON COLUMN tiendas.sleep_schedule_enabled IS 'Indica si la desactivación automática de cuentas está habilitada';
+COMMENT ON COLUMN tiendas.sleep_schedule_time IS 'Hora del día en que se desactivan automáticamente las cuentas (excepto el propietario)';
+COMMENT ON COLUMN tiendas.wake_schedule_time IS 'Hora del día en que se permite nuevamente el acceso (fin del modo dormir)';
+
+-- =============================================================================
+-- 8. Visual Recognition Feedback (Consolidated from 023)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS visual_recognition_feedback (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Relaciones
+  tienda_id INTEGER REFERENCES tiendas(id) ON DELETE CASCADE,
+  empleado_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  producto_sugerido_id INTEGER REFERENCES productos(id) ON DELETE SET NULL,
+  producto_correcto_id INTEGER REFERENCES productos(id) ON DELETE SET NULL,
+  
+  -- Datos del reconocimiento
+  similitud FLOAT NOT NULL,
+  umbral FLOAT NOT NULL,
+  fue_correcto BOOLEAN NOT NULL,
+  
+  -- El embedding capturado (opcional, para análisis futuro)
+  embedding FLOAT8[] DEFAULT NULL,
+  
+  -- Metadata adicional (nivel de confianza, timestamp original, etc.)
+  metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- Índices para feedback
+CREATE INDEX IF NOT EXISTS idx_vrf_tienda ON visual_recognition_feedback(tienda_id);
+CREATE INDEX IF NOT EXISTS idx_vrf_producto_sugerido ON visual_recognition_feedback(producto_sugerido_id);
+CREATE INDEX IF NOT EXISTS idx_vrf_fue_correcto ON visual_recognition_feedback(fue_correcto);
+CREATE INDEX IF NOT EXISTS idx_vrf_created_at ON visual_recognition_feedback(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_vrf_producto_rechazos 
+  ON visual_recognition_feedback(producto_sugerido_id, fue_correcto) 
+  WHERE fue_correcto = false;
+
+COMMENT ON TABLE visual_recognition_feedback IS 'Almacena feedback de usuarios sobre reconocimiento visual para mejorar el modelo';
+COMMENT ON COLUMN visual_recognition_feedback.fue_correcto IS 'true = usuario confirmó que el producto es correcto, false = usuario rechazó la sugerencia';
+COMMENT ON COLUMN visual_recognition_feedback.embedding IS 'Vector de embedding capturado, útil para reentrenamiento del modelo';

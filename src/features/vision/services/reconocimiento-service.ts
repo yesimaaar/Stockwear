@@ -27,6 +27,8 @@ export interface ProcesarEmbeddingParams {
   empleadoId?: string | null
   umbral: number
   tiendaId?: number
+  /** IDs de productos a excluir (rechazados previamente en la misma sesión) */
+  productosExcluidos?: number[]
 }
 
 function calcularNivelConfianza(similitud: number, umbral: number): NivelConfianza {
@@ -56,17 +58,33 @@ async function registrarConsulta(options: {
 
 export class ReconocimientoService {
   static async procesarEmbedding(params: ProcesarEmbeddingParams): Promise<ReconocimientoResult> {
-    const { embedding, empleadoId, umbral } = params
+    const { embedding, empleadoId, umbral, productosExcluidos = [] } = params
     const tiendaId = params.tiendaId ?? (await getCurrentTiendaId())
 
-    const catalogo = await ProductoEmbeddingService.getCatalogEmbeddings({ tiendaId })
-    if (catalogo.length === 0) {
+    const catalogoCompleto = await ProductoEmbeddingService.getCatalogEmbeddings({ tiendaId })
+    
+    // Filtrar productos que el usuario ya rechazó en esta sesión
+    const catalogo = catalogoCompleto.filter(
+      (producto) => !productosExcluidos.includes(producto.productoId)
+    )
+    
+    if (catalogoCompleto.length === 0) {
       return {
         success: false,
         similitud: 0,
         umbral,
         nivelConfianza: 'bajo',
         message: 'Aún no se han registrado embeddings para los productos en el catálogo.',
+      }
+    }
+
+    if (catalogo.length === 0) {
+      return {
+        success: false,
+        similitud: 0,
+        umbral,
+        nivelConfianza: 'bajo',
+        message: 'Todos los productos posibles ya fueron descartados. Intenta con otra imagen o reinicia la búsqueda.',
       }
     }
 

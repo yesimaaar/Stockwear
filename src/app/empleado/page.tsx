@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AuthService } from "@/features/auth/services/auth-service"
 import { ReconocimientoService, type ReconocimientoResult } from "@/features/vision/services/reconocimiento-service"
-import { confirmVisualMatch } from "@/features/vision/actions/vision-actions"
+import { confirmVisualMatch, registrarFeedbackVisual } from "@/features/vision/actions/vision-actions"
 import { ProductoService, type ProductoConStock } from "@/features/productos/services/producto-service"
 import type { Usuario } from "@/lib/types"
 import { useShoeRecognizer } from "@/hooks/use-shoe-recognizer"
@@ -75,6 +75,10 @@ export default function EmpleadoDashboard() {
   const { computeEmbedding, loadingModel, error: recognizerError, resetError } = useShoeRecognizer()
   const [threshold, setThreshold] = useState(() => getDefaultThreshold())
   const [expandedProductId, setExpandedProductId] = useState<number | null>(null)
+  // Lista de productos rechazados en la sesión actual para excluirlos de futuras búsquedas
+  const [productosExcluidos, setProductosExcluidos] = useState<number[]>([])
+  // Guardar el último embedding capturado para reintentar con productos excluidos
+  const [ultimoEmbedding, setUltimoEmbedding] = useState<Float32Array | null>(null)
   const [salesSummary, setSalesSummary] = useState({
     totalVentas: 0,
     montoTotal: 0,
@@ -267,22 +271,78 @@ export default function EmpleadoDashboard() {
   }, [threshold])
 
   const handleConfirmarProducto = async (confirmar: boolean) => {
+    if (!resultado?.producto) return
+
+    const productoId = resultado.producto.id
+
+    // Registrar feedback (positivo o negativo) para mejorar el modelo
+    try {
+      await registrarFeedbackVisual({
+        productoSugeridoId: productoId,
+        similitud: resultado.similitud,
+        umbral: resultado.umbral,
+        fueCorreto: confirmar,
+        embedding: resultado.embedding,
+        empleadoId: user?.id ?? null,
+        tiendaId: user?.tiendaId,
+        metadata: {
+          nivelConfianza: resultado.nivelConfianza,
+          timestamp: new Date().toISOString(),
+        },
+      })
+      console.log(`Feedback visual ${confirmar ? "positivo" : "negativo"} registrado correctamente`)
+    } catch (error) {
+      console.error("Error registrando feedback visual:", error)
+    }
+
     if (confirmar) {
       setResultado((prev) => (prev ? { ...prev, nivelConfianza: "alto" } : prev))
+      // Limpiar la lista de excluidos cuando se confirma un producto
+      setProductosExcluidos([])
+      setUltimoEmbedding(null)
 
-      // Save the embedding as feedback if available
-      if (resultado?.producto && resultado.embedding) {
+      // Save the embedding as additional training data if confirmed
+      if (resultado.embedding) {
         try {
-          await confirmVisualMatch(resultado.producto.id, resultado.embedding)
-          // Optional: Show a toast or small indicator that learning was recorded
-          console.log("Feedback visual registrado correctamente")
+          await confirmVisualMatch(productoId, resultado.embedding)
+          console.log("Embedding guardado como dato de entrenamiento")
         } catch (error) {
-          console.error("Error registrando feedback visual:", error)
+          console.error("Error guardando embedding:", error)
         }
       }
     } else {
-      setResultado(null)
-      void startCamera()
+      // Agregar el producto rechazado a la lista de excluidos
+      setProductosExcluidos((prev) => [...prev, productoId])
+      
+      // Si tenemos el embedding guardado, reintentar automáticamente con el producto excluido
+      if (ultimoEmbedding && user) {
+        setScanning(true)
+        setResultado(null)
+        
+        try {
+          const nuevoResultado = await ReconocimientoService.procesarEmbedding({
+            embedding: ultimoEmbedding,
+            empleadoId: user.id,
+            umbral: threshold,
+            tiendaId: user.tiendaId,
+            productosExcluidos: [...productosExcluidos, productoId],
+          })
+          setResultado(nuevoResultado)
+          
+          if (!nuevoResultado.success) {
+            // Si no hay más coincidencias, reiniciar cámara
+            void startCamera()
+          }
+        } catch (error) {
+          console.error("Error al reprocesar con exclusiones:", error)
+          void startCamera()
+        } finally {
+          setScanning(false)
+        }
+      } else {
+        setResultado(null)
+        void startCamera()
+      }
     }
   }
 
@@ -457,6 +517,8 @@ export default function EmpleadoDashboard() {
     if (!videoRef.current || !user || scanning) return
 
     setScanning(true)
+    // Limpiar productos excluidos en una nueva captura
+    setProductosExcluidos([])
 
     try {
       const canvas = document.createElement("canvas")
@@ -471,11 +533,15 @@ export default function EmpleadoDashboard() {
       ctx.drawImage(videoRef.current, 0, 0)
 
       const embedding = await computeEmbedding(canvas)
+      // Guardar el embedding para poder reintentar sin recapturar
+      setUltimoEmbedding(embedding)
+      
       const result = await ReconocimientoService.procesarEmbedding({
         embedding,
         empleadoId: user.id,
         umbral: threshold,
         tiendaId: user.tiendaId,
+        productosExcluidos: [],
       })
 
       setResultado(result)
@@ -540,6 +606,8 @@ export default function EmpleadoDashboard() {
     if (!file) return
 
     setScanning(true)
+    // Limpiar productos excluidos en una nueva carga de imagen
+    setProductosExcluidos([])
 
     try {
       let imageSource: ImageBitmap | HTMLImageElement
@@ -556,6 +624,8 @@ export default function EmpleadoDashboard() {
       }
 
       const embedding = await computeEmbedding(imageSource)
+      // Guardar el embedding para poder reintentar sin recapturar
+      setUltimoEmbedding(embedding)
 
       if (imageSource instanceof ImageBitmap) {
         imageSource.close()
@@ -568,6 +638,7 @@ export default function EmpleadoDashboard() {
         empleadoId: user?.id ?? null,
         umbral: threshold,
         tiendaId: user?.tiendaId,
+        productosExcluidos: [],
       })
 
       setResultado(result)
@@ -587,11 +658,17 @@ export default function EmpleadoDashboard() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
-          <p className="text-muted-foreground">Cargando...</p>
-        </div>
+      <div className="min-h-screen bg-background">
+        {/* Reservar espacio del header para evitar CLS */}
+        <header className="sticky top-0 z-40 h-16 border-b bg-background/95 backdrop-blur" />
+        <main className="container px-4 py-6">
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+              <p className="text-muted-foreground">Cargando...</p>
+            </div>
+          </div>
+        </main>
         <HiddenFileInput />
       </div>
     )
@@ -1391,11 +1468,6 @@ export default function EmpleadoDashboard() {
                         <div className="flex items-center gap-2 text-gray-900">
                           <CheckCircle className="h-5 w-5" />
                           <span className="font-medium">{resultado.message}</span>
-                          {resultado.nivelConfianza === "medio" && (
-                            <Badge variant="outline" className="ml-2">
-                              Confirmación requerida
-                            </Badge>
-                          )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -1440,40 +1512,42 @@ export default function EmpleadoDashboard() {
 
                                   <div className="space-y-2">
                                     <p className="font-medium">Disponibilidad por talla:</p>
-                                    <div className="grid grid-cols-2 gap-2">
-                                      {resultado.producto.stockPorTalla.map((s, i) => (
-                                        <div key={i} className="flex justify-between text-sm p-2 bg-muted rounded">
-                                          <span>Talla {s.talla}</span>
-                                          <span className={s.cantidad > 0 ? "text-gray-900 font-medium" : "text-red-600"}>
-                                            {s.cantidad > 0 ? `${s.cantidad} unidades` : "Sin stock"}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
+                                    {resultado.producto.stockPorTalla.length > 0 ? (
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {resultado.producto.stockPorTalla.map((s, i) => (
+                                          <div key={i} className="flex justify-between text-sm p-2 bg-muted rounded">
+                                            <span>Talla {s.talla}</span>
+                                            <span className={s.cantidad > 0 ? "text-gray-900 font-medium" : "text-red-600"}>
+                                              {s.cantidad > 0 ? `${s.cantidad} unidades` : "Sin stock"}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground">No hay información de tallas registrada para este producto.</p>
+                                    )}
                                   </div>
                                 </div>
                               </div>
 
-                              {resultado.nivelConfianza === "medio" && (
-                                <div className="mt-4 flex gap-2">
-                                  <Button
-                                    onClick={() => handleConfirmarProducto(true)}
-                                    className="flex-1"
-                                    variant="default"
-                                  >
-                                    <CheckCircle className="mr-2 h-4 w-4" />
-                                    Sí, es correcto
-                                  </Button>
-                                  <Button
-                                    onClick={() => handleConfirmarProducto(false)}
-                                    className="flex-1"
-                                    variant="outline"
-                                  >
-                                    <XCircle className="mr-2 h-4 w-4" />
-                                    No, intentar de nuevo
-                                  </Button>
-                                </div>
-                              )}
+                              <div className="mt-4 flex gap-2">
+                                <Button
+                                  onClick={() => handleConfirmarProducto(true)}
+                                  className="flex-1"
+                                  variant="default"
+                                >
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  {resultado.nivelConfianza === "alto" ? "Correcto" : "Sí, es correcto"}
+                                </Button>
+                                <Button
+                                  onClick={() => handleConfirmarProducto(false)}
+                                  className="flex-1"
+                                  variant="outline"
+                                >
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  No, intentar de nuevo
+                                </Button>
+                              </div>
                             </CardContent>
                           </Card>
                         )}

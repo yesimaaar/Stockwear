@@ -31,7 +31,12 @@ const SIDEBAR_WIDTH: Record<SidebarMode, string> = {
 };
 
 function useIsDesktop() {
-	const [isDesktop, setIsDesktop] = useState(false);
+	// Inicializar con true para desktop para evitar CLS
+	// En SSR y primer render asumimos desktop, luego ajustamos si es necesario
+	const [isDesktop, setIsDesktop] = useState(() => {
+		if (typeof window === "undefined") return true;
+		return window.innerWidth >= 1024;
+	});
 
 	useEffect(() => {
 		const mediaQuery = window.matchMedia("(min-width: 1024px)");

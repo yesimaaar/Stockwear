@@ -1458,6 +1458,7 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
             src={producto.imagen as string}
             alt={producto.nombre}
             fill
+            loading="lazy"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(min-width: 1280px) 240px, (min-width: 768px) 200px, 160px"
           />

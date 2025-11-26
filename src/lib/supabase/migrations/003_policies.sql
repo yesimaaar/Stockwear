@@ -187,3 +187,51 @@ CREATE POLICY "Enable insert access for all users" ON "public"."pagos_gastos"
   FOR INSERT
   TO public
   WITH CHECK (true);
+
+-- =============================================================================
+-- Producto Embeddings - User Feedback Policy (Consolidated from 022)
+-- =============================================================================
+
+-- Allow inserting embeddings for user feedback (bypasses auth check due to Server Action cookie issue)
+DROP POLICY IF EXISTS "producto_embeddings_insert_feedback" ON producto_embeddings;
+
+CREATE POLICY "producto_embeddings_insert_feedback" ON producto_embeddings
+FOR INSERT
+WITH CHECK (
+  fuente = 'user_feedback'
+);
+
+-- =============================================================================
+-- Visual Recognition Feedback Policies (Consolidated from 023)
+-- =============================================================================
+
+ALTER TABLE visual_recognition_feedback ENABLE ROW LEVEL SECURITY;
+
+-- Política: Los usuarios solo pueden ver feedback de su tienda
+CREATE POLICY "Users can view feedback from their store" ON visual_recognition_feedback
+  FOR SELECT
+  USING (
+    tienda_id IN (
+      SELECT tienda_id FROM usuarios WHERE id = auth.uid()
+    )
+  );
+
+-- Política: Los usuarios pueden insertar feedback en su tienda
+CREATE POLICY "Users can insert feedback for their store" ON visual_recognition_feedback
+  FOR INSERT
+  WITH CHECK (
+    tienda_id IN (
+      SELECT tienda_id FROM usuarios WHERE id = auth.uid()
+    )
+  );
+
+-- Política: Los administradores pueden ver todo el feedback
+CREATE POLICY "Admins can view all feedback" ON visual_recognition_feedback
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM usuarios 
+      WHERE id = auth.uid() 
+      AND rol IN ('admin', 'super_admin')
+    )
+  );

@@ -8,6 +8,22 @@ const enableTfjsNode = process.env.ENABLE_TFJS_NODE === "true";
 const nextConfig: NextConfig = {
   compress: true,
   reactCompiler: false,
+  // Configuración vacía de Turbopack para silenciar el warning (Next.js 16+)
+  turbopack: {},
+  // Optimizaciones experimentales para mejorar LCP y TTFB
+  experimental: {
+    optimizeCss: true,
+    optimizePackageImports: [
+      "lucide-react",
+      "@radix-ui/react-icons",
+      "@radix-ui/react-dropdown-menu",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-select",
+      "@radix-ui/react-tooltip",
+      "lucide-react",
+    ],
+  },
   modularizeImports: {
     "@radix-ui/react-icons": {
       transform: "@radix-ui/react-icons/{{member}}",
@@ -91,6 +107,16 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // Páginas estáticas como login, register - caché corto para TTFB
+      {
+        source: "/(login|register|forgot-password)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=60, stale-while-revalidate=300",
+          },
+        ],
+      },
       {
         source: "/:all*(svg|jpg|jpeg|png|gif|webp|avif|ico)",
         headers: [

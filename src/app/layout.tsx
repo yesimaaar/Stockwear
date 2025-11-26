@@ -1,5 +1,6 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
+import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ThemeProvider } from "@/components/theme-provider"
@@ -7,6 +8,14 @@ import { CartProvider } from "@/hooks/useCart"
 import { StoreGuard } from "@/features/auth/components/auth/StoreGuard"
 import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
+
+// Optimización: Precargar fuente con subset reducido
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  preload: true,
+  variable: "--font-inter",
+})
 
 export const metadata: Metadata = {
   title: "StockWear - Sistema de Gestión de Inventario",
@@ -34,8 +43,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
-      <body className={`min-h-screen bg-background text-foreground antialiased`}>
+    <html lang="es" className={inter.variable} suppressHydrationWarning>
+      <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <CartProvider>
             <StoreGuard>

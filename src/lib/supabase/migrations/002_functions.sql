@@ -134,3 +134,65 @@ CREATE TRIGGER trg_producto_embedding_updated_at
 BEFORE UPDATE ON producto_embeddings
 FOR EACH ROW
 EXECUTE FUNCTION set_producto_embedding_updated_at();
+
+-- =============================================================================
+-- 4. Visual Recognition Feedback Functions (Consolidated from 023)
+-- =============================================================================
+
+-- Vista para estadísticas de feedback por tienda
+CREATE OR REPLACE VIEW vista_feedback_estadisticas AS
+SELECT 
+  tienda_id,
+  COUNT(*) as total_feedback,
+  COUNT(*) FILTER (WHERE fue_correcto = true) as confirmaciones,
+  COUNT(*) FILTER (WHERE fue_correcto = false) as rechazos,
+  ROUND(
+    (COUNT(*) FILTER (WHERE fue_correcto = true)::NUMERIC / NULLIF(COUNT(*), 0)) * 100, 
+    1
+  ) as tasa_exito,
+  AVG(similitud) FILTER (WHERE fue_correcto = true) as similitud_promedio_correctos,
+  AVG(similitud) FILTER (WHERE fue_correcto = false) as similitud_promedio_rechazados,
+  MAX(created_at) as ultimo_feedback
+FROM visual_recognition_feedback
+GROUP BY tienda_id;
+
+-- Vista para productos problemáticos (más rechazos)
+CREATE OR REPLACE VIEW vista_productos_problematicos AS
+SELECT 
+  vrf.tienda_id,
+  vrf.producto_sugerido_id,
+  p.nombre as producto_nombre,
+  COUNT(*) as total_rechazos,
+  AVG(vrf.similitud) as similitud_promedio,
+  MAX(vrf.created_at) as ultimo_rechazo
+FROM visual_recognition_feedback vrf
+LEFT JOIN productos p ON p.id = vrf.producto_sugerido_id
+WHERE vrf.fue_correcto = false
+GROUP BY vrf.tienda_id, vrf.producto_sugerido_id, p.nombre
+ORDER BY total_rechazos DESC;
+
+-- Función para obtener umbral sugerido basado en feedback
+CREATE OR REPLACE FUNCTION calcular_umbral_sugerido(p_tienda_id INTEGER)
+RETURNS FLOAT AS $$
+DECLARE
+  v_promedio_correctos FLOAT;
+  v_promedio_rechazados FLOAT;
+  v_total_correctos INTEGER;
+  v_total_rechazados INTEGER;
+BEGIN
+  SELECT 
+    AVG(similitud) FILTER (WHERE fue_correcto = true),
+    AVG(similitud) FILTER (WHERE fue_correcto = false),
+    COUNT(*) FILTER (WHERE fue_correcto = true),
+    COUNT(*) FILTER (WHERE fue_correcto = false)
+  INTO v_promedio_correctos, v_promedio_rechazados, v_total_correctos, v_total_rechazados
+  FROM visual_recognition_feedback
+  WHERE tienda_id = p_tienda_id;
+  
+  IF v_total_correctos < 5 OR v_total_rechazados < 3 THEN
+    RETURN NULL;
+  END IF;
+  
+  RETURN (v_promedio_correctos + v_promedio_rechazados) / 2;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

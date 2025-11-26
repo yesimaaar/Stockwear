@@ -48,7 +48,8 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
     const { theme, setTheme, resolvedTheme } = useTheme();
 
     const [mounted, setMounted] = useState(false);
-    const [sidebarMode, setSidebarMode] = useState<SidebarMode>("open");
+    // Inicializar sidebar en modo condensado para evitar CLS
+    const [sidebarMode, setSidebarMode] = useState<SidebarMode>("condensed");
     const [user, setUser] = useState<Usuario | null>(null);
     const [accounts, setAccounts] = useState<SavedAccount[]>([]);
 
@@ -439,7 +440,10 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
 
                             {/* Theme toggle desktop */}
                             <button type="button" onClick={() => { setTheme(resolvedTheme === "dark" ? "light" : "dark"); }} className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 text-foreground transition hover:bg-foreground/10" aria-label="Alternar tema">
-                                {mounted && (resolvedTheme === "dark" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />)}
+                                {/* Usar placeholder del mismo tamaño para evitar CLS */}
+                                <span className="h-5 w-5 flex items-center justify-center">
+                                    {mounted ? (resolvedTheme === "dark" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />) : <Sun className="h-5 w-5 opacity-0" />}
+                                </span>
                             </button>
 
                             {/* Cart button */}
