@@ -106,6 +106,7 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
     const loadNotifications = useCallback(async () => {
         if (!user?.tiendaId) return;
 
+        console.log("[Notifications] Loading notifications for store:", user.tiendaId);
         setNotificationsLoading(true);
         setNotificationsError(null);
         try {
@@ -116,29 +117,37 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                 .select('id, nombre, stockMinimo, stock(cantidad)')
                 .eq('tienda_id', user.tiendaId)
                 .eq('estado', 'activo')
-                .limit(1000);
+                .limit(5000);
 
             if (error) throw error;
+
+            console.log("[Notifications] Fetched products:", data?.length);
 
             const currentLowStockIds = new Set<string>();
 
             const alerts = (data || [])
                 .map((p: any) => {
-                    // Calculate total stock from stock entries
+                    // Check if any stock entry is below minimum
+                    // This matches the logic in ProductosPage (stockBajo count)
+                    const hasLowStockVariant = p.stock?.some((s: any) => (s.cantidad || 0) < p.stockMinimo);
+
+                    // Also calculate total for meta info
                     const totalStock = p.stock?.reduce((sum: number, s: any) => sum + (s.cantidad || 0), 0) || 0;
+
                     return {
                         ...p,
+                        isLowStock: hasLowStockVariant,
                         stock_actual: totalStock
                     };
                 })
-                .filter(p => p.stock_actual < p.stockMinimo)
+                .filter(p => p.isLowStock)
                 .map(p => {
                     const notificationId = `stock-${p.id}`;
                     currentLowStockIds.add(notificationId);
                     return {
                         id: notificationId,
                         title: "Stock bajo",
-                        description: `El producto ${p.nombre} tiene pocas unidades.`,
+                        description: `El producto ${p.nombre} tiene variantes con pocas unidades.`,
                         productId: p.id,
                         meta: {
                             stockActual: p.stock_actual,
@@ -148,11 +157,15 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                 })
                 .filter(n => !dismissedIds.includes(n.id));
 
+            console.log("[Notifications] Generated alerts:", alerts.length);
+            console.log("[Notifications] Dismissed IDs:", dismissedIds);
+
             // Cleanup dismissed IDs that are no longer low stock
             const newDismissedIds = dismissedIds.filter(id => currentLowStockIds.has(id));
             if (newDismissedIds.length !== dismissedIds.length) {
+                console.log("[Notifications] Cleaning up dismissed IDs. Old:", dismissedIds.length, "New:", newDismissedIds.length);
                 setDismissedIds(newDismissedIds);
-                localStorage.setItem("dismissedNotifications", JSON.stringify(newDismissedIds));
+                localStorage.setItem(`dismissedNotifications_${user.tiendaId}`, JSON.stringify(newDismissedIds));
             }
 
             setNotifications(alerts);
@@ -168,6 +181,15 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (user?.tiendaId) {
+            // Load dismissed notifications from local storage specific to this store
+            const savedDismissed = localStorage.getItem(`dismissedNotifications_${user.tiendaId}`);
+            if (savedDismissed) {
+                try {
+                    setDismissedIds(JSON.parse(savedDismissed));
+                } catch (e) {
+                    console.error("Error parsing dismissed notifications", e);
+                }
+            }
             void loadNotifications();
         }
 
@@ -186,9 +208,11 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
 
     const handleDismissNotification = (e: React.MouseEvent, notificationId: string) => {
         e.stopPropagation();
+        if (!user?.tiendaId) return;
+
         const newDismissed = [...dismissedIds, notificationId];
         setDismissedIds(newDismissed);
-        localStorage.setItem("dismissedNotifications", JSON.stringify(newDismissed));
+        localStorage.setItem(`dismissedNotifications_${user.tiendaId}`, JSON.stringify(newDismissed));
 
         // Optimistically remove from current view
         const updatedNotifications = notifications.filter(n => n.id !== notificationId);
@@ -336,10 +360,28 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                                                             `${notifications.length} alertas pendientes`}
                                             </p>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { void loadNotifications(); }} disabled={notificationsLoading} title="Actualizar notificaciones">
-                                            <span className="sr-only">Actualizar notificaciones</span>
-                                            {notificationsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-                                        </Button>
+                                        <div className="flex gap-1">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { void loadNotifications(); }} disabled={notificationsLoading} title="Actualizar notificaciones">
+                                                <span className="sr-only">Actualizar notificaciones</span>
+                                                {notificationsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                                            </Button>
+                                            {dismissedIds.length > 0 && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                    onClick={() => {
+                                                        setDismissedIds([]);
+                                                        localStorage.removeItem(`dismissedNotifications_${user?.tiendaId}`);
+                                                        void loadNotifications();
+                                                    }}
+                                                    title="Restaurar descartadas"
+                                                >
+                                                    <span className="sr-only">Restaurar descartadas</span>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="max-h-80 divide-y divide-border overflow-auto">
                                         {notificationsError ? (

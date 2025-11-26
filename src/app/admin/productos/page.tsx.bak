@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import Image from "next/image"
 import Link from "next/link"
@@ -1529,6 +1529,291 @@ export default function ProductosPage() {
           </div>
         )}
       </AdminSectionLayout>
+      <>
+        <AdminSectionLayout
+          title="Stock"
+          description="Gestión de productos y existencias"
+          icon={<Package className="h-5 w-5" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button
+                className="rounded-xl px-4"
+                onClick={() => handleDialogOpenChange(true)}
+                type="button"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo producto
+              </Button>
+            </div>
+          }
+        >
+
+          {totalStockBajo > 0 && !lowStockDismissed && (
+            <Alert
+              variant="destructive"
+              className="flex items-start gap-3 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+            >
+              <TriangleAlert className="mt-0.5 h-4 w-4 !text-amber-600 dark:!text-amber-400" />
+              <div className="flex-1">
+                <AlertTitle>
+                  {totalStockBajo} {totalStockBajo === 1 ? "ubicación" : "ubicaciones"} por debajo del stock mínimo
+                </AlertTitle>
+                <AlertDescription className="text-amber-800/90 dark:text-amber-300/90">
+                  Revisa el stock de los productos en alerta para reabastecerlos cuanto antes.
+                </AlertDescription>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLowStockDismissed(true)}
+                className="absolute right-4 top-4 inline-flex h-6 w-6 items-center justify-center rounded-full text-amber-700 transition hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/50"
+                aria-label="Cerrar alerta de stock"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </Alert>
+          )}
+
+          {loading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="animate-pulse rounded-md border border-border bg-card p-4">
+                  <div className="h-5 w-3/4 rounded bg-muted" />
+                  <div className="mt-3 h-4 w-full rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          ) : productosConInfo.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+              No hay productos registrados aún.
+            </div>
+          ) : (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {mostrarDesde}-{mostrarHasta} de {productosConInfo.length} productos
+              </p>
+                              toggleExpand(producto.id)
+                            }}>
+                              {esExpandido ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                                <Image
+                                  src={producto.imagen || "/placeholder.svg"}
+                                  alt={producto.nombre}
+                                  fill
+                                  sizes="48px"
+                                  className="object-cover transition-transform duration-200 group-hover:scale-110"
+                                />
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground">{producto.nombre}</p>
+                                <p className="text-xs text-muted-foreground">Código: {producto.codigo}</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="text-sm text-muted-foreground">{producto.categoria}</span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="font-semibold text-primary">
+                              ${producto.precio.toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="font-medium">{producto.stockTotal} u.</span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            {producto.stockBajo > 0 ? (
+                              <Badge variant="destructive">{producto.stockBajo}</Badge>
+                            ) : (
+                              <Badge variant="secondary">OK</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
+                              {producto.estado.toUpperCase()}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  abrirEdicionProducto(producto)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                                <span className="sr-only">Editar</span>
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  abrirConfirmacionEliminar(producto)
+                                }}
+                                disabled={deletingProducto && deleteTarget?.id === producto.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Eliminar</span>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+        {esExpandido && (
+          <TableRow className="bg-muted">
+            <TableCell colSpan={8} className="p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-semibold text-foreground">Detalle por almacén y talla</p>
+                <p className="text-xs text-muted-foreground">
+                  Stock mínimo configurado: {producto.stockMinimo} unidades
+                </p>
+              </div>
+              <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+                <div className="flex flex-col gap-3 rounded-lg border border-border/70 bg-card/70 p-4 sm:flex-row">
+                  <div className="relative h-28 w-full overflow-hidden rounded-md bg-muted sm:h-32 sm:w-40">
+                    <Image
+                      src={producto.imagen || "/placeholder.svg"}
+                      alt={producto.nombre}
+                      fill
+                      sizes="(min-width: 640px) 160px, 100vw"
+                      className="object-cover"
+                    />
+                  </div>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      <span className="font-semibold text-foreground">Descripción: </span>
+                      {producto.descripcion ? producto.descripcion : "Sin descripción"}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-foreground">Proveedor: </span>
+                      {producto.proveedor ? producto.proveedor : "No especificado"}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-foreground">Creado: </span>
+                      {new Date(producto.createdAt).toLocaleDateString("es-CO")}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-2 rounded-lg border border-border/70 bg-card/70 p-4 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Precio base</span>
+                    <span className="font-semibold text-foreground">
+                      ${producto.precio.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Descuento</span>
+                    <span className="font-semibold text-foreground">{producto.descuento}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Estado</span>
+                    <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
+                      {producto.estado.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Stock total</span>
+                    <span className="font-semibold text-foreground">{producto.stockTotal} u.</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {producto.stockPorTalla.map((detalle, index) => {
+                  const enRiesgo = detalle.cantidad < producto.stockMinimo
+                  return (
+                    <div
+                      key={`${producto.id}-${index}`}
+                      className="flex items-center justify-between rounded-md border bg-background p-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <Badge variant="outline">{detalle.almacen}</Badge>
+                        <Badge variant="secondary">Talla {detalle.talla}</Badge>
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={`text-base font-semibold ${enRiesgo ? "text-red-500" : "text-green-500"
+                            }`}
+                        >
+                          {detalle.cantidad}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Min: {producto.stockMinimo}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+      </Fragment >
+      )
+})}
+    </TableBody >
+              </Table >
+            </div >
+
+    { pageCount > 1 && (
+      <div className="flex flex-col items-center gap-2 pt-2">
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                aria-disabled={page === 1}
+                className={page === 1 ? "pointer-events-none opacity-50" : undefined}
+                onClick={(event) => {
+                  event.preventDefault()
+                  irAPagina(page - 1)
+                }}
+              />
+            </PaginationItem>
+            {Array.from({ length: pageCount }).map((_, index) => {
+              const pagina = index + 1
+              return (
+                <PaginationItem key={pagina}>
+                  <PaginationLink
+                    href="#"
+                    isActive={pagina === page}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      irAPagina(pagina)
+                    }}
+                  >
+                    {pagina}
+                  </PaginationLink>
+                </PaginationItem>
+              )
+            })}
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                aria-disabled={page === pageCount}
+                className={page === pageCount ? "pointer-events-none opacity-50" : undefined}
+                onClick={(event) => {
+                  event.preventDefault()
+                  irAPagina(page + 1)
+                }}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+        <p className="text-xs text-muted-foreground">
+          Página {page} de {pageCount}
+        </p>
+      </div>
+    )
+}
+          </div >
+        )}
+      </AdminSectionLayout >
       <Dialog open={editDialogOpen} onOpenChange={handleEditDialogChange}>
         <DialogContent className="max-w-[90vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
