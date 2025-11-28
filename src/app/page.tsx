@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import LandingPage from "./(landing)/page"
 
 // Optimización: Reducir tiempo de cold start con cache
 export const revalidate = 0 // Siempre fresco pero con streaming
@@ -42,10 +43,11 @@ async function resolveUserRole(): Promise<"admin" | "empleado" | null> {
 export default async function HomePage() {
   const role = await resolveUserRole()
 
-  if (!role) {
-    redirect("/login")
+  // Si el usuario está autenticado, redirigir al panel correspondiente
+  if (role) {
+    redirect(role === "admin" ? "/admin" : "/empleado")
   }
 
-  redirect(role === "admin" ? "/admin" : "/empleado")
-  return null
+  // Si no hay usuario autenticado, mostrar la landing page
+  return <LandingPage />
 }

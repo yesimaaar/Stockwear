@@ -145,7 +145,36 @@ export default function EmpleadoDashboard() {
   }, [])
 
   const loadRecommendations = useCallback(
-    async (categoria?: string, excludeId?: number) => {
+    async (
+      categoria?: string, 
+      excludeId?: number,
+      coincidenciasVisuales?: Array<{ productoId: number; nombre: string; similitud: number }>
+    ) => {
+      // Si tenemos coincidencias visuales, usarlas para cargar productos similares
+      if (coincidenciasVisuales && coincidenciasVisuales.length > 0) {
+        try {
+          // Filtrar el producto actual y ordenar por similitud
+          const idsToLoad = coincidenciasVisuales
+            .filter(c => c.productoId !== excludeId)
+            .sort((a, b) => b.similitud - a.similitud)
+            .slice(0, 4)
+            .map(c => c.productoId)
+
+          if (idsToLoad.length > 0) {
+            // Cargar los productos por sus IDs
+            const productos = await Promise.all(
+              idsToLoad.map(id => ProductoService.getById(id))
+            )
+            const validProducts = productos.filter((p): p is ProductoConStock => p !== null)
+            setRecommendedProducts(validProducts)
+            return
+          }
+        } catch (error) {
+          console.error("Error cargando productos similares por coincidencias:", error)
+        }
+      }
+
+      // Fallback: buscar por categoría si no hay coincidencias visuales
       if (!categoria) {
         setRecommendedProducts([])
         return
@@ -367,7 +396,11 @@ export default function EmpleadoDashboard() {
 
   useEffect(() => {
     if (resultado?.success && resultado.producto) {
-      void loadRecommendations(resultado.producto.categoria, resultado.producto.id)
+      void loadRecommendations(
+        resultado.producto.categoria, 
+        resultado.producto.id,
+        resultado.coincidencias
+      )
     }
   }, [resultado, loadRecommendations])
 
