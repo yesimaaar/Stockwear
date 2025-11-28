@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import LandingPage from "./(landing)/page"
+import LandingPageClient from "@/components/landing/landing-page"
 
 // Optimización: Reducir tiempo de cold start con cache
 export const revalidate = 0 // Siempre fresco pero con streaming
@@ -49,5 +49,5 @@ export default async function HomePage() {
   }
 
   // Si no hay usuario autenticado, mostrar la landing page
-  return <LandingPage />
+  return <LandingPageClient />
 }
