@@ -1,102 +1,121 @@
-"use client"
+"use client";
 
-import Image from "next/image"
-import Link from "next/link"
+import Link from "next/link";
+import Image from "next/image";
+import { Button } from "@/components/ui/button";
 import {
-  ArrowRight,
   Camera,
   Package,
   BarChart3,
-  Users,
-  ShoppingCart,
   Smartphone,
-  Check,
-  Sparkles,
+  Users,
   Zap,
+  ArrowRight,
+  Check,
   Shield,
-} from "lucide-react"
-
-import { Button } from "@/components/ui/button"
+  Sparkles,
+} from "lucide-react";
 
 const features = [
   {
     icon: Camera,
     title: "Reconocimiento Visual",
-    description: "Escanea productos con la cámara y obtén información instantánea de stock, precios y tallas.",
+    description: "Escanea productos con la cámara de tu celular. Nuestra IA identifica el modelo al instante.",
   },
   {
     icon: Package,
-    title: "Gestión de Inventario",
-    description: "Control total de tu stock en múltiples almacenes con alertas de reposición automáticas.",
+    title: "Control de Inventario",
+    description: "Gestiona stock por tallas, colores y ubicaciones. Recibe alertas de stock bajo.",
   },
   {
     icon: BarChart3,
-    title: "Reportes y Analytics",
-    description: "Dashboards en tiempo real con métricas de ventas, productos más vendidos y tendencias.",
-  },
-  {
-    icon: Users,
-    title: "Multi-usuario",
-    description: "Roles de administrador y empleado con permisos personalizados para cada miembro.",
-  },
-  {
-    icon: ShoppingCart,
-    title: "Catálogo Compartible",
-    description: "Genera catálogos digitales para compartir con tus clientes vía WhatsApp o redes sociales.",
+    title: "Reportes en Tiempo Real",
+    description: "Visualiza ventas, movimientos y tendencias con dashboards interactivos.",
   },
   {
     icon: Smartphone,
-    title: "100% Responsivo",
-    description: "Funciona perfecto en móvil, tablet y escritorio. Accede desde cualquier dispositivo.",
+    title: "Catálogo Digital",
+    description: "Genera catálogos automáticos para compartir con tus clientes por WhatsApp.",
   },
-]
+  {
+    icon: Users,
+    title: "Multi-Tienda",
+    description: "Administra múltiples sucursales desde una sola cuenta con roles y permisos.",
+  },
+  {
+    icon: Zap,
+    title: "Ventas Rápidas",
+    description: "Procesa ventas en segundos. Control de caja y cortes diarios automatizados.",
+  },
+];
 
 const steps = [
   {
-    number: "01",
-    title: "Registra tu tienda",
-    description: "Crea tu cuenta en minutos y configura los datos básicos de tu negocio.",
+    number: "1",
+    title: "Crea tu cuenta",
+    description: "Regístrate gratis en menos de 2 minutos con tu correo electrónico.",
   },
   {
-    number: "02",
-    title: "Añade tu inventario",
-    description: "Sube tus productos con fotos, precios y tallas. El sistema aprende a reconocerlos.",
+    number: "2",
+    title: "Configura tu tienda",
+    description: "Agrega tus productos, tallas y empleados. Importa desde Excel si lo prefieres.",
   },
   {
-    number: "03",
-    title: "¡Listo para vender!",
-    description: "Tu equipo puede escanear productos, gestionar ventas y consultar stock al instante.",
+    number: "3",
+    title: "¡Empieza a vender!",
+    description: "Usa tu celular para escanear productos y gestionar ventas al instante.",
   },
-]
+];
 
 const plans = [
   {
-    name: "Starter",
+    name: "Básico",
+    description: "Para tiendas pequeñas",
     price: "Gratis",
-    description: "Perfecto para empezar",
-    features: ["1 almacén", "Hasta 100 productos", "1 usuario", "Soporte por email"],
+    period: "",
+    features: [
+      "1 tienda",
+      "Hasta 100 productos",
+      "1 usuario",
+      "Reportes básicos",
+    ],
     highlighted: false,
   },
   {
-    name: "Pro",
-    price: "$29.990",
+    name: "Profesional",
+    description: "Para tiendas en crecimiento",
+    price: "$299",
     period: "/mes",
-    description: "Para negocios en crecimiento",
-    features: ["5 almacenes", "Productos ilimitados", "10 usuarios", "Reconocimiento visual", "Reportes avanzados", "Soporte prioritario"],
+    features: [
+      "Hasta 3 tiendas",
+      "Productos ilimitados",
+      "5 usuarios",
+      "Reconocimiento visual",
+      "Catálogo digital",
+      "Soporte prioritario",
+    ],
     highlighted: true,
   },
   {
-    name: "Enterprise",
-    price: "Personalizado",
-    description: "Para grandes operaciones",
-    features: ["Almacenes ilimitados", "Usuarios ilimitados", "API access", "Integraciones custom", "Soporte dedicado 24/7"],
+    name: "Empresarial",
+    description: "Para cadenas de tiendas",
+    price: "Contactar",
+    period: "",
+    features: [
+      "Tiendas ilimitadas",
+      "Productos ilimitados",
+      "Usuarios ilimitados",
+      "API personalizada",
+      "Integraciones",
+      "Soporte dedicado",
+    ],
     highlighted: false,
   },
-]
+];
 
-export default function LandingPage() {
+export default function LandingPageClient() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
+    <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
@@ -349,5 +368,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }
