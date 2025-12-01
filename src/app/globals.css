@@ -39,15 +39,16 @@
   --sidebar-ring: #111114;
 }
 
-.dark {
+.dark,
+:root.dark {
   --background: #09090b;
   --foreground: #f4f4f5;
   --card: #111113;
   --card-foreground: #f4f4f5;
   --popover: #111113;
   --popover-foreground: #f4f4f5;
-  --primary: #636161;
-  --primary-foreground: #f9f8ff;
+  --primary: #f4f4f5;
+  --primary-foreground: #09090b;
   --secondary: #18181b;
   --secondary-foreground: #f4f4f5;
   --muted: #1f1f23;
@@ -56,7 +57,7 @@
   --accent-foreground: #f4f4f5;
   --destructive: #f87171;
   --destructive-foreground: #111113;
-  --border: #1f1f23;
+  --border: #27272a;
   --input: #27272f;
   --ring: #6366f1;
   --chart-1: #6366f1;
@@ -66,7 +67,7 @@
   --chart-5: #facc15;
   --sidebar: #0f0f12;
   --sidebar-foreground: #f4f4f5;
-  --sidebar-primary: #000000;
+  --sidebar-primary: #f4f4f5;
   --sidebar-primary-foreground: #09090b;
   --sidebar-accent: #18181b;
   --sidebar-accent-foreground: #f4f4f5;
@@ -155,11 +156,14 @@
     @apply border-border outline-ring/50;
   }
   html {
-    color-scheme: light;
+    color-scheme: light dark;
     overscroll-behavior: none;
   }
-  .dark {
+  html.dark {
     color-scheme: dark;
+  }
+  html.light {
+    color-scheme: light;
   }
   body {
     @apply bg-background text-foreground font-sans;
