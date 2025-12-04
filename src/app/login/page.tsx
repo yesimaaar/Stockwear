@@ -322,7 +322,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="h-12 w-full rounded-full bg-primary text-base font-semibold text-primary-foreground shadow-lg dark:bg-indigo-600 dark:hover:bg-indigo-500"
+              className="h-12 w-full rounded-full bg-slate-900 text-base font-semibold text-white shadow-[0_18px_35px_rgba(15,18,30,0.25)] hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
               disabled={loading || googleLoading}
             >
               {loading ? "Iniciando sesión..." : "Iniciar sesión"}
@@ -376,10 +376,10 @@ export default function LoginPage() {
                   <button
                     key={label}
                     type="button"
-                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${active ? "bg-primary text-primary-foreground dark:bg-indigo-600" : "text-muted-foreground hover:bg-accent"
+                    className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition ${active ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "text-muted-foreground hover:bg-accent"
                       }`}
                   >
-                    <Icon className={`h-5 w-5 ${active ? "text-primary-foreground" : "text-muted-foreground"}`} />
+                    <Icon className={`h-5 w-5 ${active ? "text-white dark:text-slate-900" : "text-muted-foreground"}`} />
                     <span>{label}</span>
                   </button>
                 ))}
@@ -396,10 +396,10 @@ export default function LoginPage() {
             </aside>
 
             <div className="flex-1 bg-background px-10 py-9">
-              <div className="rounded-2xl bg-gradient-to-r from-primary to-primary/80 dark:from-indigo-600 dark:to-indigo-800 p-6 text-primary-foreground">
-                <p className="text-xs font-semibold uppercase tracking-[0.4em] text-primary-foreground/60">StockWear</p>
+              <div className="rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white dark:from-slate-700 dark:to-slate-800">
+                <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">StockWear</p>
                 <h3 className="mt-1 text-2xl font-semibold">Panel de Administración</h3>
-                <p className="text-sm text-primary-foreground/80">Facturación rápida y seguimiento express sin salir del dashboard.</p>
+                <p className="text-sm text-slate-300">Facturación rápida y seguimiento express sin salir del dashboard.</p>
               </div>
 
               <div className="mt-6 flex flex-col gap-6">
@@ -417,7 +417,7 @@ export default function LoginPage() {
                         placeholder="Código o nombre del producto"
                         className="h-12 flex-1 rounded-2xl border-border bg-card text-sm text-foreground placeholder:text-muted-foreground"
                       />
-                      <Button className="h-12 rounded-full bg-primary dark:bg-indigo-600 px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90 dark:hover:bg-indigo-500">
+                      <Button className="h-12 rounded-full bg-slate-900 px-6 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
                         Buscar
                       </Button>
                       <button
@@ -426,7 +426,7 @@ export default function LoginPage() {
                       >
                         <ShoppingCart className="h-4 w-4" />
                         Carrito
-                        <span className="rounded-full bg-primary dark:bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-primary-foreground">0</span>
+                        <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">0</span>
                       </button>
                     </div>
                   </div>
@@ -483,7 +483,7 @@ export default function LoginPage() {
                             </div>
                             <p className="text-sm font-semibold text-foreground">{product.price}</p>
                           </div>
-                          <Button className="rounded-full bg-primary dark:bg-indigo-600 px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 dark:hover:bg-indigo-500">
+                          <Button className="rounded-full bg-slate-900 px-5 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
                             Agregar
                           </Button>
                         </div>

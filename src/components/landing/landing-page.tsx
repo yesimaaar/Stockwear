@@ -143,7 +143,7 @@ export default function LandingPageClient() {
             <Button asChild variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent">
               <Link href="/login">Iniciar sesión</Link>
             </Button>
-            <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-indigo-600 dark:hover:bg-indigo-500">
+            <Button asChild className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
               <Link href="/register">Registrarse</Link>
             </Button>
           </div>
@@ -152,23 +152,23 @@ export default function LandingPageClient() {
 
       {/* Hero */}
       <section className="relative overflow-hidden py-24 md:py-32">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.1),_transparent_50%)] dark:bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.15),_transparent_50%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(118,131,173,0.15),_transparent_50%)]" />
         <div className="mx-auto max-w-7xl px-6 text-center">
           <div className="mx-auto max-w-3xl">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1.5 text-sm text-indigo-600 dark:text-indigo-300">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-100 px-4 py-1.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               <Sparkles className="h-4 w-4" />
               Potenciado con Inteligencia Artificial
             </div>
             <h1 className="mb-6 text-4xl font-bold leading-tight tracking-tight md:text-6xl">
               Gestiona tu inventario de calzado con
-              <span className="bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent"> visión inteligente</span>
+              <span className="bg-gradient-to-r from-slate-700 to-slate-900 bg-clip-text text-transparent dark:from-slate-300 dark:to-slate-100"> visión inteligente</span>
             </h1>
             <p className="mb-10 text-lg text-muted-foreground md:text-xl">
               StockWear es el sistema de gestión de inventario diseñado para tiendas de calzado. 
               Escanea productos con tu cámara, controla stock en tiempo real y genera catálogos para tus clientes.
             </p>
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Button asChild size="lg" className="h-12 rounded-full bg-indigo-600 px-8 text-base font-semibold hover:bg-indigo-500 text-white">
+              <Button asChild size="lg" className="h-12 rounded-full bg-slate-900 px-8 text-base font-semibold hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
                 <Link href="/register">
                   Comenzar gratis
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -184,7 +184,7 @@ export default function LandingPageClient() {
           
           {/* Hero Image/Preview */}
           <div className="relative mx-auto mt-16 max-w-5xl">
-            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-indigo-500/20 to-purple-500/20 blur-3xl" />
+            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-slate-500/20 to-slate-700/20 blur-3xl" />
             <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
               <div className="flex h-8 items-center gap-2 border-b border-border bg-muted/50 px-4">
                 <div className="h-3 w-3 rounded-full bg-red-500/80" />
@@ -195,7 +195,7 @@ export default function LandingPageClient() {
                 <div className="grid h-full gap-4 md:grid-cols-3">
                   <div className="rounded-xl border border-border bg-card/50 p-4">
                     <div className="mb-3 flex items-center gap-2">
-                      <Package className="h-5 w-5 text-indigo-500" />
+                      <Package className="h-5 w-5 text-slate-700 dark:text-slate-300" />
                       <span className="text-sm font-medium">Inventario</span>
                     </div>
                     <div className="space-y-2">
@@ -206,7 +206,7 @@ export default function LandingPageClient() {
                   </div>
                   <div className="rounded-xl border border-border bg-card/50 p-4">
                     <div className="mb-3 flex items-center gap-2">
-                      <Camera className="h-5 w-5 text-purple-500" />
+                      <Camera className="h-5 w-5 text-slate-600 dark:text-slate-400" />
                       <span className="text-sm font-medium">Reconocimiento</span>
                     </div>
                     <div className="flex aspect-square items-center justify-center rounded-lg border-2 border-dashed border-border">
@@ -242,8 +242,8 @@ export default function LandingPageClient() {
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
-              <div key={feature.title} className="group rounded-2xl border border-border bg-card p-6 transition hover:border-indigo-500/50 hover:bg-accent">
-                <div className="mb-4 inline-flex rounded-xl bg-indigo-500/20 p-3 text-indigo-600 dark:text-indigo-400">
+              <div key={feature.title} className="group rounded-2xl border border-border bg-card p-6 transition hover:border-slate-400 hover:bg-accent dark:hover:border-slate-600">
+                <div className="mb-4 inline-flex rounded-xl bg-slate-900/10 p-3 text-slate-700 dark:bg-slate-100/10 dark:text-slate-300">
                   <feature.icon className="h-6 w-6" />
                 </div>
                 <h3 className="mb-2 text-lg font-semibold">{feature.title}</h3>
@@ -267,10 +267,10 @@ export default function LandingPageClient() {
             {steps.map((step, index) => (
               <div key={step.number} className="relative">
                 {index < steps.length - 1 && (
-                  <div className="absolute left-1/2 top-12 hidden h-0.5 w-full bg-gradient-to-r from-indigo-500/50 to-transparent md:block" />
+                  <div className="absolute left-1/2 top-12 hidden h-0.5 w-full bg-gradient-to-r from-slate-400/50 to-transparent dark:from-slate-600/50 md:block" />
                 )}
                 <div className="relative rounded-2xl border border-border bg-card p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-lg font-bold text-white">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-white dark:bg-slate-100 dark:text-slate-900">
                     {step.number}
                   </div>
                   <h3 className="mb-2 text-lg font-semibold">{step.title}</h3>
@@ -301,12 +301,12 @@ export default function LandingPageClient() {
                 key={plan.name}
                 className={`relative rounded-2xl border p-6 ${
                   plan.highlighted
-                    ? "border-indigo-500 bg-gradient-to-b from-indigo-500/20 to-transparent"
+                    ? "border-slate-400 bg-gradient-to-b from-slate-200/50 to-transparent dark:border-slate-600 dark:from-slate-800/50"
                     : "border-border bg-card"
                 }`}
               >
                 {plan.highlighted && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
                     Más popular
                   </div>
                 )}
@@ -321,7 +321,7 @@ export default function LandingPageClient() {
                 <ul className="mb-6 space-y-3">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-indigo-500" />
+                      <Check className="h-4 w-4 text-slate-700 dark:text-slate-300" />
                       {feature}
                     </li>
                   ))}
@@ -329,7 +329,7 @@ export default function LandingPageClient() {
                 <Button
                   className={`w-full rounded-full ${
                     plan.highlighted
-                      ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                      ? "bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
                       : "bg-muted hover:bg-accent"
                   }`}
                   disabled
@@ -346,12 +346,12 @@ export default function LandingPageClient() {
       <section className="border-t border-border bg-gradient-to-b from-muted to-background py-24">
         <div className="mx-auto max-w-7xl px-6 text-center">
           <div className="mx-auto max-w-2xl">
-            <Shield className="mx-auto mb-6 h-12 w-12 text-indigo-500" />
+            <Shield className="mx-auto mb-6 h-12 w-12 text-slate-700 dark:text-slate-300" />
             <h2 className="mb-4 text-3xl font-bold md:text-4xl">¿Listo para modernizar tu tienda?</h2>
             <p className="mb-8 text-lg text-muted-foreground">
               Únete a StockWear y descubre cómo la tecnología puede simplificar la gestión de tu inventario.
             </p>
-            <Button asChild size="lg" className="h-12 rounded-full bg-indigo-600 px-8 text-base font-semibold hover:bg-indigo-500 text-white">
+            <Button asChild size="lg" className="h-12 rounded-full bg-slate-900 px-8 text-base font-semibold hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
               <Link href="/register">
                 Crear cuenta gratis
                 <ArrowRight className="ml-2 h-4 w-4" />

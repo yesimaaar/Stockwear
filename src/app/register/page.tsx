@@ -122,7 +122,7 @@ export default function RegisterPage() {
 
           <div className="grid gap-4 rounded-3xl border border-border bg-card p-6 shadow-[0_25px_90px_rgba(15,23,42,0.08)] dark:shadow-[0_25px_90px_rgba(0,0,0,0.3)]">
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-foreground dark:bg-indigo-500/20">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900/5 text-foreground dark:bg-slate-100/10">
                 <UserPlus className="h-5 w-5" />
               </div>
               <div>
@@ -131,7 +131,7 @@ export default function RegisterPage() {
               </div>
             </div>
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-foreground dark:bg-indigo-500/20">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900/5 text-foreground dark:bg-slate-100/10">
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
@@ -258,7 +258,7 @@ export default function RegisterPage() {
             <div className="space-y-3">
               <Button
                 type="submit"
-                className="h-12 w-full rounded-full bg-primary text-base font-semibold text-primary-foreground shadow-lg dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                className="h-12 w-full rounded-full bg-slate-900 text-base font-semibold text-white shadow-[0_18px_35px_rgba(15,18,30,0.25)] hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
                 disabled={loading || googleLoading}
               >
                 {loading ? "Registrando..." : "Crear cuenta"}
