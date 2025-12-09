@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ubzabtbearqsbprabqce.supabase.co'
 const supabaseAnonKey =
@@ -10,4 +10,37 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Warning: Supabase environment variables are not set. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+  cookieOptions: {
+    secure: process.env.NODE_ENV === "production",
+  },
+})
+
+/**
+ * Clear corrupted auth tokens from localStorage.
+ * Call this when you encounter "Invalid Refresh Token" errors.
+ */
+export function clearCorruptedAuthTokens(): void {
+  if (typeof window === 'undefined') return
+  
+  // Supabase stores auth in these keys
+  const keysToCheck = [
+    'sb-ubzabtbearqsbprabqce-auth-token',
+    'supabase.auth.token',
+  ]
+  
+  keysToCheck.forEach(key => {
+    if (localStorage.getItem(key)) {
+      console.log(`🧹 Clearing potentially corrupted auth key: ${key}`)
+      localStorage.removeItem(key)
+    }
+  })
+  
+  // Also clear any keys that match the Supabase pattern
+  Object.keys(localStorage).forEach(key => {
+    if (key.startsWith('sb-') && key.includes('-auth-token')) {
+      console.log(`🧹 Clearing Supabase auth key: ${key}`)
+      localStorage.removeItem(key)
+    }
+  })
+}

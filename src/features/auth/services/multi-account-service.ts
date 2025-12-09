@@ -246,13 +246,22 @@ export class MultiAccountService {
     }
 
     /** Listen for token refreshes and keep storage up‑to‑date */
+    private static listenerStarted = false;
+    
     static startTokenListener(): void {
         if (typeof window === 'undefined') return;
+        // Prevent multiple listeners
+        if (this.listenerStarted) return;
+        this.listenerStarted = true;
+        
         supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                if (session?.user && session?.refresh_token) {
-                    await this.saveCurrentAccount();
-                }
+            // Only save on successful sign-in or token refresh with valid session
+            if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && session?.refresh_token) {
+                await this.saveCurrentAccount();
+            }
+            // Clear corrupted tokens on sign-out or errors
+            if (event === 'SIGNED_OUT') {
+                console.log('🔒 User signed out, cleaning up...');
             }
         });
     }

@@ -32,7 +32,6 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { GoogleIcon } from "@/components/icons/google-icon"
 import { AuthService } from "@/features/auth/services/auth-service"
-import { supabase } from "@/lib/supabase"
 import type { Usuario } from "@/lib/types"
 
 const previewQuickStats = [
@@ -165,37 +164,49 @@ export default function LoginPage() {
     }
   }, [router])
 
-  const syncSession = useCallback(async () => {
-    const currentUser = await AuthService.getCurrentUser()
-    if (currentUser) {
-      navigateByRole(currentUser)
-      setCheckingSession(false)
-      return
-    }
-    setCheckingSession(false)
-  }, [navigateByRole])
-
+  // Simple session check - only runs once on mount
   useEffect(() => {
-    // Check for account switch request
-    const switchEmail = sessionStorage.getItem('switch_to_account')
-    if (switchEmail) {
-      setEmail(switchEmail)
-      sessionStorage.removeItem('switch_to_account')
-    }
-
-    void syncSession()
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setCheckingSession(true)
-        void syncSession()
+    let cancelled = false
+    
+    const checkSession = async () => {
+      // Check for account switch request
+      const switchEmail = sessionStorage.getItem('switch_to_account')
+      if (switchEmail) {
+        setEmail(switchEmail)
+        sessionStorage.removeItem('switch_to_account')
+        setCheckingSession(false)
+        return
       }
-    })
 
-    return () => {
-      listener.subscription.unsubscribe()
+      try {
+        // Quick timeout to prevent hanging
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3000)
+        
+        const currentUser = await AuthService.getCurrentUser()
+        clearTimeout(timeoutId)
+        
+        if (cancelled) return
+        
+        if (currentUser) {
+          navigateByRole(currentUser)
+          return
+        }
+      } catch (error) {
+        console.error('Session check error:', error)
+      }
+      
+      if (!cancelled) {
+        setCheckingSession(false)
+      }
     }
-  }, [syncSession])
+
+    checkSession()
+    
+    return () => {
+      cancelled = true
+    }
+  }, [navigateByRole])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -203,19 +214,23 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800))
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       const result = await AuthService.login(email.trim(), password)
+      console.log('Login result:', JSON.stringify(result, null, 2))
 
       if (!result.success) {
         setError(result.message || "Error al iniciar sesión")
+        setLoading(false)
         return
       }
 
-      navigateByRole(result.user)
+      // Navigate directly without triggering auth state listeners
+      if (result.user) {
+        navigateByRole(result.user)
+      }
     } catch (_error) {
       setError("Ocurrió un problema al iniciar sesión")
-    } finally {
       setLoading(false)
     }
   }

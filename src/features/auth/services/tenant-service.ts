@@ -6,6 +6,14 @@ let cachedTenant: { tiendaId: number; expiresAt: number } | null = null
 
 async function fetchTenantId(client: SupabaseClient): Promise<number> {
   const { data: userData, error: userError } = await client.auth.getUser()
+  
+  if (userError) {
+    console.error('fetchTenantId: getUser error', userError)
+    if (userError.status === 429) {
+       throw new Error('Rate limit exceeded')
+    }
+  }
+
   if (userError || !userData.user) {
     throw new Error('Usuario no autenticado')
   }
@@ -75,5 +83,6 @@ export async function getCurrentTiendaId(options?: {
 }
 
 export function invalidateTenantCache(): void {
+  console.log('invalidateTenantCache: Clearing tenant cache')
   cachedTenant = null
 }

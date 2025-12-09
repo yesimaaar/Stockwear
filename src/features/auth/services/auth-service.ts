@@ -1,5 +1,5 @@
-import { supabase } from '@/lib/supabase'
-import { getCurrentTiendaId } from '@/features/auth/services/tenant-service'
+import { supabase, clearCorruptedAuthTokens } from '@/lib/supabase'
+import { getCurrentTiendaId, invalidateTenantCache } from '@/features/auth/services/tenant-service'
 import type { Usuario } from '@/lib/types'
 
 export interface AuthResponse {
@@ -50,9 +50,25 @@ export class AuthService {
     const normalizedEmail = email.trim().toLowerCase()
     const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
 
+    console.log('AuthService.login: signInWithPassword result', { 
+      hasUser: !!data.user, 
+      hasSession: !!data.session, 
+      error: error?.message 
+    })
+
     if (error) {
       return { success: false, message: error.message }
     }
+
+    // Clear any stale cache from previous sessions
+    this.userCache = null
+    invalidateTenantCache()
+
+    // Verify session is set
+    const { data: sessionData } = await supabase.auth.getSession()
+    console.log('AuthService.login: Immediate getSession check', { 
+      hasSession: !!sessionData.session 
+    })
 
     const userId = data.user?.id ?? null
 
@@ -250,7 +266,12 @@ export class AuthService {
     return { success: true, message: 'Contraseña actualizada correctamente.' }
   }
 
+  private static userCache: { user: Usuario | null; timestamp: number } | null = null
+  private static CACHE_DURATION = 10000 // 10 seconds
+
   static async logout(scope: 'global' | 'local' | 'others' = 'global'): Promise<void> {
+    this.userCache = null // Clear cache on logout
+    invalidateTenantCache() // Clear tenant cache on logout
     if (scope === 'local') {
       // Manually clear Supabase keys from localStorage to preserve server session
       if (typeof window !== 'undefined') {
@@ -266,19 +287,72 @@ export class AuthService {
   }
 
   static async getCurrentUser(): Promise<Usuario | null> {
+    // Check cache first
+    if (this.userCache && (Date.now() - this.userCache.timestamp < this.CACHE_DURATION)) {
+      return this.userCache.user
+    }
+
     try {
-      const { data } = await supabase.auth.getUser()
-      const user = data?.user
-      if (!user) return null
+      // Add timeout to prevent hanging on corrupted tokens
+      const timeoutPromise = new Promise<null>((resolve) => 
+        setTimeout(() => {
+          console.warn('AuthService.getCurrentUser: Timeout reached (5s)')
+          resolve(null)
+        }, 5000)
+      )
+      
+      const userPromise = (async () => {
+        // Debug: Check session state before getUser
+        const { data: sessionData } = await supabase.auth.getSession()
+        // console.log('AuthService.getCurrentUser: getSession check', { hasSession: !!sessionData.session })
 
-      const { data: profile } = await supabase
-        .from('usuarios')
-        .select('*')
-        .or(`id.eq.${user.id},auth_uid.eq.${user.id}`)
-        .maybeSingle()
+        if (!sessionData.session) {
+          // console.warn('AuthService.getCurrentUser: No session found in getSession, skipping getUser')
+          return null
+        }
 
-      return mapUsuario(profile as UsuarioRow) ?? null
-    } catch (_error) {
+        const { data, error } = await supabase.auth.getUser()
+        
+        if (error) {
+          console.error('AuthService.getCurrentUser: getUser error', error)
+          // If rate limited, return cached user if available (even if expired)
+          if (error.status === 429 && this.userCache) {
+             console.warn('AuthService.getCurrentUser: Rate limited, returning stale cache')
+             return this.userCache.user
+          }
+        }
+        
+        // Check for refresh token errors
+        if (error?.message?.includes('Refresh Token')) {
+          console.warn('🧹 Corrupted refresh token detected in getCurrentUser')
+          clearCorruptedAuthTokens()
+          return null
+        }
+        
+        const user = data?.user
+        if (!user) return null
+
+        const { data: profile } = await supabase
+          .from('usuarios')
+          .select('*')
+          .or(`id.eq.${user.id},auth_uid.eq.${user.id}`)
+          .maybeSingle()
+
+        const mappedUser = mapUsuario(profile as UsuarioRow) ?? null
+        
+        // Update cache
+        this.userCache = { user: mappedUser, timestamp: Date.now() }
+        
+        return mappedUser
+      })()
+      
+      return await Promise.race([userPromise, timeoutPromise])
+    } catch (error) {
+      // Check if it's a refresh token error
+      if (error instanceof Error && error.message?.includes('Refresh Token')) {
+        console.warn('🧹 Corrupted refresh token detected in getCurrentUser catch')
+        clearCorruptedAuthTokens()
+      }
       return null
     }
   }

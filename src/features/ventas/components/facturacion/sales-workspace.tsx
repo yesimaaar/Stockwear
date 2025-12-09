@@ -306,8 +306,14 @@ export function SalesWorkspace({
           console.log("loadData: Fetching user...")
           user = await AuthService.getCurrentUser()
           console.log("loadData: User fetched", user ? user.id : "null")
+          
+          if (!user) {
+            console.warn("loadData: No user found, aborting data load")
+            return
+          }
         } catch (error) {
           console.error("Error loading user", error)
+          return
         }
 
         // 2. Get Payment Methods
