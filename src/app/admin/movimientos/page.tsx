@@ -78,6 +78,8 @@ import { PagoGastoService } from "@/features/movimientos/services/pago-gasto-ser
 import type { PagoGasto } from "@/lib/types"
 import { PaymentMethodSelector } from "@/components/domain/payment-method-selector"
 import { VentaLibreDialog } from "./components/venta-libre-dialog"
+import { VentaDetalleDialog } from "./components/venta-detalle-dialog"
+import { VentaService } from "@/features/ventas/services/venta-service"
 
 // --- Schemas (Existing) ---
 
@@ -154,6 +156,8 @@ interface IngresoItem {
   secondaryDescription?: string
   referencia?: string
   metodoPago?: string
+  fechaLiquidacion?: string
+  status?: 'pending' | 'available'
 }
 
 interface CuentaPorCobrar {
@@ -232,6 +236,10 @@ export default function MovimientosPage() {
   const [openPagoGastoDialog, setOpenPagoGastoDialog] = useState(false)
   const [selectedGastoPago, setSelectedGastoPago] = useState<Gasto | null>(null)
   const [openVentaLibreDialog, setOpenVentaLibreDialog] = useState(false)
+
+  // Sale Details State
+  const [selectedVentaDetalle, setSelectedVentaDetalle] = useState<any | null>(null)
+  const [openVentaDetalleDialog, setOpenVentaDetalleDialog] = useState(false)
 
   useEffect(() => {
     setFilterTerm(searchQ)
@@ -386,7 +394,7 @@ export default function MovimientosPage() {
       const metodosMap = new Map(metodosPago?.map(m => [m.id, m.nombre]) || [])
 
       // 4. Map and Combine
-      const ventasMapped: IngresoItem[] = (ventas || []).map(v => {
+      const ventasMapped: IngresoItem[] = (ventas || []).flatMap(v => {
         // Extract product names
         const productos = (v.ventasDetalle as any[])?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
         const descripcion = productos.length > 0
@@ -394,16 +402,52 @@ export default function MovimientosPage() {
           : 'Venta de contado'
 
         const metodoPago = metodosMap.get(v.metodo_pago_id) || 'Efectivo'
+        const isAddi = metodoPago.toLowerCase() === 'addi'
 
-        return {
+        if (isAddi) {
+          // 1. Pending Item (The Sale event) - Gray, Gross amount
+          const pendingItem: IngresoItem = {
+            id: `v-${v.id}`,
+            tipo: 'venta_contado',
+            monto: v.total,
+            fecha: v.createdAt,
+            descripcion: descripcion,
+            referencia: v.folio,
+            metodoPago,
+            status: 'pending'
+          }
+
+          // 2. Settlement Item (The Cash Availability) - Green, Net amount, 7 days later
+          const dateObj = new Date(v.createdAt)
+          dateObj.setDate(dateObj.getDate() + 7)
+          const settlementDate = dateObj.toISOString()
+
+          const settlementItem: IngresoItem = {
+            id: `v-${v.id}-settlement`,
+            tipo: 'venta_contado',
+            monto: v.total * (1 - 0.1071),
+            fecha: settlementDate,
+            descripcion: `Liquidación Addi: ${descripcion}`, // Distinguishable title
+            referencia: `${v.folio} (Liquidación)`,
+            metodoPago: 'Transferencia Addi',
+            status: 'available',
+            fechaLiquidacion: settlementDate
+          }
+
+          return [pendingItem, settlementItem]
+        }
+
+        // Normal Sale
+        return [{
           id: `v-${v.id}`,
           tipo: 'venta_contado',
-          monto: v.total,
+          monto: v.total, // Full amount for cash/others
           fecha: v.createdAt,
           descripcion: descripcion,
           referencia: v.folio,
-          metodoPago
-        }
+          metodoPago,
+          status: 'available'
+        }]
       })
 
       const abonosMapped: IngresoItem[] = (abonos || []).map(a => {
@@ -732,8 +776,10 @@ export default function MovimientosPage() {
   }, [filteredHistorial, gastos, pagosGastos, date, periodo])
 
   const resumenFinanciero = useMemo(() => {
-    // Calculate Income from Cash Sales + Abonos
-    const totalIngresos = filteredIngresos.reduce((acc, item) => acc + item.monto, 0)
+    // Calculate Income from Cash Sales + Abonos (Exclude pending Addi sales)
+    const totalIngresos = filteredIngresos
+      .filter(item => item.status !== 'pending')
+      .reduce((acc, item) => acc + item.monto, 0)
 
     // Calculate Expenses from Inventory Entries (Cost) + Registered Expenses
     const gastosInventario = filteredHistorial
@@ -766,6 +812,49 @@ export default function MovimientosPage() {
     setPaymentNote("")
     setSelectedMetodoPagoId(prev => prev ?? (metodosPago.length ? String(metodosPago[0].id) : null))
     setDetailsOpen(true)
+  }
+
+  const handleVentaClick = async (idStr: string | number) => {
+    console.log("handleVentaClick triggered with ID:", idStr)
+    // Check if it is a sale (starts with 'v-')
+    const id = String(idStr)
+    if (!id.startsWith('v-')) {
+      console.log("ID does not start with v-, ignoring")
+      return
+    }
+
+    // Handle suffixes like '-settlement'
+    const cleanId = id.replace('v-', '').split('-')[0]
+    const ventaId = Number(cleanId)
+    console.log("Parsed Venta ID:", ventaId, "Original:", idStr)
+
+    if (!ventaId) return
+
+    try {
+      toast({ title: "Cargando detalles...", duration: 1000 }) // Feedback to user immediately
+      const fullVenta = await VentaService.getById(ventaId)
+      console.log("Venta fetched:", fullVenta)
+
+      // Find metadata from the list to enrich (like payment method name which we already computed)
+      const listItem = movimientosIngresos.find(i => String(i.id) === idStr)
+      const enrichedVenta = {
+        ...fullVenta,
+        metodo_pago: fullVenta?.metodo_pago || { nombre: listItem?.metodoPago || 'Desconocido' },
+        usuario: fullVenta?.usuario || { nombre: 'Usuario' } // Fallback since we removed the join
+      }
+
+      if (fullVenta) {
+        console.log("Opening Dialog with:", enrichedVenta)
+        setSelectedVentaDetalle(enrichedVenta)
+        setOpenVentaDetalleDialog(true)
+      } else {
+        console.warn("No sale data returned")
+        toast({ title: "Error", description: "No se encontraron datos de la venta.", variant: "destructive" })
+      }
+    } catch (error) {
+      console.error("Error loading sale details", error)
+      toast({ title: "Error", description: "No se pudo cargar el detalle de la venta", variant: "destructive" })
+    }
   }
 
   const handleRegisterPayment = async () => {
@@ -2010,7 +2099,11 @@ export default function MovimientosPage() {
                     {movimientosIngresos.map((item) => (
                       <div
                         key={item.id}
-                        className="flex flex-col justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center"
+                        onClick={() => handleVentaClick(item.id)}
+                        className={cn(
+                          "flex flex-col justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center",
+                          String(item.id).startsWith('v-') && "cursor-pointer hover:border-emerald-200 hover:bg-emerald-50/10 active:scale-[0.99]"
+                        )}
                       >
                         <div className="flex flex-col gap-1">
                           <span className="font-semibold text-foreground">
@@ -2033,13 +2126,26 @@ export default function MovimientosPage() {
                             </Badge>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between gap-6 sm:justify-end">
-                          <span className="text-sm text-muted-foreground">
-                            {format(new Date(item.fecha), "PP p", { locale: es })}
-                          </span>
-                          <span className="text-lg font-bold text-emerald-600">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={cn(
+                            "text-lg font-bold",
+                            item.status === 'pending' ? "text-slate-400" : "text-emerald-600"
+                          )}>
                             +{currencyFormatter.format(item.monto)}
                           </span>
+                          <span className="text-sm text-muted-foreground text-right">
+                            {format(new Date(item.fecha), "PP p", { locale: es })}
+                          </span>
+                          {item.status === 'pending' && (
+                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">
+                              ⏳ Pendiente de liquidación
+                            </span>
+                          )}
+                          {item.id.toString().includes('settlement') && (
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100">
+                              ✅ Liquidación disponible
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2406,6 +2512,11 @@ export default function MovimientosPage() {
               </div>
             )}
           </TabsContent>
+          <VentaDetalleDialog
+            open={openVentaDetalleDialog}
+            onOpenChange={setOpenVentaDetalleDialog}
+            venta={selectedVentaDetalle}
+          />
         </Tabs >
       </div >
     </AdminSectionLayout >

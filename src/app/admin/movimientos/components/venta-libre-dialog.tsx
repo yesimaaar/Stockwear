@@ -322,6 +322,45 @@ export function VentaLibreDialog({ open, onOpenChange, onSuccess }: VentaLibreDi
                                                 )
                                             })}
                                         </div>
+                                        {/* Addi Feedback */}
+                                        {(() => {
+                                            const selectedId = field.value
+                                            const selectedMethod = metodosPago.find(m => String(m.id) === selectedId)
+                                            if (selectedMethod?.nombre.toLowerCase() === 'addi') {
+                                                const monto = form.getValues('monto') || 0
+                                                const comision = monto * 0.1071
+                                                const neto = monto - comision
+                                                const fechaLiqudacion = new Date()
+                                                fechaLiqudacion.setDate(fechaLiqudacion.getDate() + 7)
+
+                                                return (
+                                                    <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
+                                                        <p className="font-semibold flex items-center gap-2">
+                                                            <span className="text-xs bg-blue-200 dark:bg-blue-800 px-1.5 py-0.5 rounded text-blue-800 dark:text-blue-100">Info Addi</span>
+                                                        </p>
+                                                        <div className="mt-2 text-xs space-y-1 opacity-90">
+                                                            <p className="flex justify-between">
+                                                                <span>Venta bruta:</span>
+                                                                <span>{currencyFormatter.format(monto)}</span>
+                                                            </p>
+                                                            <p className="flex justify-between text-red-600 dark:text-red-400">
+                                                                <span>Comisión (10.71%):</span>
+                                                                <span>-{currencyFormatter.format(comision)}</span>
+                                                            </p>
+                                                            <div className="my-1 h-px bg-blue-200 dark:bg-blue-800" />
+                                                            <p className="flex justify-between font-medium">
+                                                                <span>Neto a recibir:</span>
+                                                                <span>{currencyFormatter.format(neto)}</span>
+                                                            </p>
+                                                            <p className="mt-2 text-[10px] text-blue-700 dark:text-blue-300">
+                                                                📅 Disponible el: {format(fechaLiqudacion, "PPP", { locale: es })}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            }
+                                            return null
+                                        })()}
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

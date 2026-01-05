@@ -226,7 +226,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
                         proveedor: String(row.Proveedor || ""),
                         color: String(row.Color || "").trim() || null,
                         imagen: null,
-                        estado: 'activo' as const
+                        estado: (String(row.Estado || "activo").toLowerCase() === "inactivo" ? "inactivo" : "activo") as const
                     }
 
                     let nuevoId: number | null = null

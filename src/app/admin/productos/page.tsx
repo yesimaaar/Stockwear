@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -776,6 +777,11 @@ export default function ProductosPage() {
     setFilteredProductos(resultados)
   }, [filters, productos, searchQuery])
 
+  // Reset page only when filters or search query change
+  useEffect(() => {
+    setPage(1)
+  }, [filters, searchQuery])
+
   useEffect(() => {
     const idParam = searchParams.get("id")
     if (idParam && filteredProductos.length > 0) {
@@ -785,11 +791,8 @@ export default function ProductosPage() {
         setExpanded(id)
         const index = filteredProductos.indexOf(target)
         setPage(Math.floor(index / pageSize) + 1)
-        return
       }
     }
-    setPage(1)
-    setExpanded(null)
   }, [filteredProductos, searchParams, pageSize])
 
   const productosConInfo = useMemo(() => {
@@ -1349,9 +1352,34 @@ export default function ProductosPage() {
                             )}
                           </TableCell>
                           <TableCell className="py-3">
-                            <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
-                              {producto.estado.toUpperCase()}
-                            </Badge>
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <Switch
+                                checked={producto.estado === "activo"}
+                                onCheckedChange={async (checked) => {
+                                  const nuevoEstado = checked ? "activo" : "inactivo"
+                                  // Optimistic update
+                                  setProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: nuevoEstado } : p))
+                                  setFilteredProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: nuevoEstado } : p))
+
+                                  try {
+                                    await ProductoService.update(producto.id, { estado: nuevoEstado })
+                                    toast({
+                                      title: `Producto ${nuevoEstado}`,
+                                      description: `El producto se ha marcado como ${nuevoEstado}.`
+                                    })
+                                  } catch (error) {
+                                    // Revert on error
+                                    setProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: producto.estado } : p))
+                                    setFilteredProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: producto.estado } : p))
+                                    toast({
+                                      title: "Error al actualizar estado",
+                                      variant: "destructive"
+                                    })
+                                  }
+                                }}
+                              />
+                              <span className="text-xs text-muted-foreground capitalize">{producto.estado}</span>
+                            </div>
                           </TableCell>
                           <TableCell className="py-3 text-right">
                             <div className="flex justify-end gap-2">
@@ -1431,9 +1459,34 @@ export default function ProductosPage() {
                                   </div>
                                   <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">Estado</span>
-                                    <Badge variant={producto.estado === "activo" ? "default" : "secondary"}>
-                                      {producto.estado.toUpperCase()}
-                                    </Badge>
+                                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                      <Switch
+                                        checked={producto.estado === "activo"}
+                                        onCheckedChange={async (checked) => {
+                                          const nuevoEstado = checked ? "activo" : "inactivo"
+                                          // Optimistic update
+                                          setProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: nuevoEstado } : p))
+                                          setFilteredProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: nuevoEstado } : p))
+
+                                          try {
+                                            await ProductoService.update(producto.id, { estado: nuevoEstado })
+                                            toast({
+                                              title: `Producto ${nuevoEstado}`,
+                                              description: `El producto se ha marcado como ${nuevoEstado}.`
+                                            })
+                                          } catch (error) {
+                                            // Revert on error
+                                            setProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: producto.estado } : p))
+                                            setFilteredProductos(prev => prev.map(p => p.id === producto.id ? { ...p, estado: producto.estado } : p))
+                                            toast({
+                                              title: "Error al actualizar estado",
+                                              variant: "destructive"
+                                            })
+                                          }
+                                        }}
+                                      />
+                                      <span className="text-xs text-muted-foreground capitalize">{producto.estado}</span>
+                                    </div>
                                   </div>
                                   <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">Stock total</span>

@@ -251,7 +251,7 @@ export function SalesWorkspace({
         if (!active) {
           return
         }
-        const activos = lista.filter((usuario) => usuario.rol === "empleado" && usuario.estado !== "inactivo")
+        const activos = lista.filter((usuario) => ["empleado", "admin", "propietario"].includes(usuario.rol) && usuario.estado !== "inactivo")
         setEmpleados(activos)
         setSelectedEmpleadoId((prev) => {
           if (prev && activos.some((empleado) => empleado.id === prev)) {
@@ -307,7 +307,7 @@ export function SalesWorkspace({
           console.log("loadData: Fetching user...")
           user = await AuthService.getCurrentUser()
           console.log("loadData: User fetched", user ? user.id : "null")
-          
+
           if (!user) {
             console.warn("loadData: No user found, aborting data load")
             return
@@ -322,7 +322,7 @@ export function SalesWorkspace({
           console.log("loadData: Fetching payment methods...")
           // Ensure defaults exist first
           await CajaService.ensureDefaults()
-          
+
           const metodos = await CajaService.getMetodosPago()
           console.log("loadData: Payment methods fetched", Array.isArray(metodos) ? metodos.length : "not array")
 

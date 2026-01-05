@@ -482,7 +482,7 @@ export function GlobalExcelActions() {
             descripcion: row.Descripcion,
             proveedor: row.Proveedor,
             color: row.Color || null,
-            estado: row.Estado || 'activo',
+            estado: (String(row.Estado || "activo").toLowerCase() === "inactivo" ? "inactivo" : "activo"),
             tienda_id: tiendaId,
             codigo: row.Codigo.toString()
           }

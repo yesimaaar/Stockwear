@@ -315,4 +315,70 @@ export class VentaService {
       detalles: detallesPorVenta.get(venta.id) || [],
     }))
   }
+
+  static async getById(id: number): Promise<any | null> {
+    const tiendaId = await getCurrentTiendaId()
+
+    // 1. Get Sale info (raw, no joins)
+    const { data: venta, error: ventaError } = await supabase
+      .from('ventas')
+      .select('*')
+      .eq('id', id)
+      .eq('tienda_id', tiendaId)
+      .single()
+
+    if (ventaError || !venta) {
+      console.error('Error al obtener venta (getById):', ventaError)
+      return null
+    }
+
+    // 1.5 Get Client info manually
+    let cliente = null
+    if (venta.cliente_id) {
+      const { data: c } = await supabase.from('clientes').select('*').eq('id', venta.cliente_id).single()
+      cliente = c
+    }
+
+    // 2. Get Details info (raw)
+    const { data: detallesRaw, error: detallesError } = await supabase
+      .from('ventasDetalle')
+      .select('*')
+      .eq('ventaId', venta.id)
+
+    if (detallesError) {
+      console.error('Error al obtener detalles raw:', detallesError)
+      return { ...venta, ventasDetalle: [] }
+    }
+
+    // 3. Enrich details manually to avoid relation issues
+    const detalles = await Promise.all((detallesRaw as any[]).map(async (d) => {
+      const { data: p } = await supabase.from('productos').select('nombre, codigo').eq('id', d.productoId).single()
+
+      let t = { nombre: '-' }
+      if (d.tallaId) {
+        const { data: tallad } = await supabase.from('tallas').select('nombre').eq('id', d.tallaId).single()
+        if (tallad) t = tallad
+      }
+
+      // Almacen defaults
+      let a = { nombre: '-' }
+      if (d.almacenId) {
+        const { data: almad } = await supabase.from('almacenes').select('nombre').eq('id', d.almacenId).single()
+        if (almad) a = almad
+      }
+
+      return {
+        ...d,
+        producto: p || { nombre: 'Producto desconocido', codigo: '' },
+        talla: t,
+        almacen: a
+      }
+    }))
+
+    return {
+      ...venta,
+      cliente,
+      ventasDetalle: detalles
+    }
+  }
 }
