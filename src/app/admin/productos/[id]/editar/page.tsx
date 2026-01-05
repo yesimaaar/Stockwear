@@ -447,6 +447,7 @@ export default function EditarProductoPage() {
                     id="marca"
                     value={formData.marca}
                     onChange={(event) => setFormData({ ...formData, marca: event.target.value })}
+                    placeholder="Nike, Adidas..."
                   />
                 </div>
                 <div className="space-y-2">
@@ -455,6 +456,7 @@ export default function EditarProductoPage() {
                     id="proveedor"
                     value={formData.proveedor}
                     onChange={(event) => setFormData({ ...formData, proveedor: event.target.value })}
+                    placeholder="Nombre del proveedor"
                   />
                 </div>
               </div>

@@ -1680,6 +1680,7 @@ export default function ProductosPage() {
                         id="editar-marca"
                         value={editForm.marca}
                         onChange={(event) => updateEditFormField("marca", event.target.value)}
+                        placeholder="Nike, Adidas..."
                       />
                     </div>
                     <div className="space-y-2">
@@ -1688,6 +1689,7 @@ export default function ProductosPage() {
                         id="editar-proveedor"
                         value={editForm.proveedor}
                         onChange={(event) => updateEditFormField("proveedor", event.target.value)}
+                        placeholder="Nombre del proveedor"
                       />
                     </div>
                     <div className="space-y-2">
@@ -2309,7 +2311,7 @@ export default function ProductosPage() {
                       id="nuevo-marca"
                       value={nuevoProducto.marca}
                       onChange={(event) => setNuevoProducto((prev) => ({ ...prev, marca: event.target.value }))}
-                      placeholder="Nike, Adidas, Puma..."
+                      placeholder="Nike, Adidas..."
                     />
                   </div>
                   <div className="space-y-2">
@@ -2318,7 +2320,7 @@ export default function ProductosPage() {
                       id="nuevo-proveedor"
                       value={nuevoProducto.proveedor}
                       onChange={(event) => setNuevoProducto((prev) => ({ ...prev, proveedor: event.target.value }))}
-                      placeholder="Nike, Adidas, Puma..."
+                      placeholder="Nombre del proveedor"
                     />
                   </div>
                   <div className="space-y-2">

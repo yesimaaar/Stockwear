@@ -342,7 +342,7 @@ export default function NuevoProductoPage() {
                     <Label htmlFor="proveedor">Proveedor</Label>
                     <Input
                       id="proveedor"
-                      placeholder="Nike, Adidas, Puma..."
+                      placeholder="Proveedor principal..."
                       value={formData.proveedor}
                       onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
                     />
