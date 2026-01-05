@@ -15,6 +15,7 @@ import {
   Edit,
   Trash2,
   X,
+  Filter,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -79,6 +80,16 @@ import {
   RadioGroupItem,
 } from "@/components/ui/radio-group"
 import { PRODUCT_COLORS } from "@/lib/colors"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import { Separator } from "@/components/ui/separator"
 
 type EstadoFiltro = "todos" | "activo" | "inactivo"
 type CategoriaFiltro = "todas" | string
@@ -86,6 +97,8 @@ type CategoriaFiltro = "todas" | string
 const getDefaultFiltros = () => ({
   estado: "todos" as EstadoFiltro,
   categoria: "todas" as CategoriaFiltro,
+  marca: "todas",
+  proveedor: "todos",
 })
 
 type Filtros = ReturnType<typeof getDefaultFiltros>
@@ -135,7 +148,7 @@ export default function ProductosPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [filters] = useState<Filtros>(getDefaultFiltros)
+  const [filters, setFilters] = useState<Filtros>(getDefaultFiltros)
   const [formOpen, setFormOpen] = useState(false)
   const [savingProducto, setSavingProducto] = useState(false)
   const [categorias, setCategorias] = useState<Categoria[]>([])
@@ -754,6 +767,14 @@ export default function ProductosPage() {
         return false
       }
 
+      if (filters.marca !== "todas" && producto.marca !== filters.marca) {
+        return false
+      }
+
+      if (filters.proveedor !== "todos" && producto.proveedor !== filters.proveedor) {
+        return false
+      }
+
       if (normalized.length === 0) {
         return true
       }
@@ -1220,6 +1241,18 @@ export default function ProductosPage() {
     }
   }, [expanded, page])
 
+  const uniqueMarcas = useMemo(() => {
+    const s = new Set<string>()
+    productos.forEach(p => { if (p.marca) s.add(p.marca) })
+    return Array.from(s).sort()
+  }, [productos])
+
+  const uniqueProveedores = useMemo(() => {
+    const s = new Set<string>()
+    productos.forEach(p => { if (p.proveedor) s.add(p.proveedor) })
+    return Array.from(s).sort()
+  }, [productos])
+
   return (
     <>
       <AdminSectionLayout
@@ -1280,11 +1313,118 @@ export default function ProductosPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Mostrando {mostrarDesde}-{mostrarHasta} de {productosConInfo.length} productos
-              </p>
-              <p className="text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Mostrando {mostrarDesde}-{mostrarHasta} de {productosConInfo.length} productos
+                </p>
+                <div className="h-4 w-px bg-border" />
+                 <Sheet>
+                   <SheetTrigger asChild>
+                     <Button variant="outline" size="sm" className="h-8 gap-2 border-dashed">
+                       <Filter className="h-3.5 w-3.5" />
+                       Filtros
+                       {(filters.estado !== "todos" || filters.categoria !== "todas" || filters.marca !== "todas" || filters.proveedor !== "todos") && (
+                          <Badge variant="secondary" className="ml-1 h-5 rounded-sm px-1 text-[10px] font-normal">
+                             Ativos
+                          </Badge>
+                       )}
+                     </Button>
+                   </SheetTrigger>
+                   <SheetContent side="right" className="w-full sm:max-w-md flex flex-col h-full">
+                      <SheetHeader>
+                        <SheetTitle>Filtros</SheetTitle>
+                        <SheetDescription>
+                          Refina la lista de productos
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div className="flex-1 overflow-y-auto py-6">
+                         <div className="grid gap-6 px-1">
+                           <div className="space-y-2">
+                              <h4 className="text-sm font-medium leading-none">Estado</h4>
+                              <div className="flex flex-wrap gap-2">
+                                 {["todos", "activo", "inactivo"].map((option) => (
+                                    <Badge
+                                      key={option}
+                                      variant={filters.estado === option ? "default" : "outline"}
+                                      className="cursor-pointer capitalize"
+                                      onClick={() => setFilters(prev => ({ ...prev, estado: option as EstadoFiltro }))}
+                                    >
+                                      {option}
+                                    </Badge>
+                                 ))}
+                              </div>
+                           </div>
+                           <Separator />
+                           <div className="space-y-2">
+                              <h4 className="text-sm font-medium leading-none">Categoría</h4>
+                              <Select
+                                  value={filters.categoria}
+                                  onValueChange={(value) => setFilters(prev => ({ ...prev, categoria: value as CategoriaFiltro }))}
+                              >
+                                  <SelectTrigger>
+                                     <SelectValue placeholder="Todas las categorías" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                     <SelectItem value="todas">Todas</SelectItem>
+                                     {categorias.map(c => (
+                                        <SelectItem key={c.id} value={c.nombre}>{c.nombre}</SelectItem>
+                                     ))}
+                                  </SelectContent>
+                              </Select>
+                           </div>
+                           <Separator />
+                           <div className="space-y-2">
+                              <h4 className="text-sm font-medium leading-none">Marca</h4>
+                               <Select
+                                  value={filters.marca}
+                                  onValueChange={(value) => setFilters(prev => ({ ...prev, marca: value }))}
+                               >
+                                  <SelectTrigger>
+                                     <SelectValue placeholder="Todas las marcas" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                     <SelectItem value="todas">Todas</SelectItem>
+                                      {uniqueMarcas.map(m => (
+                                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                                      ))}
+                                  </SelectContent>
+                               </Select>
+                           </div>
+                           <Separator />
+                           <div className="space-y-2">
+                              <h4 className="text-sm font-medium leading-none">Proveedor</h4>
+                               <Select
+                                  value={filters.proveedor}
+                                  onValueChange={(value) => setFilters(prev => ({ ...prev, proveedor: value }))}
+                               >
+                                  <SelectTrigger>
+                                     <SelectValue placeholder="Todos los proveedores" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                     <SelectItem value="todos">Todos</SelectItem>
+                                      {uniqueProveedores.map(p => (
+                                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                                      ))}
+                                  </SelectContent>
+                               </Select>
+                           </div>
+                         </div>
+                      </div>
+                      <SheetFooter className="mt-auto pt-4 border-t">
+                         <Button 
+                            variant="outline" 
+                            className="w-full sm:w-full"
+                            onClick={() => setFilters(getDefaultFiltros())}
+                            disabled={filters.estado === "todos" && filters.categoria === "todas" && filters.marca === "todas" && filters.proveedor === "todos"}
+                         >
+                            Limpiar filtros
+                         </Button>
+                      </SheetFooter>
+                   </SheetContent>
+                 </Sheet>
+              </div>
+              <p className="text-xs text-muted-foreground hidden sm:block">
                 Haz clic en un producto para ver el detalle por almacén y talla.
               </p>
             </div>
@@ -1297,6 +1437,7 @@ export default function ProductosPage() {
                     <TableHead>Producto</TableHead>
                     <TableHead>Categoría</TableHead>
                     <TableHead>Marca</TableHead>
+                    <TableHead>Proveedor</TableHead>
                     <TableHead>Precio</TableHead>
                     <TableHead>Stock total</TableHead>
                     <TableHead>En alerta</TableHead>
@@ -1344,6 +1485,9 @@ export default function ProductosPage() {
                           </TableCell>
                           <TableCell className="py-3">
                             <span className="text-sm text-muted-foreground">{producto.marca || "—"}</span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="text-sm text-muted-foreground">{producto.proveedor || "—"}</span>
                           </TableCell>
                           <TableCell className="py-3">
                             <span className="font-semibold text-primary">
