@@ -60,6 +60,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
                     Codigo: p.codigo,
                     Nombre: p.nombre,
                     Categoria: p.categoria,
+                    Marca: p.marca || "",
                     Color: p.color || "",
                     Precio: p.precio,
                     Costo: p.precio_base || 0,
@@ -84,6 +85,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
                 { wch: 15 }, // Codigo
                 { wch: max_width }, // Nombre
                 { wch: 20 }, // Categoria
+                { wch: 15 }, // Marca
                 { wch: 15 }, // Color
                 { wch: 12 }, // Precio
                 { wch: 12 }, // Costo
@@ -121,6 +123,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
                 Codigo: "EJEMPLO001",
                 Nombre: "Camiseta Básica Negra",
                 Categoria: "Camisetas",
+                Marca: "Nike",
                 Color: "Negro",
                 Precio: 45000,
                 Costo: 25000,
@@ -144,6 +147,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
             { wch: 15 }, // Codigo
             { wch: 25 }, // Nombre
             { wch: 15 }, // Categoria
+            { wch: 15 }, // Marca
             { wch: 15 }, // Color
             { wch: 10 }, // Precio
             { wch: 10 }, // Costo
@@ -224,9 +228,10 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
                         stockMinimo: Number(row.StockMinimo) || 0,
                         descripcion: String(row.Descripcion || ""),
                         proveedor: String(row.Proveedor || ""),
+                        marca: String(row.Marca || "").trim() || null,
                         color: String(row.Color || "").trim() || null,
                         imagen: null,
-                        estado: (String(row.Estado || "activo").toLowerCase() === "inactivo" ? "inactivo" : "activo") as const
+                        estado: (String(row.Estado || "activo").toLowerCase() === "inactivo" ? "inactivo" : "activo") as "activo" | "inactivo"
                     }
 
                     let nuevoId: number | null = null

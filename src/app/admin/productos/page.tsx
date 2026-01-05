@@ -98,6 +98,7 @@ const getDefaultNuevoProducto = () => ({
   precio_base: "",
   descuento: "0",
   proveedor: "",
+  marca: "",
   stockMinimo: "",
   descripcion: "",
   imagen: "",
@@ -247,6 +248,7 @@ export default function ProductosPage() {
     precio_base: String(producto.precio_base ?? 0),
     descuento: String(producto.descuento ?? 0),
     proveedor: producto.proveedor ?? "",
+    marca: producto.marca ?? "",
     stockMinimo: String(producto.stockMinimo),
     descripcion: producto.descripcion ?? "",
     imagen: producto.imagen ?? "",
@@ -335,6 +337,7 @@ export default function ProductosPage() {
       precio_base: Number(form.precio_base) || 0,
       descuento: Number.isNaN(descuento) ? 0 : descuento,
       proveedor: form.proveedor.trim() || null,
+      marca: form.marca.trim() || null,
       imagen: form.imagen.trim() || null,
       stockMinimo,
       color: form.color || null,
@@ -759,6 +762,7 @@ export default function ProductosPage() {
       const codigo = producto.codigo.toLowerCase()
       const categoria = producto.categoria.toLowerCase()
       const proveedor = (producto.proveedor ?? "").toLowerCase()
+      const marca = (producto.marca ?? "").toLowerCase()
       const coincideStock = producto.stockPorTalla.some((detalle) => {
         const almacen = (detalle.almacen ?? "").toLowerCase()
         const talla = (detalle.talla ?? "").toLowerCase()
@@ -770,6 +774,7 @@ export default function ProductosPage() {
         codigo.includes(normalized) ||
         categoria.includes(normalized) ||
         proveedor.includes(normalized) ||
+        marca.includes(normalized) ||
         coincideStock
       )
     })
@@ -1291,6 +1296,7 @@ export default function ProductosPage() {
                     <TableHead className="w-10" aria-label="Expandir" />
                     <TableHead>Producto</TableHead>
                     <TableHead>Categoría</TableHead>
+                    <TableHead>Marca</TableHead>
                     <TableHead>Precio</TableHead>
                     <TableHead>Stock total</TableHead>
                     <TableHead>En alerta</TableHead>
@@ -1335,6 +1341,9 @@ export default function ProductosPage() {
                           </TableCell>
                           <TableCell className="py-3">
                             <span className="text-sm text-muted-foreground">{producto.categoria}</span>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className="text-sm text-muted-foreground">{producto.marca || "—"}</span>
                           </TableCell>
                           <TableCell className="py-3">
                             <span className="font-semibold text-primary">
@@ -1664,6 +1673,14 @@ export default function ProductosPage() {
                           )}
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="editar-marca">Marca</Label>
+                      <Input
+                        id="editar-marca"
+                        value={editForm.marca}
+                        onChange={(event) => updateEditFormField("marca", event.target.value)}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="editar-proveedor">Proveedor</Label>
@@ -2285,6 +2302,15 @@ export default function ProductosPage() {
                         Crea una categoría desde la sección correspondiente antes de registrar nuevos productos.
                       </p>
                     )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nuevo-marca">Marca</Label>
+                    <Input
+                      id="nuevo-marca"
+                      value={nuevoProducto.marca}
+                      onChange={(event) => setNuevoProducto((prev) => ({ ...prev, marca: event.target.value }))}
+                      placeholder="Nike, Adidas, Puma..."
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="nuevo-proveedor">Proveedor</Label>

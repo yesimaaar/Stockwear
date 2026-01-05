@@ -26,6 +26,7 @@ interface FormState {
   precio_base: string;
   descuento: string;
   proveedor: string;
+  marca: string;
   stockMinimo: string;
   descripcion: string;
   imagen: string;
@@ -107,6 +108,7 @@ export default function EditarProductoPage() {
           precio_base: String(producto.precio_base ?? 0),
           descuento: String(producto.descuento ?? 0),
           proveedor: producto.proveedor ?? "",
+          marca: producto.marca ?? "",
           stockMinimo: String(producto.stockMinimo ?? 0),
           descripcion: producto.descripcion ?? "",
           imagen: producto.imagen ?? "",
@@ -176,6 +178,7 @@ export default function EditarProductoPage() {
         precio_base: Number(formData.precio_base) || 0,
         descuento: Number.isNaN(descuento) ? 0 : descuento,
         proveedor: formData.proveedor.trim() || null,
+        marca: formData.marca.trim() || null,
         imagen: formData.imagen.trim() || null,
         stockMinimo,
         estado: formData.estado
@@ -437,6 +440,14 @@ export default function EditarProductoPage() {
                       {categorias.length === 0 && <SelectItem value="" disabled>No hay categorías disponibles</SelectItem>}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="marca">Marca</Label>
+                  <Input
+                    id="marca"
+                    value={formData.marca}
+                    onChange={(event) => setFormData({ ...formData, marca: event.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="proveedor">Proveedor</Label>

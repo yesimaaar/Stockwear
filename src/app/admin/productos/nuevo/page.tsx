@@ -34,6 +34,7 @@ export default function NuevoProductoPage() {
     precio_base: "",
     descuento: "0",
     proveedor: "",
+    marca: "",
     stockMinimo: "",
     descripcion: "",
     imagen: "",
@@ -122,6 +123,7 @@ export default function NuevoProductoPage() {
         precio_base: Number(formData.precio_base) || 0,
         descuento: Number.isNaN(descuento) ? 0 : descuento,
         proveedor: formData.proveedor.trim() || null,
+        marca: formData.marca.trim() || null,
         imagen: formData.imagen.trim() || null,
         color: null,
         stockMinimo,
@@ -326,6 +328,15 @@ export default function NuevoProductoPage() {
                         Crea una categoría en el panel correspondiente antes de registrar productos.
                       </p>
                     )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="marca">Marca</Label>
+                    <Input
+                      id="marca"
+                      placeholder="Nike, Adidas, Puma..."
+                      value={formData.marca}
+                      onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="proveedor">Proveedor</Label>

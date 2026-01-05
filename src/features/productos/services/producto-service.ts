@@ -45,6 +45,7 @@ export type ProductoRow = {
   precio_base?: number | null
   descuento: number
   proveedor: string | null
+  marca: string | null
   imagen: string | null
   color: string | null
   stockMinimo: number
@@ -93,6 +94,7 @@ export const PRODUCTO_SELECT = `
   precio_base,
   descuento,
   proveedor,
+  marca,
   imagen,
   color,
   stockMinimo,

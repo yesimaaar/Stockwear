@@ -32,6 +32,7 @@ export interface Producto {
   precio_base?: number | null
   descuento: number
   proveedor: string | null
+  marca: string | null
   imagen: string | null
   color: string | null
   stockMinimo: number
@@ -172,6 +173,8 @@ export interface VentaDetalle {
   ventaId: number
   productoId: number
   stockId: number
+  tallaId?: number | null
+  almacenId?: number | null
   cantidad: number
   precioUnitario: number
   descuento: number

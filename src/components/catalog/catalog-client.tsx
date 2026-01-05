@@ -46,9 +46,9 @@ interface FilterContentProps {
     setPriceRange: (val: [number, number]) => void
     minPrice: number
     maxPrice: number
-    allProviders: string[]
-    selectedProviders: string[]
-    setSelectedProviders: React.Dispatch<React.SetStateAction<string[]>>
+    allBrands: string[]
+    selectedBrands: string[]
+    setSelectedBrands: React.Dispatch<React.SetStateAction<string[]>>
     hasActiveFilters: boolean
     clearFilters: () => void
 }
@@ -67,9 +67,9 @@ function FilterContent({
     setPriceRange,
     minPrice,
     maxPrice,
-    allProviders,
-    selectedProviders,
-    setSelectedProviders,
+    allBrands,
+    selectedBrands,
+    setSelectedBrands,
     hasActiveFilters,
     clearFilters
 }: FilterContentProps) {
@@ -203,30 +203,30 @@ function FilterContent({
             <Separator />
 
             <div className="space-y-3">
-                <h4 className="text-sm font-medium text-muted-foreground">Marcas / Proveedores</h4>
+                <h4 className="text-sm font-medium text-muted-foreground">Marcas</h4>
                 <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-border">
-                    {allProviders.length > 0 ? (
-                        allProviders.map((provider) => (
-                            <div key={provider} className="flex items-center space-x-2">
+                    {allBrands.length > 0 ? (
+                        allBrands.map((brand) => (
+                            <div key={brand} className="flex items-center space-x-2">
                                 <Checkbox 
-                                    id={`provider-${provider}`} 
-                                    checked={selectedProviders.includes(provider)}
+                                    id={`brand-${brand}`} 
+                                    checked={selectedBrands.includes(brand)}
                                     onCheckedChange={(checked) => {
-                                        setSelectedProviders(prev => 
-                                            checked ? [...prev, provider] : prev.filter(p => p !== provider)
+                                        setSelectedBrands(prev => 
+                                            checked ? [...prev, brand] : prev.filter(b => b !== brand)
                                         )
                                     }}
                                 />
                                 <Label 
-                                    htmlFor={`provider-${provider}`}
+                                    htmlFor={`brand-${brand}`}
                                     className="text-sm font-normal cursor-pointer leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                 >
-                                    {provider}
+                                    {brand}
                                 </Label>
                             </div>
                         ))
                     ) : (
-                        <p className="text-xs text-muted-foreground">Sin proveedores.</p>
+                        <p className="text-xs text-muted-foreground">Sin marcas.</p>
                     )}
                 </div>
             </div>
@@ -239,7 +239,7 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
     const [selectedColors, setSelectedColors] = useState<string[]>([])
     const [selectedSizes, setSelectedSizes] = useState<string[]>([])
-    const [selectedProviders, setSelectedProviders] = useState<string[]>([])
+    const [selectedBrands, setSelectedBrands] = useState<string[]>([])
     const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000000])
 
     const { setStoreScope } = useCart()
@@ -250,20 +250,20 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
         }
     }, [storeSlug, setStoreScope])
 
-    const { allSizes, allProviders, allColors, minPrice, maxPrice } = useMemo(() => {
+    const { allSizes, allBrands, allColors, minPrice, maxPrice } = useMemo(() => {
         const sizes = new Set<string>()
-        const providers = new Set<string>()
+        const brands = new Set<string>()
         const colors = new Set<string>()
         let min = Infinity
         let max = -Infinity
 
-        if (initialProducts.length === 0) return { allSizes: [], allProviders: [], allColors: [], minPrice: 0, maxPrice: 1000 }
+        if (initialProducts.length === 0) return { allSizes: [], allBrands: [], allColors: [], minPrice: 0, maxPrice: 1000 }
 
         initialProducts.forEach(p => {
             p.stockPorTalla.forEach(s => {
                 if (s.talla && s.talla !== 'none') sizes.add(s.talla)
             })
-            if (p.proveedor) providers.add(p.proveedor)
+            if (p.marca) brands.add(p.marca)
             if (p.color) colors.add(p.color)
             if (p.precio < min) min = p.precio
             if (p.precio > max) max = p.precio
@@ -276,7 +276,7 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                 if (!isNaN(numA) && !isNaN(numB)) return numA - numB
                 return a.localeCompare(b)
             }),
-            allProviders: Array.from(providers).sort(),
+            allBrands: Array.from(brands).sort(),
             allColors: Array.from(colors).sort(),
             minPrice: min === Infinity ? 0 : min,
             maxPrice: max === -Infinity ? 1000 : max
@@ -301,13 +301,13 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
             
             const matchesSize = selectedSizes.length === 0 || product.stockPorTalla.some(s => selectedSizes.includes(s.talla))
             
-            const matchesProvider = selectedProviders.length === 0 || (product.proveedor && selectedProviders.includes(product.proveedor))
+            const matchesBrand = selectedBrands.length === 0 || (product.marca && selectedBrands.includes(product.marca))
 
             const matchesColor = selectedColors.length === 0 || (product.color && selectedColors.includes(product.color))
 
-            return matchesSearch && matchesCategory && matchesPrice && matchesSize && matchesProvider && matchesColor
+            return matchesSearch && matchesCategory && matchesPrice && matchesSize && matchesBrand && matchesColor
         })
-    }, [initialProducts, searchQuery, selectedCategory, priceRange, selectedSizes, selectedProviders, selectedColors])
+    }, [initialProducts, searchQuery, selectedCategory, priceRange, selectedSizes, selectedBrands, selectedColors])
 
     const numberFormatter = new Intl.NumberFormat("es-MX")
     const displayName = storeName ?? "StockWear"
@@ -317,12 +317,12 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
         setSearchQuery("")
         setSelectedCategory(null)
         setSelectedSizes([])
-        setSelectedProviders([])
+        setSelectedBrands([])
         setSelectedColors([])
         setPriceRange([minPrice, maxPrice])
     }
 
-    const hasActiveFilters = searchQuery || selectedCategory || selectedSizes.length > 0 || selectedProviders.length > 0 || selectedColors.length > 0 || priceRange[0] > minPrice || priceRange[1] < maxPrice
+    const hasActiveFilters = searchQuery || selectedCategory || selectedSizes.length > 0 || selectedBrands.length > 0 || selectedColors.length > 0 || priceRange[0] > minPrice || priceRange[1] < maxPrice
 
     return (
         <main className="relative mx-auto flex w-full max-w-7xl flex-col px-4 py-8 lg:px-8">
@@ -374,10 +374,10 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                                     setPriceRange={setPriceRange}
                                     minPrice={minPrice}
                                     maxPrice={maxPrice}
-                                    allProviders={allProviders}
-                                    selectedProviders={selectedProviders}
-                                    setSelectedProviders={setSelectedProviders}
-                                    hasActiveFilters={!!hasActiveFilters}
+                                    allBrands={allBrands}
+                                    selectedBrands={selectedBrands}
+                                    setSelectedBrands={setSelectedBrands}
+                                    hasActiveFilters={hasActiveFilters}
                                     clearFilters={clearFilters}
                                 />
                             </SheetContent>
@@ -416,9 +416,9 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                             setPriceRange={setPriceRange}
                             minPrice={minPrice}
                             maxPrice={maxPrice}
-                            allProviders={allProviders}
-                            selectedProviders={selectedProviders}
-                            setSelectedProviders={setSelectedProviders}
+                            allBrands={allBrands}
+                            selectedBrands={selectedBrands}
+                            setSelectedBrands={setSelectedBrands}
                             hasActiveFilters={!!hasActiveFilters}
                             clearFilters={clearFilters}
                         />

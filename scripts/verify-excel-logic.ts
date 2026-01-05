@@ -17,6 +17,7 @@ type Product = {
     stockMinimo: number;
     descripcion: string | null;
     proveedor: string | null;
+    marca: string | null;
     estado: string;
     stock: Stock[];
 };
@@ -52,6 +53,7 @@ function transformToExcelParams(productos: Product[]) {
             Codigo: p.codigo,
             Nombre: p.nombre,
             Categoria: p.categoria?.nombre || '',
+            Marca: p.marca || '',
             Color: p.color || "",
             Precio: p.precio,
             Costo: p.precio_base || 0,
@@ -74,6 +76,7 @@ const mockData: Product[] = [
         codigo: "EJEMPLO001",
         nombre: "Camiseta Básica Negra",
         categoria: { nombre: "Camisetas" },
+        marca: "Nike",
         color: "Negro",
         precio: 45000,
         precio_base: 25000,

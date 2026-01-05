@@ -79,7 +79,9 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
               {product.nombre ?? product.codigo ?? "Producto"}
             </p>
           </div>
-          <p className="text-[10px] sm:text-xs text-muted-foreground">{product.categoria || "General"}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground">
+            {product.marca ? `${product.marca} • ` : ""}{product.categoria || "General"}
+          </p>
         </div>
 
         <div className="space-y-2 sm:space-y-3">
