@@ -263,16 +263,16 @@ export async function GET() {
         const seleccionados = new Set<number>()
 
         for (const entrada of ordenarVentas(ventasPorProductoMes)) {
-            if (combinados.length >= 4) break
+            if (combinados.length >= 20) break
             seleccionados.add(entrada[0])
             combinados.push(entrada)
         }
 
-        if (combinados.length < 4) {
+        if (combinados.length < 20) {
             for (const entrada of ordenarVentas(ventasPorProductoHistorico)) {
                 if (seleccionados.has(entrada[0])) continue
                 combinados.push(entrada)
-                if (combinados.length >= 4) break
+                if (combinados.length >= 20) break
             }
         }
 
@@ -281,7 +281,7 @@ export async function GET() {
 
         const topProducts = Array.from(ventasParaDestacados.entries())
             .sort((a, b) => b[1].cantidad - a[1].cantidad || b[1].total - a[1].total)
-            .slice(0, 4)
+            .slice(0, 20)
             .map(([productoId, stats], index): HighlightProduct => {
                 const productInfo = productMap.get(productoId)
                 return {
@@ -305,7 +305,7 @@ export async function GET() {
             .slice()
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .filter(p => !topProductIds.has(p.id))
-            .slice(0, 4)
+            .slice(0, 20)
             .map((producto, index) => formatRecent(producto, index))
 
         const destacados = [...topProducts, ...newProducts]

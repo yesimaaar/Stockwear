@@ -124,6 +124,7 @@ export function SalesWorkspace({
   const { toast } = useToast()
   const [busqueda, setBusqueda] = useState(initialPreviewState?.searchTerm ?? "")
   const [buscando, setBuscando] = useState(false)
+  const [visibleHighlights, setVisibleHighlights] = useState(8)
   const [productosEncontrados, setProductosEncontrados] = useState<ProductoConStock[]>(initialPreviewState?.productos ?? [])
   const [lineas, setLineas] = useState<LineaVentaForm[]>(initialPreviewState?.lineas ?? [])
   const [registrando, setRegistrando] = useState(false)
@@ -1275,7 +1276,7 @@ export function SalesWorkspace({
                 </div>
               </header>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {highlights.destacados.map((producto) => (
+                {highlights.destacados.slice(0, visibleHighlights).map((producto) => (
                   <HighlightProductCard
                     key={`destacado-${producto.id}`}
                     producto={producto}
@@ -1283,6 +1284,17 @@ export function SalesWorkspace({
                   />
                 ))}
               </div>
+              {highlights.destacados.length > visibleHighlights && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVisibleHighlights(prev => prev + 12)}
+                  >
+                    Ver más productos
+                  </Button>
+                </div>
+              )}
             </section>
           </div>
         ) : (

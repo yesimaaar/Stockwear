@@ -53,6 +53,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
           Codigo: p.codigo,
           Nombre: p.nombre,
           Categoria: p.categoria,
+          Color: p.color || "",
           Precio: p.precio,
           Costo: p.precio_base || 0,
           Descuento: p.descuento || 0,
@@ -61,7 +62,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
           Proveedor: p.proveedor || "",
           StockTotal: p.stockTotal, // Informational only
           CantidadTallas: stockPorTallaMap.size,
-          StockInicial: detalleStock
+          Talla: detalleStock
         }
       })
 
@@ -75,6 +76,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
         { wch: 15 }, // Codigo
         { wch: max_width }, // Nombre
         { wch: 20 }, // Categoria
+        { wch: 15 }, // Color
         { wch: 12 }, // Precio
         { wch: 12 }, // Costo
         { wch: 10 }, // Descuento
@@ -83,7 +85,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
         { wch: 20 }, // Proveedor
         { wch: 12 }, // StockTotal
         { wch: 15 }, // CantidadTallas
-        { wch: 30 }, // StockInicial
+        { wch: 30 }, // Talla
       ]
 
       XLSX.writeFile(wb, `Inventario_Stockwear_${new Date().toISOString().split('T')[0]}.xlsx`)
@@ -110,6 +112,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
         Codigo: "EJEMPLO001",
         Nombre: "Camiseta Básica Negra",
         Categoria: "Camisetas",
+        Color: "Negro",
         Precio: 45000,
         Costo: 25000,
         Descuento: 0,
@@ -119,7 +122,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
         StockTotal: 23,
         CantidadTallas: 3,
         Almacen: "Principal",
-        StockInicial: "38 (10), 40 (5), 42 (8)"
+        Talla: "38 (10), 40 (5), 42 (8)"
       }
     ]
     
@@ -132,6 +135,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
       { wch: 15 }, // Codigo
       { wch: 25 }, // Nombre
       { wch: 15 }, // Categoria
+      { wch: 15 }, // Color
       { wch: 10 }, // Precio
       { wch: 10 }, // Costo
       { wch: 10 }, // Descuento
@@ -141,7 +145,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
       { wch: 12 }, // StockTotal
       { wch: 15 }, // CantidadTallas
       { wch: 15 }, // Almacen
-      { wch: 30 }, // StockInicial
+      { wch: 30 }, // Talla
     ]
 
     XLSX.writeFile(wb, "Plantilla_Importacion_Productos.xlsx")
@@ -211,6 +215,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
             stockMinimo: Number(row.StockMinimo) || 0,
             descripcion: String(row.Descripcion || ""),
             proveedor: String(row.Proveedor || ""),
+            color: String(row.Color || "").trim() || null,
             imagen: null,
             estado: 'activo' as const
           }
@@ -231,7 +236,7 @@ export function ExcelActions({ onSuccess }: ExcelActionsProps) {
           }
 
           // Process Stock if product created
-          const stockStr = String(row.StockInicial || row.DetalleTallas || "").trim()
+          const stockStr = String(row.Talla || row.StockInicial || row.DetalleTallas || "").trim()
           if (nuevoId && stockStr) {
              const almacenNombre = String(row.Almacen || "").trim()
              let almacenId: number | null = null

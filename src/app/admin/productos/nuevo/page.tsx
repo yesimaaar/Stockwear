@@ -123,6 +123,7 @@ export default function NuevoProductoPage() {
         descuento: Number.isNaN(descuento) ? 0 : descuento,
         proveedor: formData.proveedor.trim() || null,
         imagen: formData.imagen.trim() || null,
+        color: null,
         stockMinimo,
         estado: "activo" as const,
       }

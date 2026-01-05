@@ -28,7 +28,7 @@ export const CajaService = {
                 nombre: row.nombre,
                 tipo: row.tipo,
                 estado: row.estado,
-                comisionPorcentaje: row.comision_porcentaje
+                comisionPorcentaje: 0
             }))
         } catch (err) {
             console.error("CajaService.getMetodosPago: Unexpected error", err)
@@ -55,10 +55,10 @@ export const CajaService = {
             
             // Use types compatible with MetodoPago interface: 'efectivo' | 'digital' | 'banco' | 'otro'
             const defaults = [
-                { nombre: 'Efectivo', tipo: 'efectivo', estado: 'activo', comision_porcentaje: 0 },
-                { nombre: 'Tarjeta de Crédito', tipo: 'banco', estado: 'activo', comision_porcentaje: 0 },
-                { nombre: 'Transferencia', tipo: 'banco', estado: 'activo', comision_porcentaje: 0 },
-                { nombre: 'Addi', tipo: 'otro', estado: 'activo', comision_porcentaje: 0 }
+                { nombre: 'Efectivo', tipo: 'efectivo', estado: 'activo' },
+                { nombre: 'Tarjeta de Crédito', tipo: 'banco', estado: 'activo' },
+                { nombre: 'Transferencia', tipo: 'banco', estado: 'activo' },
+                { nombre: 'Addi', tipo: 'otro', estado: 'activo' }
             ]
 
             for (const def of defaults) {
