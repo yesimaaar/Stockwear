@@ -133,6 +133,7 @@ export interface MetodoPago {
   nombre: string
   tipo: 'efectivo' | 'digital' | 'banco' | 'otro'
   estado: EstadoRegistro
+  comisionPorcentaje?: number
 }
 
 export interface CajaSesion {

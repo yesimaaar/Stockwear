@@ -38,6 +38,8 @@ export function PaymentMethodSelector({
       {methods.map((method) => {
         const Icon = getIcon(method.nombre)
         const isSelected = String(method.id) === selectedMethodId
+        // @ts-ignore
+        const comision = method.comisionPorcentaje
 
         return (
           <Button
@@ -45,14 +47,19 @@ export function PaymentMethodSelector({
             type="button"
             variant={isSelected ? "default" : "outline"}
             className={cn(
-              "h-auto flex-col items-center justify-center gap-2 py-3 text-xs sm:flex-row sm:justify-start sm:text-sm",
+              "h-auto flex-col items-center justify-center gap-2 py-3 text-xs sm:flex-row sm:justify-start sm:text-sm relative",
               isSelected ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
             )}
             onClick={() => onSelect(String(method.id))}
             disabled={disabled}
           >
             <Icon className="h-4 w-4" />
-            <span>{method.nombre}</span>
+            <div className="flex flex-col items-start">
+              <span>{method.nombre}</span>
+              {comision ? (
+                <span className="text-[10px] opacity-80">Comisión: {comision}%</span>
+              ) : null}
+            </div>
             {isSelected && <Check className="ml-auto h-3 w-3 hidden sm:block" />}
           </Button>
         )

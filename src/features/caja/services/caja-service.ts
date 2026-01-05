@@ -4,22 +4,79 @@ import type { CajaSesion, MetodoPago } from "@/lib/types"
 
 export const CajaService = {
     async getMetodosPago(): Promise<MetodoPago[]> {
-        const tiendaId = await getCurrentTiendaId()
-        const { data, error } = await supabase
-            .from("metodos_pago")
-            .select("*")
-            .eq("tienda_id", tiendaId)
-            .eq("estado", "activo")
-            .order("id")
+        try {
+            const tiendaId = await getCurrentTiendaId()
+            console.log("CajaService.getMetodosPago: Fetching for store", tiendaId)
+            
+            const { data, error } = await supabase
+                .from("metodos_pago")
+                .select("*")
+                .eq("tienda_id", tiendaId)
+                .eq("estado", "activo")
+                .order("id")
 
-        if (error) throw error
-        return (data || []).map((row) => ({
-            id: row.id,
-            tiendaId: row.tienda_id,
-            nombre: row.nombre,
-            tipo: row.tipo,
-            estado: row.estado,
-        }))
+            if (error) {
+                console.error("CajaService.getMetodosPago: Error fetching", error)
+                throw error
+            }
+            
+            console.log("CajaService.getMetodosPago: Found", data?.length || 0, "methods")
+            
+            return (data || []).map((row) => ({
+                id: row.id,
+                tiendaId: row.tienda_id,
+                nombre: row.nombre,
+                tipo: row.tipo,
+                estado: row.estado,
+                comisionPorcentaje: row.comision_porcentaje
+            }))
+        } catch (err) {
+            console.error("CajaService.getMetodosPago: Unexpected error", err)
+            return []
+        }
+    },
+
+    async ensureDefaults(): Promise<void> {
+        try {
+            const tiendaId = await getCurrentTiendaId()
+            console.log("CajaService.ensureDefaults: Checking defaults for store", tiendaId)
+            
+            const { data: existing, error: fetchError } = await supabase
+                .from("metodos_pago")
+                .select("nombre")
+                .eq("tienda_id", tiendaId)
+            
+            if (fetchError) {
+                console.error("CajaService.ensureDefaults: Error checking existing", fetchError)
+                return
+            }
+            
+            const existingNames = new Set(existing?.map(e => e.nombre) || [])
+            
+            // Use types compatible with MetodoPago interface: 'efectivo' | 'digital' | 'banco' | 'otro'
+            const defaults = [
+                { nombre: 'Efectivo', tipo: 'efectivo', estado: 'activo', comision_porcentaje: 0 },
+                { nombre: 'Tarjeta de Crédito', tipo: 'banco', estado: 'activo', comision_porcentaje: 0 },
+                { nombre: 'Transferencia', tipo: 'banco', estado: 'activo', comision_porcentaje: 0 },
+                { nombre: 'Addi', tipo: 'otro', estado: 'activo', comision_porcentaje: 0 }
+            ]
+
+            for (const def of defaults) {
+                if (!existingNames.has(def.nombre)) {
+                    console.log("CajaService.ensureDefaults: Inserting", def.nombre)
+                    const { error: insertError } = await supabase.from("metodos_pago").insert({
+                        tienda_id: tiendaId,
+                        ...def
+                    })
+                    
+                    if (insertError) {
+                        console.error("CajaService.ensureDefaults: Error inserting", def.nombre, insertError)
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error ensuring default payment methods:", error)
+        }
     },
 
     async getSesionActual(usuarioId: string): Promise<CajaSesion | null> {

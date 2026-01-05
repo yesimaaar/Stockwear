@@ -319,6 +319,9 @@ export function SalesWorkspace({
         // 2. Get Payment Methods
         try {
           console.log("loadData: Fetching payment methods...")
+          // Ensure defaults exist first
+          await CajaService.ensureDefaults()
+          
           const metodos = await CajaService.getMetodosPago()
           console.log("loadData: Payment methods fetched", Array.isArray(metodos) ? metodos.length : "not array")
 
@@ -654,6 +657,17 @@ export function SalesWorkspace({
               onSelect={setSelectedMetodoPagoId}
               disabled={opciones.length === 0}
             />
+            {(() => {
+              const selected = metodosPago.find(m => String(m.id) === selectedMetodoPagoId)
+              if (selected?.comisionPorcentaje) {
+                return (
+                  <div className="p-2 rounded-md bg-blue-50 text-blue-700 text-xs border border-blue-100">
+                    <p>ℹ️ Este método aplica una comisión del <strong>{selected.comisionPorcentaje}%</strong>.</p>
+                  </div>
+                )
+              }
+              return null
+            })()}
           </div>
         )}
 
