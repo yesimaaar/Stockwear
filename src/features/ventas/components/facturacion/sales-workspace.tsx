@@ -1546,8 +1546,8 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
               </div>
             ) : stockError ? (
               <p className="text-center text-xs text-destructive">{stockError}</p>
-            ) : !hasAvailableStock ? (
-              <p className="text-center text-xs text-muted-foreground">Agotado</p>
+            ) : tallaGroups.length === 0 ? (
+              <p className="text-center text-xs text-muted-foreground">Sin stock configurado</p>
             ) : (
               <>
                 <div className="flex flex-wrap gap-1.5">

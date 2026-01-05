@@ -2512,6 +2512,10 @@ export default function MovimientosPage() {
             open={openVentaDetalleDialog}
             onOpenChange={setOpenVentaDetalleDialog}
             venta={selectedVentaDetalle}
+            onSuccess={() => {
+              loadIngresos()
+              loadHistorial()
+            }}
           />
         </Tabs >
       </div >

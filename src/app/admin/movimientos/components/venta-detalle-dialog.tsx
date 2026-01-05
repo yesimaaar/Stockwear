@@ -5,6 +5,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogFooter,
 } from "@/components/ui/dialog"
 import {
     Table,
@@ -17,12 +18,29 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { User, Calendar, CreditCard, UserCircle, Receipt } from "lucide-react"
+import { User, Calendar, CreditCard, UserCircle, Receipt, Trash2, Loader2 } from "lucide-react"
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { VentaService } from "@/features/ventas/services/venta-service"
+import { supabase } from "@/lib/supabase"
+import { useToast } from "@/hooks/use-toast"
 
 interface VentaDetalleDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     venta: any | null
+    onSuccess?: () => void
 }
 
 const currencyFormatter = new Intl.NumberFormat("es-CO", {
@@ -31,9 +49,39 @@ const currencyFormatter = new Intl.NumberFormat("es-CO", {
     maximumFractionDigits: 0,
 })
 
-export function VentaDetalleDialog({ open, onOpenChange, venta }: VentaDetalleDialogProps) {
+export function VentaDetalleDialog({ open, onOpenChange, venta, onSuccess }: VentaDetalleDialogProps) {
+    const { toast } = useToast()
+    const [isDeleting, setIsDeleting] = useState(false)
+
     console.log("VentaDetalleDialog rendering. Open:", open, "HasVenta:", !!venta)
     if (!venta) return null
+
+    const handleUndo = async () => {
+        if (!venta) return
+        setIsDeleting(true)
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) throw new Error("No hay sesión activa")
+
+            await VentaService.anularVenta(venta.id, user.id)
+            
+            toast({
+                title: "Venta anulada",
+                description: "La venta ha sido anulada y el stock restaurado.",
+            })
+            onOpenChange(false)
+            onSuccess?.()
+        } catch (error: any) {
+            console.error("Error anular venta", error)
+            toast({
+                title: "Error",
+                description: error.message || "No se pudo anular la venta.",
+                variant: "destructive"
+            })
+        } finally {
+            setIsDeleting(false)
+        }
+    }
 
     const isAddi = venta.metodo_pago?.nombre?.toLowerCase() === 'addi'
     const comisionAddi = isAddi ? venta.total * 0.1071 : 0
@@ -178,6 +226,35 @@ export function VentaDetalleDialog({ open, onOpenChange, venta }: VentaDetalleDi
                             <span>{currencyFormatter.format(venta.total)}</span>
                         </div>
                     </div>
+
+                    <DialogFooter className="sm:justify-between gap-2">
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="sm" disabled={isDeleting}>
+                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                    Deshacer Venta
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Esta acción anulará la venta #{venta.folio} y devolverá los productos al inventario.
+                                        Esta acción no se puede deshacer.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleUndo} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                        {isDeleting ? "Anulando..." : "Sí, anular venta"}
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                        <Button variant="outline" onClick={() => onOpenChange(false)}>
+                            Cerrar
+                        </Button>
+                    </DialogFooter>
 
                 </div>
             </DialogContent>

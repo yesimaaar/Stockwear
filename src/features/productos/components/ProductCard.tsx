@@ -18,14 +18,12 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
       if (!item.talla) return
       const current = map.get(item.talla) || { total: 0, warehouses: [] }
 
+      current.total += item.cantidad
       if (item.cantidad > 0) {
-        current.total += item.cantidad
         current.warehouses.push({ name: item.almacen || "Almacén", qty: item.cantidad })
       }
 
-      if (current.total > 0) {
-        map.set(item.talla, current)
-      }
+      map.set(item.talla, current)
     })
 
     return Array.from(map.entries()).sort((a, b) => {
@@ -92,12 +90,18 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
           <div className="min-h-[36px] sm:min-h-[44px]">
             {hasStock ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-1.5">
-                {stockBySize.map(([size]) => (
+                {stockBySize.map(([size, data]) => (
                   <Button
                     key={size}
                     variant="outline"
                     size="sm"
-                    className="h-8 sm:h-9 w-full p-0 text-[10px] sm:text-xs font-medium hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                    disabled={data.total <= 0}
+                    className={cn(
+                      "h-8 sm:h-9 w-full p-0 text-[10px] sm:text-xs font-medium",
+                      data.total > 0
+                        ? "hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                        : "opacity-50 cursor-not-allowed bg-muted text-muted-foreground"
+                    )}
                     onClick={() => onAdd(size)}
                   >
                     {size}

@@ -124,6 +124,8 @@ export class VentaService {
         ventaId: 0, // se ajustará tras crear la venta
         productoId: stockRow.productoId,
         stockId: stockRow.id,
+        tallaId: stockRow.tallaId,
+        almacenId: stockRow.almacenId,
         cantidad: item.cantidad,
         precioUnitario,
         descuento,
@@ -367,16 +369,28 @@ export class VentaService {
     const detalles = await Promise.all((detallesRaw as any[]).map(async (d) => {
       const { data: p } = await supabase.from('productos').select('nombre, codigo').eq('id', d.productoId).single()
 
+      let tallaId = d.tallaId
+      let almacenId = d.almacenId
+
+      // Fallback: try to recover from stock table if missing
+      if (!tallaId && d.stockId) {
+        const { data: stockData } = await supabase.from('stock').select('tallaId, almacenId').eq('id', d.stockId).single()
+        if (stockData) {
+          tallaId = stockData.tallaId
+          almacenId = almacenId || stockData.almacenId
+        }
+      }
+
       let t = { nombre: '-' }
-      if (d.tallaId) {
-        const { data: tallad } = await supabase.from('tallas').select('nombre').eq('id', d.tallaId).single()
+      if (tallaId) {
+        const { data: tallad } = await supabase.from('tallas').select('nombre').eq('id', tallaId).single()
         if (tallad) t = tallad
       }
 
       // Almacen defaults
       let a = { nombre: '-' }
-      if (d.almacenId) {
-        const { data: almad } = await supabase.from('almacenes').select('nombre').eq('id', d.almacenId).single()
+      if (almacenId) {
+        const { data: almad } = await supabase.from('almacenes').select('nombre').eq('id', almacenId).single()
         if (almad) a = almad
       }
 
@@ -394,5 +408,66 @@ export class VentaService {
       usuario,
       ventasDetalle: detalles
     }
+  }
+
+  static async anularVenta(ventaId: number, usuarioId: string): Promise<void> {
+    const tiendaId = await getCurrentTiendaId()
+
+    // 1. Get details
+    const { data: detalles, error: detallesError } = await supabase
+      .from('ventasDetalle')
+      .select('*')
+      .eq('ventaId', ventaId)
+
+    if (detallesError) throw new Error('Error al leer detalles de la venta')
+
+    // 2. Restore stock
+    for (const d of detalles || []) {
+      // Check if stock row exists
+      let query = supabase
+        .from('stock')
+        .select('id, cantidad')
+        .eq('productoId', d.productoId)
+        .eq('almacenId', d.almacenId)
+        .eq('tienda_id', tiendaId)
+
+      if (d.tallaId) {
+        query = query.eq('tallaId', d.tallaId)
+      } else {
+        query = query.is('tallaId', null)
+      }
+
+      const { data: stockRecord } = await query.single()
+
+      if (stockRecord) {
+        await supabase.from('stock').update({
+          cantidad: stockRecord.cantidad + d.cantidad
+        }).eq('id', stockRecord.id)
+      } else {
+        await supabase.from('stock').insert({
+          productoId: d.productoId,
+          tallaId: d.tallaId,
+          almacenId: d.almacenId,
+          cantidad: d.cantidad,
+          tienda_id: tiendaId
+        })
+      }
+
+      // Add history movement
+      await supabase.from('historialStock').insert({
+        tipo: 'entrada',
+        productoId: d.productoId,
+        tallaId: d.tallaId,
+        almacenId: d.almacenId,
+        cantidad: d.cantidad,
+        motivo: `Anulación de venta #${ventaId}`,
+        tienda_id: tiendaId,
+        usuarioId: usuarioId
+      })
+    }
+
+    // 3. Delete sale
+    await supabase.from('ventasDetalle').delete().eq('ventaId', ventaId)
+    await supabase.from('ventas').delete().eq('id', ventaId)
   }
 }
