@@ -284,11 +284,10 @@ export function VentaLibreDialog({ open, onOpenChange, onSuccess }: VentaLibreDi
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Método de pago*</FormLabel>
-                                    <FormControl>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {metodosPago.map((metodo) => {
-                                                // Find matching icon based on name
-                                                let MetodoIcon = Banknote
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {metodosPago.map((metodo) => {
+                                            // Find matching icon based on name
+                                            let MetodoIcon = Banknote
                                                 const name = metodo.nombre.toLowerCase()
                                                 if (name.includes('tarjeta')) MetodoIcon = CreditCard
                                                 else if (name.includes('transferencia')) MetodoIcon = Building2
@@ -361,7 +360,6 @@ export function VentaLibreDialog({ open, onOpenChange, onSuccess }: VentaLibreDi
                                             }
                                             return null
                                         })()}
-                                    </FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}
