@@ -269,12 +269,23 @@ export const CajaService = {
         const totalEgresosEfectivo = totalGastosEfectivo + totalPagosGastosEfectivo
         const totalIngresosEfectivo = totalVentasEfectivo + totalAbonosEfectivo
 
+        // 5. Obtener VENTA TOTAL (Bruta, incluye todos los medios de pago)
+        const { data: ventasTotales, error: ventasTotalesError } = await supabase
+            .from("ventas")
+            .select("total")
+            .eq("caja_sesion_id", sesionId)
+            .eq("tienda_id", tiendaId)
+
+        if (ventasTotalesError) throw ventasTotalesError
+        const ventaTotal = ventasTotales?.reduce((sum, v) => sum + Number(v.total), 0) ?? 0
+
         return {
             totalVentas: totalVentasEfectivo,
             totalAbonos: totalAbonosEfectivo,
             totalIngresos: totalIngresosEfectivo,
             totalGastos: totalEgresosEfectivo,
-            balance: totalIngresosEfectivo - totalEgresosEfectivo
+            balance: totalIngresosEfectivo - totalEgresosEfectivo,
+            ventaTotal // New field
         }
     },
 

@@ -61,18 +61,30 @@ export function VentaDetalleDialog({ open, onOpenChange, venta }: VentaDetalleDi
                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                         <div className="space-y-1">
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Calendar className="h-3 w-3" /> Fecha
+                                <Calendar className="h-3 w-3" /> Fecha Venta
                             </span>
                             <p className="font-medium text-sm">
                                 {format(new Date(venta.createdAt), "PP p", { locale: es })}
                             </p>
                         </div>
+
+                        {isAddi && fechaLiquidacion && (
+                            <div className="space-y-1">
+                                <span className="text-xs text-muted-foreground flex items-center gap-1 text-emerald-600">
+                                    <Calendar className="h-3 w-3" /> Disponible
+                                </span>
+                                <p className="font-medium text-sm text-emerald-700">
+                                    {format(fechaLiquidacion, "PP", { locale: es })}
+                                </p>
+                            </div>
+                        )}
+
                         <div className="space-y-1">
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 <User className="h-3 w-3" /> Vendedor
                             </span>
                             <p className="font-medium text-sm capitalize">
-                                {venta.usuario?.nombre || "Desconocido"}
+                                {venta.usuario?.nombre || venta.usuario?.email || "Desconocido"}
                             </p>
                         </div>
                         <div className="space-y-1">

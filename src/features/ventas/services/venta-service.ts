@@ -339,6 +339,19 @@ export class VentaService {
       cliente = c
     }
 
+    // 1.6 Get User (Seller) info manually
+    let usuario = null
+    if (venta.usuarioId) {
+      // Try 'usuarios' table first (custom profile)
+      const { data: u, error } = await supabase.from('usuarios').select('nombre, email').eq('id', venta.usuarioId).single()
+      if (u) {
+        usuario = u
+      } else {
+        // Fallback or generic?
+        console.warn("Could not find seller info for id", venta.usuarioId, error)
+      }
+    }
+
     // 2. Get Details info (raw)
     const { data: detallesRaw, error: detallesError } = await supabase
       .from('ventasDetalle')
@@ -378,6 +391,7 @@ export class VentaService {
     return {
       ...venta,
       cliente,
+      usuario,
       ventasDetalle: detalles
     }
   }

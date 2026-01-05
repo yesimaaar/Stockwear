@@ -263,7 +263,7 @@ export default function MovimientosPage() {
   const [openCierreDialog, setOpenCierreDialog] = useState(false)
   const [montoInicial, setMontoInicial] = useState("")
   const [montoFinal, setMontoFinal] = useState("")
-  const [resumenCierre, setResumenCierre] = useState<{ totalVentas: number, totalAbonos: number, totalIngresos: number, totalGastos: number } | null>(null)
+  const [resumenCierre, setResumenCierre] = useState<{ totalVentas: number, totalAbonos: number, totalIngresos: number, totalGastos: number, ventaTotal: number } | null>(null)
 
   // Cierres History State
   const [cierres, setCierres] = useState<CajaSesion[]>([])
@@ -720,15 +720,7 @@ export default function MovimientosPage() {
   }, [filteredIngresos])
 
   const movimientosEgresos = useMemo(() => {
-    // Combine inventory entries (costs) with expenses
-    const inventoryCosts = filteredHistorial.filter(h => h.tipo === 'entrada').map(h => ({
-      id: `inv-${h.id}`,
-      tipo: 'inventario',
-      descripcion: `Entrada: ${h.producto?.nombre || 'Producto'}`,
-      monto: (h.costoUnitario || 0) * h.cantidad,
-      fecha: h.createdAt,
-      categoria: 'Inventario'
-    }))
+    // Inventory entries removed from display
 
     const expenseItems = gastos.filter(g => {
       // Apply same date filters if needed
@@ -772,8 +764,8 @@ export default function MovimientosPage() {
       categoria: p.gasto?.categoria || 'Pago deuda'
     }))
 
-    return [...inventoryCosts, ...expenseItems, ...paymentItems].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-  }, [filteredHistorial, gastos, pagosGastos, date, periodo])
+    return [...expenseItems, ...paymentItems].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+  }, [gastos, pagosGastos, date, periodo]) // Removed filteredHistorial dependency
 
   const resumenFinanciero = useMemo(() => {
     // Calculate Income from Cash Sales + Abonos (Exclude pending Addi sales)
@@ -1496,6 +1488,10 @@ export default function MovimientosPage() {
             {resumenCierre && sesionActual && (
               <div className="space-y-4 py-2">
                 <div className="space-y-2 text-sm">
+                  <div className="flex justify-between border-b pb-2 mb-2">
+                    <span className="font-semibold text-emerald-600">Venta Total del Día</span>
+                    <span className="font-bold text-emerald-600">{currencyFormatter.format(resumenCierre.ventaTotal || 0)}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Dinero base</span>
                     <span>{currencyFormatter.format(sesionActual.montoInicial)}</span>
