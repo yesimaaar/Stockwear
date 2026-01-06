@@ -431,39 +431,101 @@ export default function MovimientosPage() {
       // We need extended window for pending settlements (check date + daysToSettle matches range)
       // AND normal window for sales created today
       
+      // 1. Fetch Cash Sales (Extended window)
+      // Remove nested join that was causing errors
       const { data: ventas, error: ventasError } = await supabase
         .from("ventas")
-        .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id, descripcion, ventasDetalle(producto:productos(nombre, codigo))")
+        .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id")
         .eq("tienda_id", tiendaId)
         .eq("tipo_venta", "contado")
         .gte("createdAt", extendedStart.toISOString())
         .lte("createdAt", bufferedEnd.toISOString())
         .order("createdAt", { ascending: false })
+        .limit(2000)
 
       if (ventasError) {
-        console.error("Error fetching ventas:", ventasError)
+        // Log detailed error
+        console.error("Error fetching ventas:", JSON.stringify(ventasError, null, 2))
         throw ventasError
       }
       
       console.log(`Ventas fetched: ${ventas?.length || 0}`)
 
+      // 1.1 Fetch Details Manually
+      const ventaIds = (ventas || []).map(v => v.id);
+      let detallesMap: Record<number, any[]> = {};
+      
+      if (ventaIds.length > 0) {
+        // Batch fetch details
+        const { data: detallesData, error: detError } = await supabase
+            .from("ventasDetalle")
+            .select("ventaId, productoId, cantidad, producto:productos(nombre, codigo)")
+            .in("ventaId", ventaIds);
+            
+        if (detError) {
+            console.error("Error fetching details:", detError);
+            // Proceed without details rather than crashing
+        } else {
+            (detallesData || []).forEach((d: any) => {
+                if (!detallesMap[d.ventaId]) detallesMap[d.ventaId] = [];
+                detallesMap[d.ventaId].push(d);
+            });
+        }
+      }
+
+      // Attach details to ventas
+      const ventasWithDetails = (ventas || []).map(v => ({
+          ...v,
+          ventasDetalle: detallesMap[v.id] || []
+      }));
+
       // 2. Fetch Abonos (Buffered window)
-      // Buffer start slightly too (-1 day) just in case
       const bufferedStart = new Date(start)
       bufferedStart.setDate(start.getDate() - 1)
 
+      // Simplified, removing deep nesting 'venta:ventas(...)'
       const { data: abonos, error: abonosError } = await supabase
         .from("abonos")
-        .select("id, monto, createdAt, nota, metodo_pago_id, cliente:clientes(nombre), venta:ventas(ventasDetalle(producto:productos(nombre)))")
+        .select("id, monto, createdAt, nota, metodo_pago_id, venta_id, cliente:clientes(nombre)")
         .eq("tienda_id", tiendaId)
         .gte("createdAt", bufferedStart.toISOString())
         .lte("createdAt", bufferedEnd.toISOString())
         .order("createdAt", { ascending: false })
+        .limit(2000)
 
       if (abonosError) {
-        console.error("Error fetching abonos:", abonosError)
+        console.error("Error fetching abonos:", JSON.stringify(abonosError, null, 2))
         throw abonosError
       }
+
+      // 2.1 Fetch Abono Sale Details for Product Name
+      // Needs 'venta_id' from abonos
+      const abonoVentaIds = (abonos || []).map(a => a.venta_id).filter(id => id != null);
+      const uniqueAbonoVentaIds = [...new Set(abonoVentaIds)];
+      let abonoDetallesMap: Record<number, any> = {};
+
+      if (uniqueAbonoVentaIds.length > 0) {
+           // Reuse logic: fetch details for these sales
+           const { data: abonoDetalles, error: abDetError } = await supabase
+            .from("ventasDetalle")
+            .select("ventaId, producto:productos(nombre)")
+            .in("ventaId", uniqueAbonoVentaIds);
+           
+           if (!abDetError) {
+               (abonoDetalles || []).forEach((d: any) => {
+                   if (!abonoDetallesMap[d.ventaId]) abonoDetallesMap[d.ventaId] = [];
+                   abonoDetallesMap[d.ventaId].push(d);
+               });
+           }
+      }
+
+      // Attach simplified details to abonos for mapping
+      const abonosWithDetails = (abonos || []).map(a => ({
+          ...a,
+          venta: {
+              ventasDetalle: abonoDetallesMap[a.venta_id] || []
+          }
+      }));
 
       // 3. Fetch payment methods
       const { data: metodosPago, error: metodosError } = await supabase
@@ -476,11 +538,10 @@ export default function MovimientosPage() {
       // Create a map for quick lookup
       const metodosMap = new Map(metodosPago?.map(m => [m.id, m.nombre]) || [])
 
-      // 3.5 Fetch History for Venta Libre descriptions (Workaround for missing description column)
-      // Optimize: Only fetch for visible sales? No, batch is fine.
+      // 3.5 Fetch History for Venta Libre descriptions
       let historialMap = new Map<string, string>();
-      const ventasLibres = (ventas || []).filter(v => {
-        const details = (v.ventasDetalle as any[]) || [];
+      const ventasLibres = ventasWithDetails.filter(v => {
+        const details = v.ventasDetalle;
         if (details.length === 0) return true;
         const prod = details[0]?.producto;
         if (details.length === 1 && prod?.codigo === 'VL-GENERICO') return true;
@@ -488,8 +549,6 @@ export default function MovimientosPage() {
       });
       
       if (ventasLibres.length > 0) {
-        // Fetch history that looks like 'Venta libre:%'
-        // Restricted to the date range to optimize
         const { data: historyData } = await supabase
           .from('historialStock')
           .select('motivo, createdAt')
@@ -516,7 +575,7 @@ export default function MovimientosPage() {
       }
 
       // 4. Map and Combine
-      const ventasMapped: IngresoItem[] = (ventas || []).flatMap((v: any) => {
+      const ventasMapped: IngresoItem[] = ventasWithDetails.flatMap((v: any) => {
         // Extract product info
         const details = (v.ventasDetalle as any[]) || []
         const prods = details.map((d: any) => ({ 
@@ -614,7 +673,7 @@ export default function MovimientosPage() {
           return itemDate >= start && itemDate <= end
       })
 
-      const abonosMapped: IngresoItem[] = (abonos || []).map(a => {
+      const abonosMapped: IngresoItem[] = abonosWithDetails.map(a => {
         // ... (existing abonos mapping)
         const productos = (a.venta as any)?.ventasDetalle?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
         const modelo = productos.length > 0 ? productos[0] : 'Producto'
@@ -633,9 +692,15 @@ export default function MovimientosPage() {
         }
       })
 
-      const combined = [...ventasMapped, ...abonosMapped].sort((a, b) =>
-        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-      )
+      const combined = [...ventasMapped, ...abonosMapped]
+        .filter((item: IngresoItem) => {
+          // Strict filter for all items
+          const itemDate = new Date(item.fecha)
+          return itemDate >= start && itemDate <= end
+        })
+        .sort((a, b) =>
+          new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+        )
 
       setIngresos(combined)
     } catch (error) {
@@ -801,37 +866,8 @@ export default function MovimientosPage() {
   }, [toast])
 
   const filteredHistorial = useMemo(() => {
+    // 1. Filter by Search Term (Date filtering is handled in DB query)
     return historial.filter((item) => {
-      // 1. Filter by Date/Period
-      if (date) {
-        const itemDate = new Date(item.createdAt)
-        const selectedDate = new Date(date)
-
-        if (periodo === "diario") {
-          const isSameDay =
-            itemDate.getDate() === selectedDate.getDate() &&
-            itemDate.getMonth() === selectedDate.getMonth() &&
-            itemDate.getFullYear() === selectedDate.getFullYear()
-          if (!isSameDay) return false
-        } else if (periodo === "mensual") {
-          const isSameMonth =
-            itemDate.getMonth() === selectedDate.getMonth() &&
-            itemDate.getFullYear() === selectedDate.getFullYear()
-          if (!isSameMonth) return false
-        } else if (periodo === "semanal") {
-          const startOfWeek = new Date(selectedDate)
-          startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay())
-          startOfWeek.setHours(0, 0, 0, 0)
-
-          const endOfWeek = new Date(startOfWeek)
-          endOfWeek.setDate(startOfWeek.getDate() + 6)
-          endOfWeek.setHours(23, 59, 59, 999)
-
-          if (itemDate < startOfWeek || itemDate > endOfWeek) return false
-        }
-      }
-
-      // 2. Filter by Search Term
       if (filterTerm.trim()) {
         const term = filterTerm.toLowerCase()
         const prodName = item.producto?.nombre?.toLowerCase() || ""
@@ -846,38 +882,8 @@ export default function MovimientosPage() {
   }, [historial, date, periodo, filterTerm])
 
   const filteredIngresos = useMemo(() => {
-    return ingresos.filter((item) => {
-      // 1. Filter by Date/Period
-      if (date) {
-        const itemDate = new Date(item.fecha)
-        const selectedDate = new Date(date)
-
-        if (periodo === "diario") {
-          const isSameDay =
-            itemDate.getDate() === selectedDate.getDate() &&
-            itemDate.getMonth() === selectedDate.getMonth() &&
-            itemDate.getFullYear() === selectedDate.getFullYear()
-          if (!isSameDay) return false
-        } else if (periodo === "mensual") {
-          const isSameMonth =
-            itemDate.getMonth() === selectedDate.getMonth() &&
-            itemDate.getFullYear() === selectedDate.getFullYear()
-          if (!isSameMonth) return false
-        } else if (periodo === "semanal") {
-          const startOfWeek = new Date(selectedDate)
-          startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay())
-          startOfWeek.setHours(0, 0, 0, 0)
-
-          const endOfWeek = new Date(startOfWeek)
-          endOfWeek.setDate(startOfWeek.getDate() + 6)
-          endOfWeek.setHours(23, 59, 59, 999)
-
-          if (itemDate < startOfWeek || itemDate > endOfWeek) return false
-        }
-      }
-      return true
-    })
-  }, [ingresos, date, periodo])
+    return ingresos
+  }, [ingresos])
 
   const movimientosIngresos = useMemo(() => {
     return filteredIngresos

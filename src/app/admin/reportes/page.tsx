@@ -517,8 +517,10 @@ export default function ReportesPage() {
               .from("historialStock")
               .select("tipo,cantidad,\"costoUnitario\",\"createdAt\",\"usuarioId\"")
               .eq("tienda_id", tiendaId)
+              .eq("tipo", "venta")
               .gte("createdAt", subDays(new Date(), 90).toISOString())
-              .order("createdAt", { ascending: false }),
+              .order("createdAt", { ascending: false })
+              .limit(5000),
             supabase
               .from("productos")
               .select("id,estado,\"stockMinimo\",\"createdAt\",nombre")
@@ -1013,7 +1015,7 @@ export default function ReportesPage() {
           .gte("createdAt", fromISO)
           .lte("createdAt", toISO)
           .order("createdAt", { ascending: false })
-          .limit(300)
+          .limit(2000)
 
         if (ventasError) throw ventasError
 
