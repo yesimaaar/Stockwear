@@ -581,6 +581,47 @@ export class InventarioService {
     }
   }
 
+  static async eliminarStock(
+    productoId: number,
+    tallaId: number | null,
+    almacenId: number | null,
+  ): Promise<boolean> {
+    const tiendaId = await getCurrentTiendaId()
+    
+    const stockRow = await this.findStockRow(productoId, tallaId, almacenId)
+    if (!stockRow) return true 
+
+    // Solo registramos movimiento si había cantidad > 0
+    if (stockRow.cantidad > 0) {
+      const { error: historialError } = await supabase.from('historialStock').insert({
+        tienda_id: tiendaId,
+        tipo: 'salida',
+        productoId,
+        tallaId,
+        almacenId,
+        cantidad: stockRow.cantidad,
+        stockAnterior: stockRow.cantidad,
+        stockNuevo: 0,
+        motivo: 'Eliminación manual de talla desde formulario de producto',
+      })
+      if (historialError) {
+        console.warn('No se pudo registrar historial al eliminar stock', historialError)
+      }
+    }
+
+    const { error } = await supabase
+      .from('stock')
+      .delete()
+      .eq('id', stockRow.id)
+      .eq('tienda_id', tiendaId)
+
+    if (error) {
+      console.error('Error eliminando stock row', error)
+      return false
+    }
+    return true
+  }
+
   static async getAlmacenesResumen(client?: SupabaseClient): Promise<AlmacenResumen[]> {
     const supabaseClient = client ?? supabase
     const tiendaId = await getCurrentTiendaId({ client: supabaseClient })

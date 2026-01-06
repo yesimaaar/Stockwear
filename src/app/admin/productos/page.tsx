@@ -1148,7 +1148,25 @@ export default function ProductosPage() {
 
         for (const [key, existing] of existingMap.entries()) {
           const desired = desiredMap.get(key)
-          const desiredCantidad = desired?.cantidad ?? 0
+          
+          if (!desired) {
+            try {
+              await InventarioService.eliminarStock(
+                editTarget.id,
+                existing.tallaId,
+                existing.almacenId
+              )
+              stockAdjustSuccess += 1
+            } catch (delError) {
+              console.error("Error eliminando stock", delError)
+              stockAdjustErrors.push(
+                `${describeStockDestino(existing.almacenId, existing.tallaId)}: No se pudo eliminar`
+              )
+            }
+            continue
+          }
+
+          const desiredCantidad = desired.cantidad
           const diff = desiredCantidad - existing.cantidad
           if (diff === 0) {
             desiredMap.delete(key)
