@@ -164,8 +164,7 @@ export async function GET() {
                     `id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`
                 )
                 .eq("tienda_id", tiendaId)
-                .order("createdAt", { ascending: false })
-                .limit(PRODUCTOS_LIMIT),
+                .order("createdAt", { ascending: false }),
             supabase
                 .from("historialStock")
                 .select("tipo,\"productoId\",cantidad,\"costoUnitario\",\"createdAt\"")
@@ -300,15 +299,14 @@ export async function GET() {
         const topProductIds = new Set(topProducts.map(p => p.id))
 
         const activos = productos.filter((producto) => producto.estado === "activo")
-        const baseRecientes = activos.length ? activos : productos
-        const newProducts = baseRecientes
-            .slice()
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        
+        // Get ALL remaining products
+        const otherProducts = activos
             .filter(p => !topProductIds.has(p.id))
-            .slice(0, 20)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .map((producto, index) => formatRecent(producto, index))
 
-        const destacados = [...topProducts, ...newProducts]
+        const destacados = [...topProducts, ...otherProducts]
 
         return NextResponse.json({
             destacados,

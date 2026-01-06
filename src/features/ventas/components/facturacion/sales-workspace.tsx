@@ -130,7 +130,7 @@ export function SalesWorkspace({
   const { toast } = useToast()
   const [busqueda, setBusqueda] = useState(initialPreviewState?.searchTerm ?? "")
   const [buscando, setBuscando] = useState(false)
-  const [visibleHighlights, setVisibleHighlights] = useState(8)
+  const [visibleHighlights, setVisibleHighlights] = useState(15)
   const [productosEncontrados, setProductosEncontrados] = useState<ProductoConStock[]>(initialPreviewState?.productos ?? [])
   const [lineas, setLineas] = useState<LineaVentaForm[]>(initialPreviewState?.lineas ?? [])
   const [registrando, setRegistrando] = useState(false)
@@ -1346,7 +1346,7 @@ export function SalesWorkspace({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setVisibleHighlights(prev => prev + 12)}
+                    onClick={() => setVisibleHighlights(prev => prev + 15)}
                   >
                     Ver más productos
                   </Button>
