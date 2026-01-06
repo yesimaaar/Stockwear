@@ -18,12 +18,18 @@ import {
   ArrowLeftRight,
   Settings2,
   User,
+  Maximize2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Sheet,
   SheetContent,
@@ -1535,22 +1541,45 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
 
   return (
     <div className="group flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm">
-      <div className="relative h-48 w-full overflow-hidden rounded-xl border border-border/50 bg-secondary/20">
-        {hasImage ? (
-          <Image
-            src={producto.imagen as string}
-            alt={producto.nombre}
-            fill
-            loading="lazy"
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-            sizes="(min-width: 1280px) 240px, (min-width: 768px) 200px, 160px"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-secondary-foreground/60">
-            <Package className="h-8 w-8" />
-          </div>
+      <Dialog>
+        <DialogTrigger asChild>
+          <button type="button" className="relative h-48 w-full overflow-hidden rounded-xl border border-border/50 bg-secondary/20 cursor-zoom-in p-0 text-left transition-all hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+            {hasImage ? (
+              <>
+                <Image
+                  src={producto.imagen as string}
+                  alt={producto.nombre}
+                  fill
+                  loading="lazy"
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  sizes="(min-width: 1280px) 240px, (min-width: 768px) 200px, 160px"
+                />
+                <div className="absolute right-2 top-2 z-10 rounded-full bg-black/20 p-1.5 text-white opacity-0 backdrop-blur-sm transition-all group-hover:opacity-100 hover:bg-black/40">
+                  <Maximize2 className="h-4 w-4" />
+                </div>
+              </>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-secondary-foreground/60">
+                <Package className="h-8 w-8" />
+              </div>
+            )}
+          </button>
+        </DialogTrigger>
+        {hasImage && (
+          <DialogContent className="max-w-3xl overflow-hidden border-none bg-transparent p-0 shadow-none sm:max-w-4xl">
+            <div className="relative flex aspect-square h-full max-h-[85vh] w-full items-center justify-center overflow-hidden rounded-lg bg-black/90 md:aspect-video">
+              <Image
+                src={producto.imagen as string}
+                alt={producto.nombre}
+                fill
+                className="object-contain"
+                sizes="100vw"
+                priority
+              />
+            </div>
+          </DialogContent>
         )}
-      </div>
+      </Dialog>
       <div className="flex flex-1 flex-col justify-between gap-3 text-sm">
         <div className="space-y-1">
           <p className="font-semibold text-foreground line-clamp-1" title={producto.nombre}>
