@@ -55,7 +55,7 @@ export const CajaService = {
 
             const { data: existing, error: fetchError } = await supabase
                 .from("metodos_pago")
-                .select("nombre")
+                .select("id, nombre, estado")
                 .eq("tienda_id", tiendaId)
 
             if (fetchError) {
@@ -63,18 +63,19 @@ export const CajaService = {
                 return
             }
 
-            const existingNames = new Set(existing?.map(e => e.nombre.toLowerCase().trim()) || [])
-
             // Use types compatible with MetodoPago interface: 'efectivo' | 'digital' | 'banco' | 'otro'
             const defaults = [
                 { nombre: 'Efectivo', tipo: 'efectivo', estado: 'activo' },
                 { nombre: 'Tarjeta de Crédito', tipo: 'banco', estado: 'activo' },
                 { nombre: 'Transferencia', tipo: 'banco', estado: 'activo' },
-                { nombre: 'Addi', tipo: 'otro', estado: 'activo' }
+                { nombre: 'Addi', tipo: 'otro', estado: 'activo' },
+                { nombre: 'Crédito', tipo: 'otro', estado: 'activo' }
             ]
 
             for (const def of defaults) {
-                if (!existingNames.has(def.nombre.toLowerCase().trim())) {
+                const match = existing?.find(e => e.nombre.toLowerCase().trim() === def.nombre.toLowerCase().trim())
+
+                if (!match) {
                     console.log("CajaService.ensureDefaults: Inserting", def.nombre)
                     const { error: insertError } = await supabase.from("metodos_pago").insert({
                         tienda_id: tiendaId,
@@ -83,6 +84,16 @@ export const CajaService = {
 
                     if (insertError) {
                         console.error("CajaService.ensureDefaults: Error inserting", def.nombre, insertError)
+                    }
+                } else if (match.estado !== 'activo') {
+                    console.log("CajaService.ensureDefaults: Reactivating", def.nombre)
+                    const { error: updateError } = await supabase
+                        .from("metodos_pago")
+                        .update({ estado: 'activo' })
+                        .eq('id', match.id)
+
+                    if (updateError) {
+                        console.error("CajaService.ensureDefaults: Error reactivating", def.nombre, updateError)
                     }
                 }
             }

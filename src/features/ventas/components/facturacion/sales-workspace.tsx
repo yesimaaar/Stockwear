@@ -831,8 +831,10 @@ export function SalesWorkspace({
 
     setRegistrando(true)
     try {
+      let finalMetodoPagoId = selectedMetodoPagoId
+
       // Validate payment method
-      if (tipoVenta === 'contado' && !selectedMetodoPagoId) {
+      if (tipoVenta === 'contado' && !finalMetodoPagoId) {
         toast({
           title: "Método de pago requerido",
           description: "Selecciona un método de pago para la venta de contado.",
@@ -858,24 +860,32 @@ export function SalesWorkspace({
           setRegistrando(false)
           return
         }
-        // Force selection of credit method just in case
-        if (selectedMetodoPagoId !== String(creditoMethod.id)) {
-          setSelectedMetodoPagoId(String(creditoMethod.id))
+        
+        // Use the credit method ID for this transaction
+        finalMetodoPagoId = String(creditoMethod.id)
+        
+        // Sync state for UI consistency
+        if (selectedMetodoPagoId !== finalMetodoPagoId) {
+          setSelectedMetodoPagoId(finalMetodoPagoId)
         }
       }
 
       const venta = await VentaService.create({
         usuarioId: selectedEmpleadoId,
-        metodoPagoId: selectedMetodoPagoId ? Number(selectedMetodoPagoId) : undefined,
+        metodoPagoId: finalMetodoPagoId ? Number(finalMetodoPagoId) : undefined,
         cajaSesionId: sesionActual?.id,
         clienteId: clienteIdParaVenta,
-        tipoVenta: isCredito ? 'credito' : 'contado',
+        tipoVenta: tipoVenta,
         items: lineas.map((linea) => ({
           stockId: linea.stockId,
           cantidad: linea.cantidad,
           precioUnitario: linea.precioUnitario,
           descuento: linea.descuento,
         })),
+        // Additional credit fields
+        numeroCuotas: 1, // Default to 1 for now
+        interesPorcentaje: 0,
+        montoCuota: 0, // Will be calculated by service or DB if 0
       })
 
       if (!venta) {

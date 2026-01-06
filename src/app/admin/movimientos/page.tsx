@@ -249,6 +249,8 @@ export default function MovimientosPage() {
   const [cuentasPorCobrar, setCuentasPorCobrar] = useState<CuentaPorCobrar[]>([])
   const [loadingCuentas, setLoadingCuentas] = useState(true)
   const [selectedCuenta, setSelectedCuenta] = useState<CuentaPorCobrar | null>(null)
+  const [selectedCuentaDetalles, setSelectedCuentaDetalles] = useState<any[]>([])
+  const [loadingCuentaDetalles, setLoadingCuentaDetalles] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState("")
   const [paymentNote, setPaymentNote] = useState("")
@@ -974,6 +976,16 @@ export default function MovimientosPage() {
     setPaymentNote("")
     setSelectedMetodoPagoId(prev => prev ?? (metodosPago.length ? String(metodosPago[0].id) : null))
     setDetailsOpen(true)
+    
+    // Fetch details
+    setLoadingCuentaDetalles(true)
+    setSelectedCuentaDetalles([])
+    VentaService.getById(cuenta.id).then(venta => {
+        if (venta && venta.detalles) {
+            setSelectedCuentaDetalles(venta.detalles)
+        }
+    }).catch(err => console.error("Error loading account details", err))
+    .finally(() => setLoadingCuentaDetalles(false))
   }
 
   const handleVentaClick = async (idStr: string | number) => {
@@ -2490,6 +2502,29 @@ export default function MovimientosPage() {
                               {selectedCuenta.frecuenciaPago || "Única"}
                             </p>
                           </div>
+                        </div>
+
+                        <div className="rounded-lg border p-3">
+                          <h5 className="mb-2 text-sm font-medium">Productos adquiridos</h5>
+                          {loadingCuentaDetalles ? (
+                            <p className="text-xs text-muted-foreground">Cargando productos...</p>
+                          ) : selectedCuentaDetalles.length > 0 ? (
+                            <div className="space-y-2">
+                              {selectedCuentaDetalles.map((detalle, idx) => (
+                                <div key={idx} className="flex justify-between text-sm">
+                                  <span className="line-clamp-1 pr-2">
+                                    {detalle.cantidad}x {detalle.producto?.nombre || `Producto ${detalle.productoId}`}
+                                    {detalle.talla?.nombre ? ` (T: ${detalle.talla.nombre})` : ''}
+                                  </span>
+                                  <span className="whitespace-nowrap font-medium text-muted-foreground">
+                                    {currencyFormatter.format(detalle.subtotal)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No se encontraron detalles de productos.</p>
+                          )}
                         </div>
 
                         <div className="space-y-2">
