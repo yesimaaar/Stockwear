@@ -192,6 +192,13 @@ interface VentaDetalleQueryRow {
   subtotal: number | null
 }
 
+interface Abono {
+  id: number
+  monto: number
+  createdAt: string
+  venta_id?: number | null
+}
+
 const DASHBOARD_CACHE_KEY = "stockwear-dashboard-cache-v2"
 
 interface CachedMetric {
@@ -318,6 +325,7 @@ export default function ReportesPage() {
   const dismissedRef = useRef(false)
   const productosMapRef = useRef<Record<number, { nombre: string | null; codigo?: string | null }>>({})
   const usuariosMapRef = useRef<Record<string, { nombre: string | null }>>({})
+  const creditMethodsRef = useRef<Set<number>>(new Set())
   const initialSalesRangeRef = useRef<DateRange>(getInitialSalesRange())
   const [showMobileNotice, setShowMobileNotice] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>(() =>
@@ -330,6 +338,7 @@ export default function ReportesPage() {
     })),
   )
   const [allSales, setAllSales] = useState<HistorialRow[]>([])
+  const [allAbonos, setAllAbonos] = useState<Abono[]>([])
   const [chartRange, setChartRange] = useState<TimeRange>("7d")
   const [chartMetric, setChartMetric] = useState<'sales' | 'profit'>('sales')
   const [salesSeries, setSalesSeries] = useState<Array<{ date: string; value: number; profit: number }>>([])
@@ -428,7 +437,7 @@ export default function ReportesPage() {
       setLoading(true)
       try {
         const tiendaId = await getCurrentTiendaId()
-        const [ventasResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp, metodosResp, detallesResp] =
+        const [ventasResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp, metodosResp, detallesResp, abonosResp] =
           await Promise.all([
             supabase
               .from("ventas")
@@ -460,19 +469,34 @@ export default function ReportesPage() {
             ReconocimientoService.getProductosMasConsultados(5, { tiendaId }),
             supabase
               .from("metodos_pago")
-              .select("id,comision_porcentaje")
+              .select("id,nombre,comision_porcentaje")
               .eq("tienda_id", tiendaId),
             supabase
               .from("ventasDetalle")
               .select("ventaId,productoId,cantidad,subtotal, ventas!inner(createdAt)")
               .eq("ventas.tienda_id", tiendaId)
               .gte("ventas.createdAt", subDays(new Date(), 90).toISOString())
-              .limit(10000)
+              .limit(10000),
+            supabase
+              .from("abonos")
+              .select("id,monto,createdAt,venta_id")
+              .eq("tienda_id", tiendaId)
+              .gte("createdAt", subDays(new Date(), 90).toISOString())
+              .limit(5000)
           ])
 
         if (canceled) return
 
-        const metodosMap = (metodosResp?.data ?? []).reduce((acc, m: any) => {
+        const metodosData = (metodosResp?.data ?? [])
+        const creditMethodsIds = new Set(
+             metodosData
+             .filter((m: any) => ['crédito', 'credito', 'por cobrar'].includes(m.nombre?.toLowerCase()))
+             .map((m: any) => m.id)
+        )
+        creditMethodsRef.current = creditMethodsIds
+        const abonos = (abonosResp.data as Abono[]) || []
+
+        const metodosMap = metodosData.reduce((acc, m: any) => {
           acc[m.id] = m.comision_porcentaje || 0
           return acc
         }, {} as Record<number, number>)
@@ -555,11 +579,28 @@ export default function ReportesPage() {
           return month === previousMonth && year === previousMonthYear
         })
 
-        const monthSalesValue = monthSales.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
-        const previousMonthSalesValue = previousMonthSales.reduce(
+        const monthSalesValue = monthSales
+          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
+          abonos
+            .filter((a) => {
+              const { month, year } = getDateParts(a.createdAt)
+              return month === currentMonth && year === currentYear
+            })
+            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+
+        const previousMonthSalesValue = previousMonthSales
+          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
+          .reduce(
           (sum, item) => sum + (Number(item.total) || 0),
           0,
-        )
+        ) +
+          abonos
+            .filter((a) => {
+              const { month, year } = getDateParts(a.createdAt)
+              return month === previousMonth && year === previousMonthYear
+            })
+            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
 
         const monthSalesCount = monthSales.length
         const previousMonthSalesCount = previousMonthSales.length
@@ -570,14 +611,34 @@ export default function ReportesPage() {
         const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
         const yearStartDate = new Date(now.getFullYear(), 0, 1)
         const salesToday = ventas.filter((v) => new Date(v.createdAt) >= today)
-        const dailySalesValue = salesToday.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
+        const dailySalesValue = salesToday
+          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
+          abonos
+            .filter((a) => new Date(a.createdAt) >= today)
+            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+
         const weeklySales = ventas.filter((v) => new Date(v.createdAt) >= weekStartDate)
-        const weeklySalesValue = weeklySales.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
+        const weeklySalesValue = weeklySales
+          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
+          abonos
+            .filter((a) => new Date(a.createdAt) >= weekStartDate)
+            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+
         const yearlySales = ventas.filter((v) => {
           const { year } = getDateParts(v.createdAt)
           return year === currentYear
         })
-        const yearlySalesValue = yearlySales.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
+        const yearlySalesValue = yearlySales
+          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
+          abonos
+            .filter((a) => {
+              const { year } = getDateParts(a.createdAt)
+              return year === currentYear
+            })
+            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
 
         const employeeTotals: Record<ReportPeriod, Record<string, { total: number; cantidad: number }>> = {
           daily: {},
@@ -733,6 +794,7 @@ export default function ReportesPage() {
         setMetrics(metricsPayload)
         setLowStockCount(lowStock.length)
         setAllSales(ventas)
+        setAllAbonos(abonos)
 
         setEmployeeSales(employeeSalesPayload)
         setInventorySummary({
@@ -775,17 +837,19 @@ export default function ReportesPage() {
   }, [])
 
   useEffect(() => {
-    if (allSales.length === 0) {
+    if (allSales.length === 0 && allAbonos.length === 0) {
       setSalesSeries([])
       return
     }
 
     const now = new Date()
-    let filteredSales = allSales
+    // Filter out credit sales using the ref populated during load
+    const validSales = allSales.filter((s) => !creditMethodsRef.current.has(s.metodo_pago_id))
 
     if (chartRange === "1d") {
       const startOfToday = startOfDay(now)
-      filteredSales = allSales.filter((sale) => new Date(sale.createdAt) >= startOfToday)
+      const visibleSales = validSales.filter((sale) => new Date(sale.createdAt) >= startOfToday)
+      const visibleAbonos = allAbonos.filter((a) => new Date(a.createdAt) >= startOfToday)
 
       const hours = eachHourOfInterval({
         start: startOfToday,
@@ -797,7 +861,7 @@ export default function ReportesPage() {
         salesMap.set(hour.toISOString(), { total: 0, profit: 0 })
       })
 
-      filteredSales.forEach((sale) => {
+      visibleSales.forEach((sale) => {
         const saleDate = new Date(sale.createdAt)
         const hourKey = startOfHour(saleDate).toISOString()
         if (salesMap.has(hourKey)) {
@@ -805,6 +869,18 @@ export default function ReportesPage() {
           salesMap.set(hourKey, {
             total: current.total + (sale.costoUnitario || 0) * sale.cantidad,
             profit: current.profit + (sale.ganancia || 0),
+          })
+        }
+      })
+
+      visibleAbonos.forEach((abono) => {
+        const date = new Date(abono.createdAt)
+        const hourKey = startOfHour(date).toISOString()
+        if (salesMap.has(hourKey)) {
+          const current = salesMap.get(hourKey)!
+          salesMap.set(hourKey, {
+            total: current.total + (Number(abono.monto) || 0),
+            profit: current.profit,
           })
         }
       })
@@ -824,7 +900,8 @@ export default function ReportesPage() {
       if (chartRange === "7d") daysToSubtract = 7
 
       const startDate = subDays(startOfDay(now), daysToSubtract - 1)
-      filteredSales = allSales.filter((sale) => new Date(sale.createdAt) >= startDate)
+      const visibleSales = validSales.filter((sale) => new Date(sale.createdAt) >= startDate)
+      const visibleAbonos = allAbonos.filter((a) => new Date(a.createdAt) >= startDate)
 
       const salesMap = new Map<string, { total: number; profit: number }>()
       const dates: Date[] = []
@@ -835,13 +912,24 @@ export default function ReportesPage() {
         dates.push(date)
       }
 
-      filteredSales.forEach((sale) => {
+      visibleSales.forEach((sale) => {
         const key = format(new Date(sale.createdAt), "yyyy-MM-dd")
         if (salesMap.has(key)) {
           const current = salesMap.get(key)!
           salesMap.set(key, {
             total: current.total + (sale.costoUnitario || 0) * sale.cantidad,
             profit: current.profit + (sale.ganancia || 0),
+          })
+        }
+      })
+
+      visibleAbonos.forEach((abono) => {
+        const key = format(new Date(abono.createdAt), "yyyy-MM-dd")
+        if (salesMap.has(key)) {
+          const current = salesMap.get(key)!
+          salesMap.set(key, {
+            total: current.total + (Number(abono.monto) || 0),
+            profit: current.profit,
           })
         }
       })
@@ -857,7 +945,7 @@ export default function ReportesPage() {
       })
       setSalesSeries(series)
     }
-  }, [allSales, chartRange])
+  }, [allSales, allAbonos, chartRange])
 
   const employeeChartMetadata = PERIOD_METADATA[selectedEmployeePeriod]
   const employeeChartData = useMemo(() => {

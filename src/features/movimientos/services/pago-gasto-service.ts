@@ -69,7 +69,7 @@ export const PagoGastoService = {
         }
     },
 
-    async getAll(filters?: { limit?: number }): Promise<PagoGasto[]> {
+    async getAll(filters?: { limit?: number, startDate?: Date, endDate?: Date }): Promise<PagoGasto[]> {
         const tiendaId = await getCurrentTiendaId()
 
         let query = supabase
@@ -77,6 +77,14 @@ export const PagoGastoService = {
             .select("*, gasto:gastos(*)")
             .eq("tienda_id", tiendaId)
             .order("fecha_pago", { ascending: false })
+
+        if (filters?.startDate) {
+            query = query.gte("fecha_pago", filters.startDate.toISOString())
+        }
+
+        if (filters?.endDate) {
+            query = query.lte("fecha_pago", filters.endDate.toISOString())
+        }
 
         if (filters?.limit) {
             query = query.limit(filters.limit)

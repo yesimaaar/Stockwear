@@ -717,13 +717,40 @@ export default function MovimientosPage() {
   }, [loadIngresos])
 
   // Load Expenses (Gastos)
-  const loadGastos = async () => {
+  const loadGastos = useCallback(async () => {
+    if (!date) return
+
+    const start = new Date(date)
+    const end = new Date(date)
+
+    if (periodo === "diario") {
+      start.setHours(0, 0, 0, 0)
+      end.setHours(23, 59, 59, 999)
+    } else if (periodo === "semanal") {
+      const startOfWeek = new Date(date)
+      startOfWeek.setDate(date.getDate() - date.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+      start.setTime(startOfWeek.getTime())
+
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+      endOfWeek.setHours(23, 59, 59, 999)
+      end.setTime(endOfWeek.getTime())
+    } else if (periodo === "mensual") {
+      start.setDate(1)
+      start.setHours(0, 0, 0, 0)
+      end.setMonth(start.getMonth() + 1)
+      end.setDate(0)
+      end.setHours(23, 59, 59, 999)
+    }
+
     setLoadingGastos(true)
     try {
       const [pagados, pendientes, pagos] = await Promise.all([
-        GastoService.getAll({ estado: 'pagado', limit: 500 }),
-        GastoService.getAll({ estado: 'pendiente', limit: 500 }),
-        PagoGastoService.getAll({ limit: 500 })
+        GastoService.getAll({ estado: 'pagado', limit: 1000, startDate: start, endDate: end }),
+        // Pendientes siempre cargamos todos (o los últimos 1000) sin filtrar por fecha para no ocultar deudas antiguas
+        GastoService.getAll({ estado: 'pendiente', limit: 1000 }),
+        PagoGastoService.getAll({ limit: 1000, startDate: start, endDate: end })
       ])
       setGastos(pagados)
       setGastosPendientes(pendientes)
@@ -733,11 +760,11 @@ export default function MovimientosPage() {
     } finally {
       setLoadingGastos(false)
     }
-  }
+  }, [date, periodo])
 
   useEffect(() => {
-    loadGastos()
-  }, [])
+    void loadGastos()
+  }, [loadGastos])
 
   // Accounts Receivable
   // Accounts Receivable
