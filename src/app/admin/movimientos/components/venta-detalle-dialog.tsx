@@ -83,14 +83,35 @@ export function VentaDetalleDialog({ open, onOpenChange, venta, onSuccess }: Ven
         }
     }
 
-    const isAddi = venta.metodo_pago?.nombre?.toLowerCase() === 'addi'
-    const comisionAddi = isAddi ? venta.total * 0.1071 : 0
-    const netoAddi = isAddi ? venta.total - comisionAddi : venta.total
+    const metodoLower = venta.metodo_pago?.nombre?.toLowerCase() || ''
+    const isAddi = metodoLower.includes('addi')
+    const isTC = metodoLower.includes('tarjeta') || 
+                (metodoLower.includes('banco') && !metodoLower.includes('transferencia')) || 
+                metodoLower === 'tc' || 
+                metodoLower === 'datafono'
 
-    let fechaLiquidacion = null
+    let comisionRate = 0
+    let labelComision = ''
+    let daysResult = 0
+
     if (isAddi) {
+        comisionRate = 0.1071
+        labelComision = 'Comisión Addi'
+        daysResult = 8
+    } else if (isTC) {
+        comisionRate = 0.0361
+        labelComision = 'Comisión Datáfono'
+        daysResult = 1
+    }
+
+    const hasComision = comisionRate > 0
+    const montoComision = venta.total * comisionRate
+    const montoNeto = venta.total - montoComision
+    
+    let fechaLiquidacion = null
+    if (hasComision) {
         const dateObj = new Date(venta.createdAt)
-        dateObj.setDate(dateObj.getDate() + 7)
+        dateObj.setDate(dateObj.getDate() + daysResult)
         fechaLiquidacion = dateObj
     }
 
@@ -116,7 +137,7 @@ export function VentaDetalleDialog({ open, onOpenChange, venta, onSuccess }: Ven
                             </p>
                         </div>
 
-                        {isAddi && fechaLiquidacion && (
+                        {hasComision && fechaLiquidacion && (
                             <div className="space-y-1">
                                 <span className="text-xs text-muted-foreground flex items-center gap-1 text-emerald-600">
                                     <Calendar className="h-3 w-3" /> Disponible
@@ -153,11 +174,21 @@ export function VentaDetalleDialog({ open, onOpenChange, venta, onSuccess }: Ven
                         </div>
                     </div>
 
-                    {/* Addi Info Box */}
-                    {isAddi && fechaLiquidacion && (
+                    {/* Descripción */}
+                    {venta.descripcion && (
+                        <div className="rounded-md bg-muted/40 p-3 text-sm">
+                            <span className="mb-1 block text-xs font-medium text-muted-foreground">Descripción / Notas:</span>
+                            <p className="text-foreground">{venta.descripcion}</p>
+                        </div>
+                    )}
+
+                    {/* Liquidation Info Box (Addi or TC) */}
+                    {hasComision && fechaLiquidacion && (
                         <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-900">
                             <h4 className="font-semibold mb-2 flex items-center gap-2">
-                                <span className="bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded textxs">Addi</span>
+                                <span className="bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded text-[10px] uppercase">
+                                    {isAddi ? 'Addi' : 'Datáfono'}
+                                </span>
                                 Detalles de Liquidación
                             </h4>
                             <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs">
@@ -166,13 +197,13 @@ export function VentaDetalleDialog({ open, onOpenChange, venta, onSuccess }: Ven
                                     <span className="font-medium">{currencyFormatter.format(venta.total)}</span>
                                 </div>
                                 <div className="flex justify-between text-rose-600">
-                                    <span>Comisión (10.71%):</span>
-                                    <span>-{currencyFormatter.format(comisionAddi)}</span>
+                                    <span>{labelComision} ({(comisionRate * 100).toFixed(2)}%):</span>
+                                    <span>-{currencyFormatter.format(montoComision)}</span>
                                 </div>
                                 <div className="col-span-2 border-t border-blue-200 my-1"></div>
                                 <div className="flex justify-between font-bold text-sm">
                                     <span>Neto a Recibir:</span>
-                                    <span>{currencyFormatter.format(netoAddi)}</span>
+                                    <span>{currencyFormatter.format(montoNeto)}</span>
                                 </div>
                                 <div className="flex justify-between text-blue-700 mt-1">
                                     <span>Fecha Disponible:</span>
@@ -195,11 +226,20 @@ export function VentaDetalleDialog({ open, onOpenChange, venta, onSuccess }: Ven
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {venta.ventasDetalle?.map((detalle: any) => (
+                                {venta.ventasDetalle?.map((detalle: any) => {
+                                    // Si es una venta libre (sin producto real), usamos la descripción de la venta como nombre del producto
+                                    const isVentaLibre = !detalle.productoId || detalle.producto?.codigo === 'VL'
+                                    const productoNombre = isVentaLibre && venta.descripcion 
+                                        ? venta.descripcion 
+                                        : (detalle.producto?.nombre || "Producto desconocido")
+                                    
+                                    const productoCodigo = isVentaLibre ? "Venta Libre" : detalle.producto?.codigo
+
+                                    return (
                                     <TableRow key={detalle.id}>
                                         <TableCell className="font-medium">
-                                            {detalle.producto?.nombre || "Producto eliminado"}
-                                            <div className="text-[10px] text-muted-foreground">{detalle.producto?.codigo}</div>
+                                            {productoNombre}
+                                            <div className="text-[10px] text-muted-foreground">{productoCodigo}</div>
                                         </TableCell>
                                         <TableCell className="text-center">
                                             <Badge variant="outline">{detalle.talla?.nombre || "-"}</Badge>
@@ -210,7 +250,8 @@ export function VentaDetalleDialog({ open, onOpenChange, venta, onSuccess }: Ven
                                             {currencyFormatter.format(detalle.subtotal)}
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                    )
+                                })}
                             </TableBody>
                         </Table>
                     </div>

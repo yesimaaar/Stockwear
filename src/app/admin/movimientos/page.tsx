@@ -364,7 +364,7 @@ export default function MovimientosPage() {
       // 1. Fetch Cash Sales
       const { data: ventas, error: ventasError } = await supabase
         .from("ventas")
-        .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id, ventasDetalle(producto:productos(nombre))")
+        .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id, descripcion, ventasDetalle(producto:productos(nombre, codigo))")
         .eq("tienda_id", tiendaId)
         .eq("tipo_venta", "contado")
         .order("createdAt", { ascending: false })
@@ -393,18 +393,95 @@ export default function MovimientosPage() {
       // Create a map for quick lookup
       const metodosMap = new Map(metodosPago?.map(m => [m.id, m.nombre]) || [])
 
+      // 3.5 Fetch History for Venta Libre descriptions (Workaround for missing description column)
+      // We look for 'Venta libre:' pattern in history to recover descriptions
+      let historialMap = new Map<string, string>();
+      const ventasLibres = (ventas || []).filter(v => {
+        const details = (v.ventasDetalle as any[]) || [];
+        if (details.length === 0) return true;
+        const prod = details[0]?.producto;
+        // Check for generic product code
+        if (details.length === 1 && prod?.codigo === 'VL-GENERICO') return true;
+        return !(details.some((d: any) => d.producto?.nombre));
+      });
+      
+      if (ventasLibres.length > 0) {
+        // Fetch history that looks like 'Venta libre:%'
+        const { data: historyData } = await supabase
+          .from('historialStock')
+          .select('motivo, createdAt')
+          .ilike('motivo', 'Venta libre:%')
+          .order('createdAt', { ascending: false })
+          .limit(100);
+
+        if (historyData) {
+          historyData.forEach(h => {
+             // Motivo format: "Venta libre: DESCRIPCION (FOLIO)"
+             // Regex might be too strict if description has parens.
+             // Try split by ' (' from last index
+             if (h.motivo && h.motivo.startsWith('Venta libre: ')) {
+                 const prefix = 'Venta libre: '
+                 const content = h.motivo.substring(prefix.length) // "DESCRIPCION (FOLIO)"
+                 const lastParen = content.lastIndexOf(' (')
+                 if (lastParen > 0) {
+                     const desc = content.substring(0, lastParen)
+                     const folioWithParen = content.substring(lastParen + 2) // "FOLIO)"
+                     const folio = folioWithParen.substring(0, folioWithParen.length - 1)
+                     historialMap.set(folio, desc)
+                 }
+             }
+          });
+        }
+      }
+
       // 4. Map and Combine
       const ventasMapped: IngresoItem[] = (ventas || []).flatMap(v => {
-        // Extract product names
-        const productos = (v.ventasDetalle as any[])?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
-        const descripcion = productos.length > 0
-          ? productos.slice(0, 2).join(", ") + (productos.length > 2 ? ` y ${productos.length - 2} más` : "")
-          : 'Venta de contado'
+        // Extract product info
+        const details = (v.ventasDetalle as any[]) || []
+        const prods = details.map((d: any) => ({ 
+            nombre: d.producto?.nombre, 
+            codigo: d.producto?.codigo 
+        })).filter(p => p.nombre)
+        
+        let descripcion = 'Venta de contado';
+        
+        // Check if it's a Generic Venta Libre first
+        const isGeneric = prods.length === 1 && prods[0].codigo === 'VL-GENERICO'
+        
+        if (historialMap.has(v.folio)) {
+            // Priority 1: Legacy history hack
+            descripcion = historialMap.get(v.folio) || 'Venta Libre';
+        } else if ((v as any).descripcion) {
+             // Priority 2: New column 'descripcion' in ventas table
+             descripcion = (v as any).descripcion;
+        } else if (isGeneric) {
+            // Fallback if history missing but generic used
+            descripcion = 'Venta Libre';
+        } else if (prods.length > 0) {
+            // Normal products
+            const names = prods.map(p => p.nombre)
+            descripcion = names.slice(0, 2).join(", ") + (names.length > 2 ? ` y ${names.length - 2} más` : "");
+        } else {
+             // Legacy fallback
+             descripcion = 'Venta Libre';
+        }
 
         const metodoPago = metodosMap.get(v.metodo_pago_id) || 'Efectivo'
-        const isAddi = metodoPago.toLowerCase() === 'addi'
+        const metodoPagoLower = metodoPago.toLowerCase()
+        const isAddi = metodoPagoLower.includes('addi')
+        const isTC = (metodoPagoLower.includes('tarjeta') && (metodoPagoLower.includes('crédito') || metodoPagoLower.includes('credito'))) || metodoPagoLower === 'tc'
 
-        if (isAddi) {
+        if (isAddi || isTC) {
+          // --- Logic for Delayed Liquidation Payments (Addi, Credit Card) ---
+          const isCreditCard = isTC
+          
+          // Config params
+          const commissionRate = isCreditCard ? 0.0361 : 0.1071
+          const daysToSettle = isCreditCard ? 1 : 8 // Addi is ~8 days (weekly), TC is next day
+          const labelPrefix = isCreditCard ? 'Liquidación TC' : 'Liquidación Addi'
+          const methodLabel = isCreditCard ? 'Depósito Banco' : 'Transferencia Addi'
+
+
           // 1. Pending Item (The Sale event) - Gray, Gross amount
           const pendingItem: IngresoItem = {
             id: `v-${v.id}`,
@@ -414,22 +491,22 @@ export default function MovimientosPage() {
             descripcion: descripcion,
             referencia: v.folio,
             metodoPago,
-            status: 'pending'
+            status: 'pending' // UI renders this as pending/gray
           }
 
-          // 2. Settlement Item (The Cash Availability) - Green, Net amount, 7 days later
+          // 2. Settlement Item (The Cash Availability) - Green, Net amount, Delayed
           const dateObj = new Date(v.createdAt)
-          dateObj.setDate(dateObj.getDate() + 7)
+          dateObj.setDate(dateObj.getDate() + daysToSettle)
           const settlementDate = dateObj.toISOString()
 
           const settlementItem: IngresoItem = {
             id: `v-${v.id}-settlement`,
-            tipo: 'venta_contado',
-            monto: v.total * (1 - 0.1071),
+            tipo: 'venta_contado', // Still a sale income
+            monto: v.total * (1 - commissionRate),
             fecha: settlementDate,
-            descripcion: `Liquidación Addi: ${descripcion}`, // Distinguishable title
+            descripcion: `${labelPrefix}: ${descripcion}`, 
             referencia: `${v.folio} (Liquidación)`,
-            metodoPago: 'Transferencia Addi',
+            metodoPago: methodLabel,
             status: 'available',
             fechaLiquidacion: settlementDate
           }
@@ -832,7 +909,17 @@ export default function MovimientosPage() {
       const enrichedVenta = {
         ...fullVenta,
         metodo_pago: fullVenta?.metodo_pago || { nombre: listItem?.metodoPago || 'Desconocido' },
-        usuario: fullVenta?.usuario || { nombre: 'Usuario' } // Fallback since we removed the join
+        usuario: fullVenta?.usuario || { nombre: 'Usuario' }, // Fallback since we removed the join
+        // Inject computed description if original is missing
+        descripcion: fullVenta?.descripcion || listItem?.descripcion,
+        // Ensure sales details show something for freestyle sales
+        ventasDetalle: fullVenta?.ventasDetalle?.map((d: any) => ({
+             ...d,
+             producto: d.producto?.nombre !== 'Producto desconocido' ? d.producto : { 
+                 nombre: 'Concepto Venta Libre', 
+                 codigo: 'VL' 
+             }
+        }))
       }
 
       if (fullVenta) {

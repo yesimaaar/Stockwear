@@ -11,7 +11,6 @@ import { ADMIN_NAV_ITEMS } from "@/lib/admin-nav";
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger
 } from "@/components/ui/tooltip";
 
@@ -172,8 +171,7 @@ export function AdminSidebar({ sidebarMode, setSidebarMode }: AdminSidebarProps)
 						</span>
 					</Link>
 				</div>
-				<TooltipProvider delayDuration={120}>
-					<nav className="flex-1 overflow-y-auto px-3 pb-4 pt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+				<nav className="flex-1 overflow-y-auto px-3 pb-4 pt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
 					<ul className="flex list-none flex-col gap-1.5 p-0">
 						{ADMIN_NAV_ITEMS.map((item) => {
 							const Icon = item.icon;
@@ -223,8 +221,7 @@ export function AdminSidebar({ sidebarMode, setSidebarMode }: AdminSidebarProps)
 							);
 						})}
 					</ul>
-					</nav>
-				</TooltipProvider>
+				</nav>
 
 				<div className="border-t border-border px-3 py-4">
 					<Link

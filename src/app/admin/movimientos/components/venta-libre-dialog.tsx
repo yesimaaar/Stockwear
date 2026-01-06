@@ -120,7 +120,8 @@ export function VentaLibreDialog({ open, onOpenChange, onSuccess }: VentaLibreDi
             const folio = `VL-${datePart}-${randomPart}`
 
             // Create the sale record
-            const { data: ventaData, error: ventaError } = await supabase
+            // MIGRATION REQUIRED: 'descripcion' column must exist in 'ventas'
+            const { error: ventaError } = await supabase
                 .from('ventas')
                 .insert({
                     folio,
@@ -135,51 +136,22 @@ export function VentaLibreDialog({ open, onOpenChange, onSuccess }: VentaLibreDi
                     numero_cuotas: 1,
                     interes_porcentaje: 0,
                     monto_cuota: 0,
+                    descripcion: values.descripcion || '' // New column
                 })
-                .select()
-                .single()
 
             if (ventaError) {
                 console.error('Error creating free sale:', ventaError)
-                throw new Error('No se pudo registrar la venta libre')
+                throw new Error('No se pudo registrar la venta libre. Asegúrate de que la base de datos tenga la columna "descripcion" en "ventas".')
             }
 
-            // If there's a description, create a dummy product detail for display purposes
-            if (values.descripcion && values.descripcion.trim()) {
-                await supabase
-                    .from('ventasDetalle')
-                    .insert({
-                        ventaId: ventaData.id,
-                        productoId: null, // No product associated
-                        stockId: null,
-                        cantidad: 1,
-                        precioUnitario: values.monto,
-                        descuento: 0,
-                        subtotal: values.monto,
-                        tienda_id: tiendaId,
-                    })
-
-                // Store description in historial for reference
-                await supabase.from('historialStock').insert({
-                    tipo: 'venta',
-                    productoId: null,
-                    tallaId: null,
-                    almacenId: null,
-                    cantidad: 1,
-                    stockAnterior: 0,
-                    stockNuevo: 0,
-                    usuarioId: user?.id || null,
-                    motivo: `Venta libre: ${values.descripcion} (${folio})`,
-                    costoUnitario: values.monto,
-                    createdAt: values.fechaVenta.toISOString(),
-                    tienda_id: tiendaId,
-                })
-            }
+            // Note: We deliberately skip creating 'ventasDetalle' or 'historialStock' records
+            // because this is a "Product-less" sale, as requested.
 
             toast({
                 title: "Venta registrada",
-                description: `Se registró la venta de ${currencyFormatter.format(values.monto)}`,
+                description: `Se registró la venta de ${currencyFormatter.format(values.monto)}: ${values.descripcion || 'Venta Libre'}`,
             })
+
 
             form.reset()
             onSuccess?.()

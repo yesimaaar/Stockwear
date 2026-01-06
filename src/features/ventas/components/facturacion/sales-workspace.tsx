@@ -1228,6 +1228,57 @@ export function SalesWorkspace({
                     <div className="w-full space-y-4">
                       <div className="space-y-1 text-right">
                         <p className="text-sm text-muted-foreground">Total artículos: {totalArticulos} ud</p>
+                        
+                        {(() => {
+                           if (!selectedMetodoPagoId) return null
+                           const method = metodosPago.find(m => String(m.id) === selectedMetodoPagoId)
+                           if (!method) return null
+                           
+                           const name = method.nombre.toLowerCase()
+                           let rate = 0
+                           let label = ''
+
+                           // Simplificamos la detección para ser más tolerantes
+                           const isAddi = name.includes('addi')
+                           const isCard = name.includes('tarjeta') || 
+                                         (name.includes('banco') && !name.includes('transferencia')) || 
+                                         name === 'tc' || 
+                                         name === 'datafono'
+
+                           if (isAddi) {
+                               rate = 0.1071
+                               label = 'Comisión Addi'
+                           } else if (isCard) {
+                               rate = 0.0361
+                               label = 'Comisión Datáfono'
+                           }
+
+                           if (rate > 0) {
+                               const amount = total * rate
+                               const net = total - amount
+                               return (
+                                   <div className="my-2 text-xs text-muted-foreground bg-slate-50 p-2 rounded border border-slate-100 dark:bg-slate-900/50 dark:border-slate-800">
+                                       <div className="flex justify-between text-rose-500">
+                                           <span>- {label} ({(rate * 100).toFixed(2)}%):</span>
+                                           <span>-${amount.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                                       </div>
+                                       <div className="flex justify-between font-medium text-emerald-600 mt-1">
+                                           <span>Neto a recibir:</span>
+                                           <span>${net.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                                       </div>
+                                       <div className="text-[10px] text-slate-400 mt-1 text-center">
+                                           {isAddi ? 'Disponible en 8 días' : 'Disponible mañana'}
+                                       </div>
+                                   </div>
+                               )
+                           } 
+                           // Debug para entender por qué no sale
+                           /* else {
+                             return <div className="text-[10px] text-gray-300">Método: {name} (Sin comisión)</div>
+                           } */
+                           return null
+                        })()}
+
                         <p className="text-lg font-semibold text-foreground">
                           Total a pagar: ${total.toLocaleString("es-CO", { minimumFractionDigits: 0 })}
                         </p>
