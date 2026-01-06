@@ -917,7 +917,7 @@ export function SalesWorkspace({
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">Resultados de la búsqueda</p>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
           {productosEncontrados.map((producto) => (
             <HighlightProductCard
               key={producto.id}
@@ -1322,11 +1322,11 @@ export function SalesWorkspace({
             <section className="space-y-3">
               <header className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-foreground">Destacados</h3>
-                  <p className="text-xs text-muted-foreground">Productos más vendidos y novedades recientes</p>
+                  <h3 className="text-base font-semibold text-foreground">Todos los productos</h3>
+                  <p className="text-xs text-muted-foreground">{highlights.destacados.length} productos disponibles</p>
                 </div>
               </header>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
                 {highlights.destacados.slice(0, visibleHighlights).map((producto) => (
                   <HighlightProductCard
                     key={`destacado-${producto.id}`}
@@ -1535,7 +1535,7 @@ function HighlightProductCard({ producto, onQuickAdd }: HighlightProductCardProp
 
   return (
     <div className="group flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm">
-      <div className="relative h-60 w-full overflow-hidden rounded-xl border border-border/50 bg-secondary/20">
+      <div className="relative h-48 w-full overflow-hidden rounded-xl border border-border/50 bg-secondary/20">
         {hasImage ? (
           <Image
             src={producto.imagen as string}

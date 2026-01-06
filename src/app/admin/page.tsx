@@ -58,9 +58,9 @@ interface HighlightsResponse {
 
 type HighlightsCache = HighlightsResponse
 
-const HIGHLIGHT_CACHE_KEY = "stockwear.admin.highlights"
+const HIGHLIGHT_CACHE_KEY = "stockwear.admin.highlights.v2"
 const MOBILE_NOTICE_DISMISSED_KEY = "stockwear.admin.mobile-notice.dismissed"
-const SHOULD_USE_CACHE = true
+const SHOULD_USE_CACHE = false // Disable cache to ensure fresh catalog
 const CATALOG_BASE_PATH = "/catalog"
 
 type BrowserWindow = Window & {
@@ -178,12 +178,37 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
     .eq("tienda_id", tiendaId)
     .limit(DETALLE_LIMIT)
 
-  const scopedProductos = supabase
-    .from("productos")
-    .select(`id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`)
-    .eq("tienda_id", tiendaId)
-    .order("createdAt", { ascending: false })
-    .limit(PRODUCTOS_LIMIT)
+  // Fetch ALL products using pagination
+  let allProducts: ProductoRow[] = []
+  let from = 0
+  const PAGE_SIZE = 1000
+  let hasMore = true
+  let productsError = null
+
+  while (hasMore) {
+    const { data: pageData, error: pageError } = await supabase
+      .from("productos")
+      .select(`id,codigo,estado,"stockMinimo","createdAt",nombre,precio,imagen,categoria:categorias!productos_categoriaId_fkey ( nombre )`)
+      .eq("tienda_id", tiendaId)
+      .order("createdAt", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1)
+
+    if (pageError) {
+      productsError = pageError
+      break
+    }
+
+    if (!pageData || pageData.length === 0) {
+      hasMore = false
+    } else {
+      allProducts = [...allProducts, ...(pageData as ProductoRow[])]
+      if (pageData.length < PAGE_SIZE) {
+        hasMore = false
+      } else {
+        from += PAGE_SIZE
+      }
+    }
+  }
 
   const scopedHistorial = supabase
     .from("historialStock")
@@ -193,21 +218,20 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
     .order("createdAt", { ascending: false })
     .limit(HISTORIAL_LIMIT)
 
-  const [ventasResp, detallesResp, productosResp, historialResp] = await Promise.all([
+  const [ventasResp, detallesResp, historialResp] = await Promise.all([
     scopedVentas,
     scopedDetalles,
-    scopedProductos,
     scopedHistorial,
   ])
 
-  if (ventasResp.error || detallesResp.error || productosResp.error || historialResp.error) {
+  if (ventasResp.error || detallesResp.error || productsError || historialResp.error) {
     throw new Error("No se pudieron obtener los destacados localmente")
   }
 
   let ventas = (ventasResp.data as VentaRow[] | null) ?? []
   let detalles = (detallesResp.data as VentaDetalleRow[] | null) ?? []
   const historial = (historialResp.data as HistorialRow[] | null) ?? []
-  const productos = (productosResp.data as ProductoRow[] | null) ?? []
+  const productos = allProducts
 
   if (ventas.length === 0 && detalles.length === 0 && historial.length > 0) {
     const legacyEntries = historial
@@ -312,15 +336,15 @@ async function loadHighlightsFallback(): Promise<HighlightsResponse> {
   const topProductIds = new Set(topProducts.map(p => p.id))
 
   const activos = productos.filter((producto) => producto.estado === "activo")
-  const baseRecientes = activos.length ? activos : productos
-  const newProducts = baseRecientes
-    .slice()
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  
+  // Get ALL other products, sorted by recency
+  const otherProducts = activos
     .filter(p => !topProductIds.has(p.id))
-    .slice(0, 4)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .map((producto, index) => formatRecent(producto, index))
 
-  const destacados = [...topProducts, ...newProducts]
+  // Combine Top + Others = All Products
+  const destacados = [...topProducts, ...otherProducts]
 
   return {
     destacados,
