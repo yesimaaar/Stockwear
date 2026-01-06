@@ -20,6 +20,7 @@ import {
   Loader2,
   Search,
   Rocket,
+  Coins,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentTiendaId } from "@/features/auth/services/tenant-service"
@@ -46,7 +47,7 @@ type TimeRange = "90d" | "30d" | "7d" | "1d"
 
 type Trend = "up" | "down" | "flat"
 
-type MetricId = "ventasMes" | "ventasRegistradas" | "usuariosActivos" | "productosBajoStock"
+type MetricId = "ventasMes" | "gananciasMes" | "ventasRegistradas" | "usuariosActivos" | "productosBajoStock"
 const METRIC_STYLES: Record<
   MetricId,
   {
@@ -63,6 +64,13 @@ const METRIC_STYLES: Record<
     bgColor: "bg-emerald-100",
     iconColor: "text-emerald-700",
     description: "Ingresos registrados en movimientos de tipo venta",
+  },
+  gananciasMes: {
+    title: "Ganancias del mes",
+    icon: Coins,
+    bgColor: "bg-teal-100",
+    iconColor: "text-teal-700",
+    description: "Margen estimado (Venta - Precio Base)",
   },
   ventasRegistradas: {
     title: "Ventas registradas",
@@ -105,6 +113,8 @@ interface HistorialRow {
   costoUnitario: number | null
   createdAt: string
   usuarioId: string | null
+  ganancia?: number
+  total?: number
 }
 
 interface ProductoRow {
@@ -113,6 +123,7 @@ interface ProductoRow {
   stockMinimo: number
   createdAt: string
   nombre: string | null
+  precio_base?: number | null
 }
 
 interface StockRow {
@@ -181,7 +192,7 @@ interface VentaDetalleQueryRow {
   subtotal: number | null
 }
 
-const DASHBOARD_CACHE_KEY = "stockwear-dashboard-cache-v1"
+const DASHBOARD_CACHE_KEY = "stockwear-dashboard-cache-v2"
 
 interface CachedMetric {
   id: MetricId
@@ -192,15 +203,7 @@ interface CachedMetric {
 
 interface DashboardCache {
   metrics: CachedMetric[]
-  salesSeries: Array<{ date: string; value: number }>
-  dailyTarget: number
-  dailyProgress: number
-  weeklyTarget: number
-  weeklyProgress: number
-  monthlyTarget: number
-  monthlyProgress: number
-  yearlyTarget: number
-  yearlyProgress: number
+  salesSeries: Array<{ date: string; value: number; profit: number }>
   lowStockCount: number
 }
 
@@ -328,7 +331,8 @@ export default function ReportesPage() {
   )
   const [allSales, setAllSales] = useState<HistorialRow[]>([])
   const [chartRange, setChartRange] = useState<TimeRange>("7d")
-  const [salesSeries, setSalesSeries] = useState<Array<{ date: string; value: number }>>([])
+  const [chartMetric, setChartMetric] = useState<'sales' | 'profit'>('sales')
+  const [salesSeries, setSalesSeries] = useState<Array<{ date: string; value: number; profit: number }>>([])
 
   const [selectedEmployeePeriod, setSelectedEmployeePeriod] = useState<ReportPeriod>("weekly")
   const [employeeSales, setEmployeeSales] = useState<Record<ReportPeriod, EmployeeSalesPoint[]>>({
@@ -424,25 +428,25 @@ export default function ReportesPage() {
       setLoading(true)
       try {
         const tiendaId = await getCurrentTiendaId()
-        const [ventasResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp] =
+        const [ventasResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp, metodosResp, detallesResp] =
           await Promise.all([
             supabase
               .from("ventas")
-              .select("id,total,\"createdAt\",\"usuarioId\"")
+              .select("id,total,\"createdAt\",\"usuarioId\",metodo_pago_id")
               .eq("tienda_id", tiendaId)
               .gte("createdAt", subDays(new Date(), 90).toISOString())
               .order("createdAt", { ascending: false })
               .limit(5000),
             supabase
               .from("productos")
-              .select("id,estado,\"stockMinimo\",\"createdAt\",nombre")
+              .select("id,estado,\"stockMinimo\",\"createdAt\",nombre,precio_base")
               .eq("tienda_id", tiendaId)
-              .limit(500),
+              .limit(3000),
             supabase
               .from("stock")
               .select("\"productoId\",cantidad")
               .eq("tienda_id", tiendaId)
-              .limit(2000),
+              .limit(3000),
             supabase
               .from("usuarios")
               .select("id,estado,\"createdAt\",nombre,rol")
@@ -454,19 +458,59 @@ export default function ReportesPage() {
               .eq("tienda_id", tiendaId)
               .limit(200),
             ReconocimientoService.getProductosMasConsultados(5, { tiendaId }),
+            supabase
+              .from("metodos_pago")
+              .select("id,comision_porcentaje")
+              .eq("tienda_id", tiendaId),
+            supabase
+              .from("ventasDetalle")
+              .select("ventaId,productoId,cantidad,subtotal, ventas!inner(createdAt)")
+              .eq("ventas.tienda_id", tiendaId)
+              .gte("ventas.createdAt", subDays(new Date(), 90).toISOString())
+              .limit(10000)
           ])
 
         if (canceled) return
 
+        const metodosMap = (metodosResp?.data ?? []).reduce((acc, m: any) => {
+          acc[m.id] = m.comision_porcentaje || 0
+          return acc
+        }, {} as Record<number, number>)
+
+        const productsMapWithCost = (productosResp?.data ?? []).reduce((acc, p: any) => {
+          acc[p.id] = p.precio_base || 0
+          return acc
+        }, {} as Record<number, number>)
+
+        const detallesByVenta = (detallesResp?.data ?? []).reduce((acc, d: any) => {
+          if (!acc[d.ventaId]) acc[d.ventaId] = []
+          acc[d.ventaId].push(d)
+          return acc
+        }, {} as Record<number, any[]>)
+
         // Data from 'ventas' table instead of 'historialStock'
         const rawVentas = (ventasResp.data as any[]) || []
         // Map to structure compatible with logic below, but using 'total' from parent
-        const ventas = rawVentas.map(v => ({
-           ...v,
-           tipo: 'venta',
-           cantidad: 1, // Represents 1 transaction
-           costoUnitario: v.total // Hack: reuse field so existing reduce works? No, better rewrite reduce.
-        }))
+        const ventas: HistorialRow[] = rawVentas.map((v) => {
+          const details = detallesByVenta[v.id] || []
+          
+          const costoTotal = details.reduce(
+            (sum, d) => sum + d.cantidad * (productsMapWithCost[d.productoId] || 0),
+            0,
+          )
+          const comision = (v.total || 0) * ((metodosMap[v.metodo_pago_id] || 0) / 100)
+          
+          // Use total venta instead of subtotalReal to include "ventas libres"
+          const ganancia = (v.total || 0) - costoTotal - comision
+
+          return {
+            ...v,
+            tipo: "venta",
+            cantidad: 1,
+            costoUnitario: v.total,
+            ganancia,
+          }
+        })
 
         const productos = (productosResp.data as ProductoRow[]) || []
         const stock = (stockResp.data as StockRow[]) || []
@@ -611,6 +655,11 @@ export default function ReportesPage() {
         const monthSalesCountTrend = computeTrend(monthSalesCount, previousMonthSalesCount)
         const usersTrend = computeTrend(usersCurrentMonth.length, usersPreviousMonth.length)
         const productsTrend = computeTrend(productsCreatedCurrentMonth.length, productsCreatedPreviousMonth.length)
+        
+        const monthProfitValue = monthSales.reduce((sum, item) => sum + (item.ganancia || 0), 0)
+        const previousMonthProfitValue = previousMonthSales.reduce((sum, item) => sum + (item.ganancia || 0), 0)
+        const profitTrend = computeTrend(monthProfitValue, previousMonthProfitValue)
+
         const metricsPayload: Metric[] = [
           {
             id: "ventasMes",
@@ -618,6 +667,13 @@ export default function ReportesPage() {
             value: currencyFormatter.format(monthSalesValue),
             change: monthSalesTrend.change,
             trend: monthSalesTrend.trend,
+          },
+          {
+            id: "gananciasMes",
+            ...METRIC_STYLES.gananciasMes,
+            value: currencyFormatter.format(monthProfitValue),
+            change: profitTrend.change,
+            trend: profitTrend.trend,
           },
           {
             id: "ventasRegistradas",
@@ -676,6 +732,7 @@ export default function ReportesPage() {
 
         setMetrics(metricsPayload)
         setLowStockCount(lowStock.length)
+        setAllSales(ventas)
 
         setEmployeeSales(employeeSalesPayload)
         setInventorySummary({
@@ -735,55 +792,67 @@ export default function ReportesPage() {
         end: endOfDay(now),
       })
 
-      const salesMap = new Map<string, number>()
+      const salesMap = new Map<string, { total: number; profit: number }>()
       hours.forEach((hour) => {
-        salesMap.set(hour.toISOString(), 0)
+        salesMap.set(hour.toISOString(), { total: 0, profit: 0 })
       })
 
       filteredSales.forEach((sale) => {
         const saleDate = new Date(sale.createdAt)
         const hourKey = startOfHour(saleDate).toISOString()
         if (salesMap.has(hourKey)) {
-          const current = salesMap.get(hourKey) || 0
-          salesMap.set(hourKey, current + (sale.costoUnitario || 0) * sale.cantidad)
+          const current = salesMap.get(hourKey)!
+          salesMap.set(hourKey, {
+            total: current.total + (sale.costoUnitario || 0) * sale.cantidad,
+            profit: current.profit + (sale.ganancia || 0),
+          })
         }
       })
 
-      const series = hours.map((hour) => ({
-        date: hour.toISOString(),
-        value: salesMap.get(hour.toISOString()) || 0,
-      }))
+      const series = hours.map((hour) => {
+        const data = salesMap.get(hour.toISOString())!
+        return {
+          date: hour.toISOString(),
+          value: data.total,
+          profit: data.profit,
+        }
+      })
       setSalesSeries(series)
     } else {
       let daysToSubtract = 90
       if (chartRange === "30d") daysToSubtract = 30
       if (chartRange === "7d") daysToSubtract = 7
 
-      const startDate = subDays(startOfDay(now), daysToSubtract - 1) // Include today
+      const startDate = subDays(startOfDay(now), daysToSubtract - 1)
       filteredSales = allSales.filter((sale) => new Date(sale.createdAt) >= startDate)
 
-      const salesMap = new Map<string, number>()
+      const salesMap = new Map<string, { total: number; profit: number }>()
       const dates: Date[] = []
       for (let i = 0; i < daysToSubtract; i++) {
         const date = subDays(now, daysToSubtract - 1 - i)
         const key = format(date, "yyyy-MM-dd")
-        salesMap.set(key, 0)
+        salesMap.set(key, { total: 0, profit: 0 })
         dates.push(date)
       }
 
       filteredSales.forEach((sale) => {
         const key = format(new Date(sale.createdAt), "yyyy-MM-dd")
         if (salesMap.has(key)) {
-          const current = salesMap.get(key) || 0
-          salesMap.set(key, current + (sale.costoUnitario || 0) * sale.cantidad)
+          const current = salesMap.get(key)!
+          salesMap.set(key, {
+            total: current.total + (sale.costoUnitario || 0) * sale.cantidad,
+            profit: current.profit + (sale.ganancia || 0),
+          })
         }
       })
 
       const series = dates.map((date) => {
         const key = format(date, "yyyy-MM-dd")
+        const data = salesMap.get(key)!
         return {
           date: key,
-          value: salesMap.get(key) || 0,
+          value: data.total,
+          profit: data.profit,
         }
       })
       setSalesSeries(series)
@@ -1311,10 +1380,12 @@ export default function ReportesPage() {
               className="border-none shadow-sm"
               data={salesSeries}
               formatter={(value) => currencyFormatter.format(value)}
-              title="Ventas recientes"
-              description="Filtra la tendencia y compara el ingreso acumulado por rango de fecha"
+              title={chartMetric === "sales" ? "Ventas recientes" : "Ganancias recientes"}
+              description="Filtra la tendencia y compara el rendimiento acumulado por rango de fecha"
               timeRange={chartRange}
               onTimeRangeChange={setChartRange}
+              metric={chartMetric}
+              onMetricChange={setChartMetric}
             />
           </div>
 
