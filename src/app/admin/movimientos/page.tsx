@@ -1,7 +1,7 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -333,13 +333,40 @@ export default function MovimientosPage() {
     setLoadingHistorial(true)
     try {
       const tiendaId = await getCurrentTiendaId()
-      // Fetching more records to allow client-side filtering for now
-      const { data, error } = await supabase
+      
+      let query = supabase
         .from("historialStock")
         .select("id, tipo, cantidad, costoUnitario, createdAt, motivo, producto:productos(nombre)")
         .eq("tienda_id", tiendaId)
         .order("createdAt", { ascending: false })
-        .limit(500)
+
+      // If a date is selected, apply filtering at DB level to ensure we get the relevant records
+      // regardless of volume.
+      if (date) {
+        const start = new Date(date)
+        const end = new Date(date)
+        
+        // Define range based on period (matching loadIngresos logic roughly)
+        if (periodo === "diario") {
+            start.setHours(0, 0, 0, 0)
+            end.setHours(23, 59, 59, 999)
+            // Add buffer for timezone safety
+            start.setDate(start.getDate() - 1)
+            end.setDate(end.getDate() + 1)
+        } else if (periodo === "mensual") {
+            start.setDate(1)
+            end.setMonth(start.getMonth() + 1)
+            end.setDate(0)
+        }
+        
+        // Apply range filter instead of fixed limit if date is present
+        query = query.gte("createdAt", start.toISOString()).lte("createdAt", end.toISOString())
+      } else {
+        // Fallback for initial load
+        query = query.limit(500)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -352,35 +379,91 @@ export default function MovimientosPage() {
   }
 
   useEffect(() => {
+    // Reload history when date/period changes to ensure data availability
     loadHistorial()
-  }, [])
+  }, [date, periodo])
 
-  // Load Cash Flow (Sales & Abonos)
-  const loadIngresos = async () => {
+
+  // Load Cash Flow (Sales & Abonos) based on Date Selection
+  const loadIngresos = useCallback(async () => {
+    // Determine date range
+    if (!date) return
+
+    const start = new Date(date)
+    const end = new Date(date)
+
+    if (periodo === "diario") {
+      start.setHours(0, 0, 0, 0)
+      end.setHours(23, 59, 59, 999)
+    } else if (periodo === "semanal") {
+      const startOfWeek = new Date(date)
+      startOfWeek.setDate(date.getDate() - date.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+      start.setTime(startOfWeek.getTime())
+
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+      endOfWeek.setHours(23, 59, 59, 999)
+      end.setTime(endOfWeek.getTime())
+    } else if (periodo === "mensual") {
+      start.setDate(1)
+      start.setHours(0, 0, 0, 0)
+      end.setMonth(start.getMonth() + 1)
+      end.setDate(0)
+      end.setHours(23, 59, 59, 999)
+    }
+
+    // Adjust for settlements: extend past search window to catch pending settlements (e.g. 15 days ago)
+    const extendedStart = new Date(start)
+    extendedStart.setDate(start.getDate() - 15)
+
+    // Widen the end date to cover timezone differences (e.g. +1 day buffer)
+    const bufferedEnd = new Date(end)
+    bufferedEnd.setDate(end.getDate() + 2)
+
     setLoadingIngresos(true)
+    console.log(`Loading Ingresos: Range ${start.toLocaleString()} to ${end.toLocaleString()}`)
+    
     try {
       const tiendaId = await getCurrentTiendaId()
 
-      // 1. Fetch Cash Sales
+      // 1. Fetch Cash Sales (Extended window for settlements, but we will filter later)
+      // We need extended window for pending settlements (check date + daysToSettle matches range)
+      // AND normal window for sales created today
+      
       const { data: ventas, error: ventasError } = await supabase
         .from("ventas")
         .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id, descripcion, ventasDetalle(producto:productos(nombre, codigo))")
         .eq("tienda_id", tiendaId)
         .eq("tipo_venta", "contado")
+        .gte("createdAt", extendedStart.toISOString())
+        .lte("createdAt", bufferedEnd.toISOString())
         .order("createdAt", { ascending: false })
-        .limit(500)
 
-      if (ventasError) throw ventasError
+      if (ventasError) {
+        console.error("Error fetching ventas:", ventasError)
+        throw ventasError
+      }
+      
+      console.log(`Ventas fetched: ${ventas?.length || 0}`)
 
-      // 2. Fetch Abonos
+      // 2. Fetch Abonos (Buffered window)
+      // Buffer start slightly too (-1 day) just in case
+      const bufferedStart = new Date(start)
+      bufferedStart.setDate(start.getDate() - 1)
+
       const { data: abonos, error: abonosError } = await supabase
         .from("abonos")
         .select("id, monto, createdAt, nota, metodo_pago_id, cliente:clientes(nombre), venta:ventas(ventasDetalle(producto:productos(nombre)))")
         .eq("tienda_id", tiendaId)
+        .gte("createdAt", bufferedStart.toISOString())
+        .lte("createdAt", bufferedEnd.toISOString())
         .order("createdAt", { ascending: false })
-        .limit(500)
 
-      if (abonosError) throw abonosError
+      if (abonosError) {
+        console.error("Error fetching abonos:", abonosError)
+        throw abonosError
+      }
 
       // 3. Fetch payment methods
       const { data: metodosPago, error: metodosError } = await supabase
@@ -394,38 +477,36 @@ export default function MovimientosPage() {
       const metodosMap = new Map(metodosPago?.map(m => [m.id, m.nombre]) || [])
 
       // 3.5 Fetch History for Venta Libre descriptions (Workaround for missing description column)
-      // We look for 'Venta libre:' pattern in history to recover descriptions
+      // Optimize: Only fetch for visible sales? No, batch is fine.
       let historialMap = new Map<string, string>();
       const ventasLibres = (ventas || []).filter(v => {
         const details = (v.ventasDetalle as any[]) || [];
         if (details.length === 0) return true;
         const prod = details[0]?.producto;
-        // Check for generic product code
         if (details.length === 1 && prod?.codigo === 'VL-GENERICO') return true;
         return !(details.some((d: any) => d.producto?.nombre));
       });
       
       if (ventasLibres.length > 0) {
         // Fetch history that looks like 'Venta libre:%'
+        // Restricted to the date range to optimize
         const { data: historyData } = await supabase
           .from('historialStock')
           .select('motivo, createdAt')
           .ilike('motivo', 'Venta libre:%')
-          .order('createdAt', { ascending: false })
-          .limit(100);
+          .gte("createdAt", extendedStart.toISOString())
+          .lte("createdAt", end.toISOString())
+          .order('createdAt', { ascending: false });
 
         if (historyData) {
           historyData.forEach(h => {
-             // Motivo format: "Venta libre: DESCRIPCION (FOLIO)"
-             // Regex might be too strict if description has parens.
-             // Try split by ' (' from last index
              if (h.motivo && h.motivo.startsWith('Venta libre: ')) {
                  const prefix = 'Venta libre: '
-                 const content = h.motivo.substring(prefix.length) // "DESCRIPCION (FOLIO)"
+                 const content = h.motivo.substring(prefix.length)
                  const lastParen = content.lastIndexOf(' (')
                  if (lastParen > 0) {
                      const desc = content.substring(0, lastParen)
-                     const folioWithParen = content.substring(lastParen + 2) // "FOLIO)"
+                     const folioWithParen = content.substring(lastParen + 2)
                      const folio = folioWithParen.substring(0, folioWithParen.length - 1)
                      historialMap.set(folio, desc)
                  }
@@ -435,35 +516,35 @@ export default function MovimientosPage() {
       }
 
       // 4. Map and Combine
-      const ventasMapped: IngresoItem[] = (ventas || []).flatMap(v => {
+      const ventasMapped: IngresoItem[] = (ventas || []).flatMap((v: any) => {
         // Extract product info
         const details = (v.ventasDetalle as any[]) || []
         const prods = details.map((d: any) => ({ 
             nombre: d.producto?.nombre, 
             codigo: d.producto?.codigo 
-        })).filter(p => p.nombre)
+        })).filter(p => p.nombre != null)
         
         let descripcion = 'Venta de contado';
         
-        // Check if it's a Generic Venta Libre first
         const isGeneric = prods.length === 1 && prods[0].codigo === 'VL-GENERICO'
         
         if (historialMap.has(v.folio)) {
-            // Priority 1: Legacy history hack
             descripcion = historialMap.get(v.folio) || 'Venta Libre';
         } else if ((v as any).descripcion) {
-             // Priority 2: New column 'descripcion' in ventas table
              descripcion = (v as any).descripcion;
         } else if (isGeneric) {
-            // Fallback if history missing but generic used
             descripcion = 'Venta Libre';
         } else if (prods.length > 0) {
-            // Normal products
             const names = prods.map(p => p.nombre)
             descripcion = names.slice(0, 2).join(", ") + (names.length > 2 ? ` y ${names.length - 2} más` : "");
         } else {
-             // Legacy fallback
-             descripcion = 'Venta Libre';
+             // Fallback: try to construct description from raw details even if products seem missing properties
+             if (details.length > 0 && !isGeneric) {
+                  const possibleNames = details.map((d: any) => d.producto?.nombre || 'Producto').join(', ');
+                  descripcion = possibleNames;
+             } else {
+                  descripcion = 'Venta Libre';
+             }
         }
 
         const metodoPago = metodosMap.get(v.metodo_pago_id) || 'Efectivo'
@@ -472,17 +553,14 @@ export default function MovimientosPage() {
         const isTC = (metodoPagoLower.includes('tarjeta') && (metodoPagoLower.includes('crédito') || metodoPagoLower.includes('credito'))) || metodoPagoLower === 'tc'
 
         if (isAddi || isTC) {
-          // --- Logic for Delayed Liquidation Payments (Addi, Credit Card) ---
           const isCreditCard = isTC
-          
-          // Config params
           const commissionRate = isCreditCard ? 0.0361 : 0.1071
           const daysToSettle = isCreditCard ? 1 : 8 // Addi is ~8 days (weekly), TC is next day
           const labelPrefix = isCreditCard ? 'Liquidación TC' : 'Liquidación Addi'
           const methodLabel = isCreditCard ? 'Depósito Banco' : 'Transferencia Addi'
 
 
-          // 1. Pending Item (The Sale event) - Gray, Gross amount
+          // 1. Pending Item (The Sale event) 
           const pendingItem: IngresoItem = {
             id: `v-${v.id}`,
             tipo: 'venta_contado',
@@ -494,7 +572,7 @@ export default function MovimientosPage() {
             status: 'pending' // UI renders this as pending/gray
           }
 
-          // 2. Settlement Item (The Cash Availability) - Green, Net amount, Delayed
+          // 2. Settlement Item (The Cash Availability)
           const dateObj = new Date(v.createdAt)
           dateObj.setDate(dateObj.getDate() + daysToSettle)
           const settlementDate = dateObj.toISOString()
@@ -511,11 +589,11 @@ export default function MovimientosPage() {
             fechaLiquidacion: settlementDate
           }
 
-          return [pendingItem, settlementItem]
+          return [pendingItem, settlementItem] as IngresoItem[]
         }
 
         // Normal Sale
-        return [{
+        const normalItem: IngresoItem = {
           id: `v-${v.id}`,
           tipo: 'venta_contado',
           monto: v.total, // Full amount for cash/others
@@ -524,11 +602,20 @@ export default function MovimientosPage() {
           referencia: v.folio,
           metodoPago,
           status: 'available'
-        }]
+        }
+        return [normalItem] as IngresoItem[]
+      })
+      .filter((item: IngresoItem) => {
+          // Filter items to ensure they fall within the strict requested range
+          // This handles:
+          // 1. Pending items created in the past (fetched via extendedStart) -> Should NOT show if outside range
+          // 2. Settlement items -> Should show if settlementDate is inside range
+          const itemDate = new Date(item.fecha)
+          return itemDate >= start && itemDate <= end
       })
 
       const abonosMapped: IngresoItem[] = (abonos || []).map(a => {
-        // Extract product names from the associated sale
+        // ... (existing abonos mapping)
         const productos = (a.venta as any)?.ventasDetalle?.map((d: any) => d.producto?.nombre).filter(Boolean) || []
         const modelo = productos.length > 0 ? productos[0] : 'Producto'
         const clienteNombre = (a.cliente as any)?.nombre || 'Cliente'
@@ -556,11 +643,11 @@ export default function MovimientosPage() {
     } finally {
       setLoadingIngresos(false)
     }
-  }
+  }, [date, periodo])
 
   useEffect(() => {
     void loadIngresos()
-  }, [])
+  }, [loadIngresos])
 
   // Load Expenses (Gastos)
   const loadGastos = async () => {
