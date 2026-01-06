@@ -204,59 +204,34 @@ interface DashboardCache {
   lowStockCount: number
 }
 
-type GoalPeriod = "daily" | "weekly" | "monthly" | "yearly"
+type ReportPeriod = "daily" | "weekly" | "monthly" | "yearly"
 
-interface GoalState {
-  target: number
-  progress: number
-}
-
-const GOAL_METADATA: Record<
-  GoalPeriod,
+const PERIOD_METADATA: Record<
+  ReportPeriod,
   {
     title: string
     subtitle: string
-    dotColor: string
-    helper: string
-    targetPlaceholder: string
-    progressPlaceholder: string
   }
 > = {
   daily: {
-    title: "Objetivo Diario",
-    subtitle: "Actualiza metas",
-    dotColor: "bg-sky-400",
-    helper: "Controla los ingresos día a día",
-    targetPlaceholder: "Ej: 650000",
-    progressPlaceholder: "Ej: 450000",
+    title: "Reporte Diario",
+    subtitle: "Ventas del día",
   },
   weekly: {
-    title: "Objetivo Semanal",
-    subtitle: "Seguimiento de la semana",
-    dotColor: "bg-emerald-400",
-    helper: "Evalúa la suma de tus 7 días",
-    targetPlaceholder: "Ej: 4200000",
-    progressPlaceholder: "Ej: 3100000",
+    title: "Reporte Semanal",
+    subtitle: "Ventas de la semana",
   },
   monthly: {
-    title: "Objetivo Mensual",
-    subtitle: "Meta principal",
-    dotColor: "bg-amber-400",
-    helper: "Alinea tu crecimiento mensual",
-    targetPlaceholder: "Ej: 14500000",
-    progressPlaceholder: "Ej: 11200000",
+    title: "Reporte Mensual",
+    subtitle: "Ventas del mes",
   },
   yearly: {
-    title: "Objetivo Anual",
-    subtitle: "Visión a largo plazo",
-    dotColor: "bg-violet-400",
-    helper: "Planifica el cierre del año",
-    targetPlaceholder: "Ej: 175000000",
-    progressPlaceholder: "Ej: 125000000",
+    title: "Reporte Anual",
+    subtitle: "Ventas del año",
   },
 }
 
-const GOAL_ORDER: GoalPeriod[] = ["daily", "weekly", "monthly", "yearly"]
+const PERIOD_ORDER: ReportPeriod[] = ["daily", "weekly", "monthly", "yearly"]
 
 const EMPLOYEE_CHART_CONFIG: ChartConfig = {
   ventas: {
@@ -265,7 +240,7 @@ const EMPLOYEE_CHART_CONFIG: ChartConfig = {
   },
 }
 
-const REPORT_SHEET_NAMES: Record<GoalPeriod, string> = {
+const REPORT_SHEET_NAMES: Record<ReportPeriod, string> = {
   daily: "Diario",
   weekly: "Semanal",
   monthly: "Mensual",
@@ -284,19 +259,6 @@ function getInitialSalesRange(): DateRange {
   const start = new Date()
   start.setDate(end.getDate() - 29)
   return { from: start, to: end }
-}
-
-function formatGoalCompletionLabel(value: number) {
-  const normalized = Number.isFinite(value) ? value : 0
-  const clamped = Math.max(Math.min(normalized, 999), -999)
-  return `${clamped.toFixed(1)}%`
-}
-
-function getGoalStatusText(value: number) {
-  if (value >= 100) return "Meta alcanzada"
-  if (value >= 60) return "Meta en curso"
-  if (value <= 0) return "Aún sin progreso"
-  return "Meta en progreso"
 }
 
 function truncateLabel(value: string, maxLength = 16) {
@@ -367,16 +329,9 @@ export default function ReportesPage() {
   const [allSales, setAllSales] = useState<HistorialRow[]>([])
   const [chartRange, setChartRange] = useState<TimeRange>("7d")
   const [salesSeries, setSalesSeries] = useState<Array<{ date: string; value: number }>>([])
-  const [goals, setGoals] = useState<Record<GoalPeriod, GoalState>>({
-    daily: { target: 0, progress: 0 },
-    weekly: { target: 0, progress: 0 },
-    monthly: { target: 0, progress: 0 },
-    yearly: { target: 0, progress: 0 },
-  })
-  const [selectedGoal, setSelectedGoal] = useState<GoalPeriod>("daily")
-  const [selectedTrackingPeriod, setSelectedTrackingPeriod] = useState<GoalPeriod>("monthly")
-  const [selectedEmployeePeriod, setSelectedEmployeePeriod] = useState<GoalPeriod>("weekly")
-  const [employeeSales, setEmployeeSales] = useState<Record<GoalPeriod, EmployeeSalesPoint[]>>({
+
+  const [selectedEmployeePeriod, setSelectedEmployeePeriod] = useState<ReportPeriod>("weekly")
+  const [employeeSales, setEmployeeSales] = useState<Record<ReportPeriod, EmployeeSalesPoint[]>>({
     daily: [],
     weekly: [],
     monthly: [],
@@ -392,30 +347,6 @@ export default function ReportesPage() {
   const [appliedSalesRange, setAppliedSalesRange] = useState<DateRange | undefined>(initialSalesRangeRef.current)
   const [salesReportRows, setSalesReportRows] = useState<SalesReportRow[]>([])
   const [salesReportLoading, setSalesReportLoading] = useState(false)
-
-  const dailyGoal = goals.daily
-  const weeklyGoal = goals.weekly
-  const monthlyGoal = goals.monthly
-  const yearlyGoal = goals.yearly
-
-  const dailyTarget = dailyGoal.target
-  const dailyProgress = dailyGoal.progress
-  const weeklyTarget = weeklyGoal.target
-  const weeklyProgress = weeklyGoal.progress
-  const monthlyTarget = monthlyGoal.target
-  const monthlyProgress = monthlyGoal.progress
-  const yearlyTarget = yearlyGoal.target
-  const yearlyProgress = yearlyGoal.progress
-
-  const handleGoalInputChange = (period: GoalPeriod, field: keyof GoalState, value: number) => {
-    setGoals((prev) => ({
-      ...prev,
-      [period]: {
-        ...prev[period],
-        [field]: value,
-      },
-    }))
-  }
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -439,24 +370,6 @@ export default function ReportesPage() {
 
       setMetrics(hydratedMetrics)
       setSalesSeries(parsed.salesSeries)
-      setGoals((prev) => ({
-        daily: {
-          target: parsed.dailyTarget ?? prev.daily.target,
-          progress: parsed.dailyProgress ?? prev.daily.progress,
-        },
-        weekly: {
-          target: parsed.weeklyTarget ?? prev.weekly.target,
-          progress: parsed.weeklyProgress ?? prev.weekly.progress,
-        },
-        monthly: {
-          target: parsed.monthlyTarget ?? prev.monthly.target,
-          progress: parsed.monthlyProgress ?? prev.monthly.progress,
-        },
-        yearly: {
-          target: parsed.yearlyTarget ?? prev.yearly.target,
-          progress: parsed.yearlyProgress ?? prev.yearly.progress,
-        },
-      }))
       setLowStockCount(parsed.lowStockCount)
       setLoading(false)
     } catch (error) {
@@ -622,14 +535,14 @@ export default function ReportesPage() {
         })
         const yearlySalesValue = yearlySales.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
-        const employeeTotals: Record<GoalPeriod, Record<string, { total: number; cantidad: number }>> = {
+        const employeeTotals: Record<ReportPeriod, Record<string, { total: number; cantidad: number }>> = {
           daily: {},
           weekly: {},
           monthly: {},
           yearly: {},
         }
 
-        const sumEmployeeSale = (period: GoalPeriod, empleadoId: string, amount: number, quantity: number) => {
+        const sumEmployeeSale = (period: ReportPeriod, empleadoId: string, amount: number, quantity: number) => {
           if (!employeeTotals[period][empleadoId]) {
             employeeTotals[period][empleadoId] = { total: 0, cantidad: 0 }
           }
@@ -729,15 +642,6 @@ export default function ReportesPage() {
           },
         ]
 
-        const computedDailyProgress = Math.round(dailySalesValue)
-        const computedWeeklyProgress = Math.round(weeklySalesValue)
-        const computedMonthlyProgress = Math.round(monthSalesValue)
-        const computedYearlyProgress = Math.round(yearlySalesValue)
-        const computedDailyTarget = Math.max(Math.round(dailySalesValue * 1.2), 1)
-        const computedWeeklyTarget = Math.max(Math.round(weeklySalesValue * 1.18), 1)
-        const computedMonthlyTarget = Math.max(Math.round(monthSalesValue * 1.15), 1)
-        const computedYearlyTarget = Math.max(Math.round(yearlySalesValue * 1.1), 1)
-
         const productosActivos = productos.filter((producto) => producto.estado === "activo").length
         const productosInactivos = productos.length - productosActivos
         const stockTotal = stock.reduce((sum, item) => sum + (item.cantidad || 0), 0)
@@ -748,7 +652,7 @@ export default function ReportesPage() {
           consultas: item.consultas,
         }))
 
-        const employeeSalesPayload: Record<GoalPeriod, EmployeeSalesPoint[]> = GOAL_ORDER.reduce(
+        const employeeSalesPayload: Record<ReportPeriod, EmployeeSalesPoint[]> = PERIOD_ORDER.reduce(
           (acc, period) => {
             const entries = Object.entries(employeeTotals[period])
               .map(([empleadoId, data]) => ({
@@ -767,19 +671,12 @@ export default function ReportesPage() {
             weekly: [],
             monthly: [],
             yearly: [],
-          } as Record<GoalPeriod, EmployeeSalesPoint[]>,
+          } as Record<ReportPeriod, EmployeeSalesPoint[]>,
         )
 
         setMetrics(metricsPayload)
         setLowStockCount(lowStock.length)
 
-        // setSalesSeries is now handled by useEffect depending on chartRange
-        setGoals({
-          daily: { target: computedDailyTarget, progress: computedDailyProgress },
-          weekly: { target: computedWeeklyTarget, progress: computedWeeklyProgress },
-          monthly: { target: computedMonthlyTarget, progress: computedMonthlyProgress },
-          yearly: { target: computedYearlyTarget, progress: computedYearlyProgress },
-        })
         setEmployeeSales(employeeSalesPayload)
         setInventorySummary({
           productosActivos,
@@ -799,14 +696,6 @@ export default function ReportesPage() {
               trend: metric.trend,
             })),
             salesSeries: [],
-            dailyTarget: computedDailyTarget,
-            dailyProgress: computedDailyProgress,
-            weeklyTarget: computedWeeklyTarget,
-            weeklyProgress: computedWeeklyProgress,
-            monthlyTarget: computedMonthlyTarget,
-            monthlyProgress: computedMonthlyProgress,
-            yearlyTarget: computedYearlyTarget,
-            yearlyProgress: computedYearlyProgress,
             lowStockCount: lowStock.length,
           }
 
@@ -901,45 +790,7 @@ export default function ReportesPage() {
     }
   }, [allSales, chartRange])
 
-  const dailyPercentage = useMemo(() => {
-    if (dailyTarget === 0) return 0
-    return (dailyProgress / dailyTarget) * 100
-  }, [dailyProgress, dailyTarget])
-
-  const weeklyPercentage = useMemo(() => {
-    if (weeklyTarget === 0) return 0
-    return (weeklyProgress / weeklyTarget) * 100
-  }, [weeklyProgress, weeklyTarget])
-
-  const monthlyPercentage = useMemo(() => {
-    if (monthlyTarget === 0) return 0
-    return (monthlyProgress / monthlyTarget) * 100
-  }, [monthlyProgress, monthlyTarget])
-
-  const yearlyPercentage = useMemo(() => {
-    if (yearlyTarget === 0) return 0
-    return (yearlyProgress / yearlyTarget) * 100
-  }, [yearlyProgress, yearlyTarget])
-
-  const goalPercentages = useMemo<Record<GoalPeriod, number>>(
-    () => ({
-      daily: dailyPercentage,
-      weekly: weeklyPercentage,
-      monthly: monthlyPercentage,
-      yearly: yearlyPercentage,
-    }),
-    [dailyPercentage, weeklyPercentage, monthlyPercentage, yearlyPercentage],
-  )
-
-  const currentGoal = goals[selectedGoal]
-  const currentGoalMetadata = GOAL_METADATA[selectedGoal]
-  const currentGoalPercentage = goalPercentages[selectedGoal]
-  const trackingGoal = goals[selectedTrackingPeriod]
-  const trackingGoalMetadata = GOAL_METADATA[selectedTrackingPeriod]
-  const trackingGoalPercentage = goalPercentages[selectedTrackingPeriod]
-  const trackingStatusText = getGoalStatusText(trackingGoalPercentage)
-  const trackingCompletionLabel = formatGoalCompletionLabel(trackingGoalPercentage)
-  const employeeChartMetadata = GOAL_METADATA[selectedEmployeePeriod]
+  const employeeChartMetadata = PERIOD_METADATA[selectedEmployeePeriod]
   const employeeChartData = useMemo(() => {
     return employeeSales[selectedEmployeePeriod].map((item) => ({
       ...item,
@@ -949,12 +800,8 @@ export default function ReportesPage() {
   const employeeChartHasData = employeeChartData.length > 0
 
   const buildPeriodReportTables = useCallback(
-    (period: GoalPeriod, generatedAtLabel: string) => {
-      const metadata = GOAL_METADATA[period]
-      const goal = goals[period]
-      const percent = Number(goalPercentages[period].toFixed(2))
-      const status = getGoalStatusText(percent)
-      const pending = Math.max(goal.target - goal.progress, 0)
+    (period: ReportPeriod, generatedAtLabel: string) => {
+      const metadata = PERIOD_METADATA[period]
       const employees = employeeSales[period]
       const totalEmployeeSales = employees.reduce((sum, employee) => sum + employee.total, 0)
       const avgPerEmployee = employees.length > 0 ? totalEmployeeSales / employees.length : 0
@@ -962,11 +809,6 @@ export default function ReportesPage() {
       const summaryTable = {
         header: ["Indicador", "Descripción", "Valor", "Observaciones"],
         rows: [
-          ["Meta", "Meta configurada (COP)", goal.target || 0, ""],
-          ["Meta", "Progreso acumulado (COP)", goal.progress || 0, ""],
-          ["Meta", "Cumplimiento (%)", percent, "Porcentaje de avance"],
-          ["Meta", "Pendiente por alcanzar (COP)", pending > 0 ? pending : 0, ""],
-          ["Estado", "Situación actual", status, status],
           ["Ingresos", "Ventas totales analizadas (COP)", totalEmployeeSales, ""],
           ["Ingresos", "Promedio por colaborador (COP)", Number(avgPerEmployee.toFixed(2)), ""],
         ],
@@ -988,7 +830,6 @@ export default function ReportesPage() {
         rows: [
           ["Periodo", REPORT_SHEET_NAMES[period]],
           ["Generado el", generatedAtLabel],
-          ["Meta / Progreso", `${currencyFormatter.format(goal.progress)} / ${currencyFormatter.format(goal.target)}`],
         ],
       }
 
@@ -999,7 +840,7 @@ export default function ReportesPage() {
         notesTable,
       }
     },
-    [employeeSales, goalPercentages, goals],
+    [employeeSales],
   )
 
   const fetchSalesReport = useCallback(
@@ -1212,7 +1053,7 @@ export default function ReportesPage() {
 
       const sheetAddTable = ((XLSX.utils as unknown as { sheet_add_table?: (ws: WorkSheet, opts: any) => void }).sheet_add_table)
 
-      GOAL_ORDER.forEach((period, index) => {
+      PERIOD_ORDER.forEach((period, index) => {
         const { metadata, summaryTable, employeeTable, notesTable } = buildPeriodReportTables(period, generatedAtLabel)
         const maxColumns = Math.max(summaryTable.header.length, employeeTable.header.length, notesTable.header.length, 4)
 
@@ -1334,18 +1175,6 @@ export default function ReportesPage() {
     () => topConsulted.reduce((sum, item) => sum + item.consultas, 0),
     [topConsulted],
   )
-
-  const salesTargetSparkline = useMemo(() => {
-    if (salesSeries.length === 0) {
-      return [0.3, 0.5, 0.4, 0.65, 0.45, 0.7]
-    }
-    const lastPoints = salesSeries.slice(-6)
-    const maxValue = Math.max(...lastPoints.map((item) => item.value), 1)
-    if (maxValue === 0) {
-      return lastPoints.map(() => 0)
-    }
-    return lastPoints.map((item) => item.value / maxValue)
-  }, [salesSeries])
 
   const salesReportTotals = useMemo(() => {
     const detalleTotal = salesReportRows.reduce((sum, row) => sum + row.total, 0)
@@ -1476,10 +1305,10 @@ export default function ReportesPage() {
             })}
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid gap-6 lg:grid-cols-1">
             <SalesPerformanceChart
               key={chartRange}
-              className="border-none shadow-sm lg:col-span-2"
+              className="border-none shadow-sm"
               data={salesSeries}
               formatter={(value) => currencyFormatter.format(value)}
               title="Ventas recientes"
@@ -1487,211 +1316,9 @@ export default function ReportesPage() {
               timeRange={chartRange}
               onTimeRangeChange={setChartRange}
             />
-
-            <Card className="border-none bg-gradient-to-b from-card via-muted/40 to-muted text-foreground shadow-sm dark:from-[#161616] dark:via-[#111] dark:to-[#0e0e0e] dark:text-white">
-              <CardHeader className="space-y-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <CardDescription className="text-sm text-muted-foreground">Objetivo de ventas</CardDescription>
-                    <CardTitle className="text-2xl font-semibold text-foreground dark:text-white">
-                      Seguimiento {trackingGoalMetadata.title.replace("Objetivo ", "").toLowerCase()}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">Compara tu progreso vs. la meta definida</p>
-                  </div>
-                  <div className="w-full max-w-[180px]">
-                    <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Periodo
-                    </Label>
-                    <Select
-                      value={selectedTrackingPeriod}
-                      onValueChange={(value) => setSelectedTrackingPeriod(value as GoalPeriod)}
-                    >
-                      <SelectTrigger className="bg-background/60">
-                        <SelectValue placeholder="Selecciona periodo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GOAL_ORDER.map((period) => (
-                          <SelectItem key={`tracking-${period}`} value={period}>
-                            {GOAL_METADATA[period].title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Últimos 6 registros</span>
-                  <span>{trackingStatusText}</span>
-                </div>
-                <div className="flex h-24 items-end gap-2 rounded-2xl bg-[hsl(var(--foreground)/0.08)] p-4 dark:bg-white/5">
-                  {salesTargetSparkline.map((value, index) => (
-                    <div
-                      key={`spark-${index}`}
-                      className="flex-1 h-full overflow-hidden rounded-full bg-[hsl(var(--foreground)/0.12)] dark:bg-white/10"
-                    >
-                      <div
-                        className="w-full rounded-full bg-emerald-600/80 dark:bg-emerald-300/90"
-                        style={{ height: `${Math.max(value * 100, 8)}%` }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-col gap-4 text-foreground sm:flex-row sm:items-end sm:justify-between dark:text-white">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Progreso actual</p>
-                    <p className="text-3xl font-semibold text-foreground dark:text-white">
-                      {currencyFormatter.format(trackingGoal.progress)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Meta {trackingGoalMetadata.title.replace("Objetivo ", "").toLowerCase()}: {currencyFormatter.format(trackingGoal.target)}
-                    </p>
-                  </div>
-                  <div className="text-left sm:text-right">
-                    <p
-                      className={`text-2xl font-semibold ${trackingGoalPercentage >= 100 ? "text-emerald-600 dark:text-emerald-300" : "text-emerald-500 dark:text-emerald-400"}`}
-                    >
-                      {trackingCompletionLabel}
-                    </p>
-                    <p className="text-xs text-muted-foreground">avance frente al objetivo</p>
-                  </div>
-                </div>
-                <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
-                  {GOAL_ORDER.map((period) => (
-                    <div
-                      key={`summary-${period}`}
-                      className={`rounded-2xl border border-border bg-card/70 p-3 dark:border-white/10 dark:bg-white/5 ${period === selectedTrackingPeriod ? "ring-1 ring-primary/40" : ""}`}
-                    >
-                      <div className="mb-1 flex items-center justify-between text-foreground">
-                        <div className="flex items-center gap-2">
-                          <Target className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="uppercase tracking-wide text-[0.7rem]">
-                            {GOAL_METADATA[period].title.replace("Objetivo ", "")}
-                          </span>
-                        </div>
-                        <span className="text-[0.7rem] uppercase text-muted-foreground">{Math.round(goalPercentages[period])}%</span>
-                      </div>
-                      <p className="text-lg font-semibold text-foreground dark:text-white">
-                        {currencyFormatter.format(goals[period].progress)}
-                      </p>
-                      <p className="text-muted-foreground">Meta: {currencyFormatter.format(goals[period].target)}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="border-none shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <Target className="h-5 w-5 text-primary" />
-                  <CardTitle>Configuración de Objetivos</CardTitle>
-                </div>
-                <CardDescription>Define y ajusta tus metas según el periodo.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-4 rounded-xl border border-border/50 bg-background/50 p-4 shadow-sm ring-1 ring-white/5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className={`h-2.5 w-2.5 rounded-full ${currentGoalMetadata.dotColor}`} />
-                      <div>
-                        <h3 className="font-semibold">{currentGoalMetadata.title}</h3>
-                        <p className="text-xs text-muted-foreground">{currentGoalMetadata.subtitle}</p>
-                      </div>
-                    </div>
-                    <div className="w-full max-w-xs space-y-2">
-                      <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Tipo de objetivo
-                      </Label>
-                      <Select value={selectedGoal} onValueChange={(value) => setSelectedGoal(value as GoalPeriod)}>
-                        <SelectTrigger className="bg-background/60">
-                          <SelectValue placeholder="Selecciona un objetivo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {GOAL_ORDER.map((period) => (
-                            <SelectItem key={period} value={period}>
-                              {GOAL_METADATA[period].title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label htmlFor={`${selectedGoal}-target`}>Meta (COP)</Label>
-                      <Input
-                        id={`${selectedGoal}-target`}
-                        type="number"
-                        value={currentGoal.target}
-                        onChange={(e) => handleGoalInputChange(selectedGoal, "target", Number(e.target.value) || 0)}
-                        placeholder={currentGoalMetadata.targetPlaceholder}
-                        className="bg-background/60"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor={`${selectedGoal}-progress`}>Progreso</Label>
-                      <Input
-                        id={`${selectedGoal}-progress`}
-                        type="number"
-                        value={currentGoal.progress}
-                        onChange={(e) => handleGoalInputChange(selectedGoal, "progress", Number(e.target.value) || 0)}
-                        placeholder={currentGoalMetadata.progressPlaceholder}
-                        className="bg-background/60"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-dashed border-border/70 bg-primary/5 px-4 py-3 text-sm">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{currentGoalMetadata.helper}</p>
-                    <div className="mt-2 flex flex-wrap items-end justify-between gap-4 text-foreground">
-                      <div>
-                        <p className="text-3xl font-semibold text-primary">{Math.round(currentGoalPercentage)}%</p>
-                        <p className="text-xs text-muted-foreground">Porcentaje alcanzado</p>
-                      </div>
-                      <div className="text-right text-muted-foreground">
-                        <p>Progreso: {currencyFormatter.format(currentGoal.progress)}</p>
-                        <p>Meta: {currencyFormatter.format(currentGoal.target)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
-                    {GOAL_ORDER.map((period) => {
-                      const metadata = GOAL_METADATA[period]
-                      const isActive = selectedGoal === period
-                      return (
-                        <div
-                          key={period}
-                          className={`rounded-xl border border-border bg-card/60 p-3 ${isActive ? "ring-1 ring-primary/40" : ""}`}
-                        >
-                          <div className="mb-1 flex items-center gap-2 text-foreground">
-                            <span className={`h-2 w-2 rounded-full ${metadata.dotColor}`} />
-                            <span className="font-semibold">{metadata.title.replace("Objetivo ", "")}</span>
-                          </div>
-                          <p className="text-lg font-semibold text-foreground">{Math.round(goalPercentages[period])}%</p>
-                          <p className="text-muted-foreground">{currencyFormatter.format(goals[period].progress)}</p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/5 p-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                  <p>Los cambios se guardan de inmediato y afectan el seguimiento del dashboard.</p>
-                  <Button className="px-6" type="button">
-                    Guardar cambios
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
             <Card className="border-none shadow-sm">
               <CardHeader>
                 <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-xl bg-blue-50">
@@ -1760,14 +1387,14 @@ export default function ReportesPage() {
                     <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Periodo
                     </Label>
-                    <Select value={selectedEmployeePeriod} onValueChange={(value) => setSelectedEmployeePeriod(value as GoalPeriod)}>
+                    <Select value={selectedEmployeePeriod} onValueChange={(value) => setSelectedEmployeePeriod(value as ReportPeriod)}>
                       <SelectTrigger className="bg-background/60">
                         <SelectValue placeholder="Selecciona periodo" />
                       </SelectTrigger>
                       <SelectContent>
-                        {GOAL_ORDER.map((period) => (
+                        {PERIOD_ORDER.map((period) => (
                           <SelectItem key={`employee-${period}`} value={period}>
-                            {GOAL_METADATA[period].title}
+                            {PERIOD_METADATA[period].title}
                           </SelectItem>
                         ))}
                       </SelectContent>
