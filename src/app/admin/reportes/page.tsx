@@ -511,13 +511,12 @@ export default function ReportesPage() {
       setLoading(true)
       try {
         const tiendaId = await getCurrentTiendaId()
-        const [historialResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp] =
+        const [ventasResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp] =
           await Promise.all([
             supabase
-              .from("historialStock")
-              .select("tipo,cantidad,\"costoUnitario\",\"createdAt\",\"usuarioId\"")
+              .from("ventas")
+              .select("id,total,\"createdAt\",\"usuarioId\"")
               .eq("tienda_id", tiendaId)
-              .eq("tipo", "venta")
               .gte("createdAt", subDays(new Date(), 90).toISOString())
               .order("createdAt", { ascending: false })
               .limit(5000),
@@ -546,7 +545,16 @@ export default function ReportesPage() {
 
         if (canceled) return
 
-        const historial = (historialResp.data as HistorialRow[]) || []
+        // Data from 'ventas' table instead of 'historialStock'
+        const rawVentas = (ventasResp.data as any[]) || []
+        // Map to structure compatible with logic below, but using 'total' from parent
+        const ventas = rawVentas.map(v => ({
+           ...v,
+           tipo: 'venta',
+           cantidad: 1, // Represents 1 transaction
+           costoUnitario: v.total // Hack: reuse field so existing reduce works? No, better rewrite reduce.
+        }))
+
         const productos = (productosResp.data as ProductoRow[]) || []
         const stock = (stockResp.data as StockRow[]) || []
         const usuarios = (usuariosResp.data as UsuarioRow[]) || []
@@ -576,7 +584,7 @@ export default function ReportesPage() {
           return acc
         }, {})
 
-        const ventas = historial.filter((item) => item.tipo === "venta")
+        // ventas is already populated above
         const now = new Date()
         const { month: currentMonth, year: currentYear } = getDateParts(now)
         const previousMonthDate = new Date(currentYear, currentMonth - 1, 1)
@@ -590,9 +598,9 @@ export default function ReportesPage() {
           return month === previousMonth && year === previousMonthYear
         })
 
-        const monthSalesValue = monthSales.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+        const monthSalesValue = monthSales.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
         const previousMonthSalesValue = previousMonthSales.reduce(
-          (sum, item) => sum + (item.costoUnitario || 0) * item.cantidad,
+          (sum, item) => sum + (Number(item.total) || 0),
           0,
         )
 
@@ -605,14 +613,14 @@ export default function ReportesPage() {
         const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
         const yearStartDate = new Date(now.getFullYear(), 0, 1)
         const salesToday = ventas.filter((v) => new Date(v.createdAt) >= today)
-        const dailySalesValue = salesToday.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+        const dailySalesValue = salesToday.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
         const weeklySales = ventas.filter((v) => new Date(v.createdAt) >= weekStartDate)
-        const weeklySalesValue = weeklySales.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+        const weeklySalesValue = weeklySales.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
         const yearlySales = ventas.filter((v) => {
           const { year } = getDateParts(v.createdAt)
           return year === currentYear
         })
-        const yearlySalesValue = yearlySales.reduce((sum, item) => sum + (item.costoUnitario || 0) * item.cantidad, 0)
+        const yearlySalesValue = yearlySales.reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
         const employeeTotals: Record<GoalPeriod, Record<string, { total: number; cantidad: number }>> = {
           daily: {},
@@ -634,11 +642,12 @@ export default function ReportesPage() {
           const empleado = usuariosById[venta.usuarioId]
           if (!empleado || empleado.rol !== "empleado") return
           const saleDate = new Date(venta.createdAt)
-          const amount = (venta.costoUnitario || 0) * venta.cantidad
-          if (saleDate >= today) sumEmployeeSale("daily", venta.usuarioId, amount, venta.cantidad)
-          if (saleDate >= weekStartDate) sumEmployeeSale("weekly", venta.usuarioId, amount, venta.cantidad)
-          if (saleDate >= monthStartDate) sumEmployeeSale("monthly", venta.usuarioId, amount, venta.cantidad)
-          if (saleDate >= yearStartDate) sumEmployeeSale("yearly", venta.usuarioId, amount, venta.cantidad)
+          // Use total from venta
+          const amount = Number(venta.total) || 0
+          if (saleDate >= today) sumEmployeeSale("daily", venta.usuarioId, amount, 1)
+          if (saleDate >= weekStartDate) sumEmployeeSale("weekly", venta.usuarioId, amount, 1)
+          if (saleDate >= monthStartDate) sumEmployeeSale("monthly", venta.usuarioId, amount, 1)
+          if (saleDate >= yearStartDate) sumEmployeeSale("yearly", venta.usuarioId, amount, 1)
         })
         const activeUsers = usuarios.filter((u) => (u.estado ?? "activo") === "activo")
         const usersCurrentMonth = usuarios.filter((u) => {
