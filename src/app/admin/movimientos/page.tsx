@@ -435,7 +435,7 @@ export default function MovimientosPage() {
       // Remove nested join that was causing errors
       const { data: ventas, error: ventasError } = await supabase
         .from("ventas")
-        .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id")
+        .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id, descripcion")
         .eq("tienda_id", tiendaId)
         .eq("tipo_venta", "contado")
         .gte("createdAt", extendedStart.toISOString())

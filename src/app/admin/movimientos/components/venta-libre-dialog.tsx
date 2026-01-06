@@ -120,28 +120,48 @@ export function VentaLibreDialog({ open, onOpenChange, onSuccess }: VentaLibreDi
             const folio = `VL-${datePart}-${randomPart}`
 
             // Create the sale record
-            // MIGRATION REQUIRED: 'descripcion' column must exist in 'ventas'
-            const { error: ventaError } = await supabase
+            const ventaData = {
+                folio,
+                total: values.monto,
+                usuarioId: user?.id || null,
+                createdAt: values.fechaVenta.toISOString(),
+                tienda_id: tiendaId,
+                metodo_pago_id: Number(values.metodoPagoId),
+                caja_sesion_id: sesion?.id || null,
+                tipo_venta: 'contado',
+                saldo_pendiente: 0,
+                numero_cuotas: 1,
+                interes_porcentaje: 0,
+                monto_cuota: 0,
+                descripcion: values.descripcion || '' 
+            }
+
+            // Attempt insert
+            let { error: ventaError } = await supabase
                 .from('ventas')
-                .insert({
-                    folio,
-                    total: values.monto,
-                    usuarioId: user?.id || null,
-                    createdAt: values.fechaVenta.toISOString(),
-                    tienda_id: tiendaId,
-                    metodo_pago_id: Number(values.metodoPagoId),
-                    caja_sesion_id: sesion?.id || null,
-                    tipo_venta: 'contado',
-                    saldo_pendiente: 0,
-                    numero_cuotas: 1,
-                    interes_porcentaje: 0,
-                    monto_cuota: 0,
-                    descripcion: values.descripcion || '' // New column
-                })
+                .insert(ventaData)
+
+            // Fallback: If 'descripcion' column is missing (Postgres error 42703), retry without it
+            if (ventaError && ventaError.code === '42703') {
+                console.warn('Column "descripcion" missing in "ventas". Retrying without it.')
+                const { descripcion, ...ventaDataFallback } = ventaData
+                const { error: retryError } = await supabase
+                    .from('ventas')
+                    .insert(ventaDataFallback)
+                
+                ventaError = retryError
+
+                if (!retryError) {
+                     toast({
+                        title: "Advertencia",
+                        description: "Venta registrada, pero la descripción no se guardó (falta actualización en base de datos).",
+                    })
+                }
+            }
 
             if (ventaError) {
                 console.error('Error creating free sale:', ventaError)
-                throw new Error('No se pudo registrar la venta libre. Asegúrate de que la base de datos tenga la columna "descripcion" en "ventas".')
+                throw new Error(ventaError.message || 'No se pudo registrar la venta libre.')
             }
 
             // Note: We deliberately skip creating 'ventasDetalle' or 'historialStock' records
