@@ -10,12 +10,19 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
+type TimeRange = "90d" | "30d" | "7d" | "1d"
+type MetricType = "sales" | "profit"
+
 interface SalesPerformanceChartProps {
   data: Array<{ date: string; value: number }>
   formatter: (value: number) => string
   title?: string
   description?: string
   className?: string
+  timeRange?: TimeRange
+  onTimeRangeChange?: (range: TimeRange) => void
+  metric?: MetricType
+  onMetricChange?: (metric: MetricType) => void
 }
 
 const chartConfig: ChartConfig = {
@@ -27,8 +34,6 @@ const chartConfig: ChartConfig = {
     },
   },
 }
-
-type TimeRange = "90d" | "30d" | "7d" | "1d"
 
 const RANGE_LABEL: Record<TimeRange, string> = {
   "90d": "Últimos 3 meses",
@@ -52,10 +57,9 @@ export function SalesPerformanceChart({
   className,
   timeRange = "90d",
   onTimeRangeChange,
-}: SalesPerformanceChartProps & {
-  timeRange?: TimeRange
-  onTimeRangeChange?: (range: TimeRange) => void
-}) {
+  metric = "sales",
+  onMetricChange,
+}: SalesPerformanceChartProps) {
   const isMobile = useIsMobile()
 
   React.useEffect(() => {
@@ -72,6 +76,12 @@ export function SalesPerformanceChart({
     }
   }
 
+  const handleMetricChange = (value: string) => {
+    if ((value === "sales" || value === "profit") && onMetricChange) {
+      onMetricChange(value as MetricType)
+    }
+  }
+
   return (
     <Card className={cn("@container/card", className)}>
       <CardHeader>
@@ -79,7 +89,20 @@ export function SalesPerformanceChart({
           <CardTitle className="text-xl font-semibold">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </div>
-        <CardAction>
+        <CardAction className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {onMetricChange && (
+             <ToggleGroup
+              type="single"
+              value={metric}
+              onValueChange={handleMetricChange}
+              variant="outline"
+              className="hidden space-x-1 @[768px]/card:flex"
+            >
+              <ToggleGroupItem value="sales" title="Ver ventas totales">Ventas</ToggleGroupItem>
+              <ToggleGroupItem value="profit" title="Ver ganancias estimadas">Ganancias</ToggleGroupItem>
+            </ToggleGroup>
+          )}
+
           <ToggleGroup
             type="single"
             value={timeRange}
@@ -92,25 +115,39 @@ export function SalesPerformanceChart({
             <ToggleGroupItem value="7d">7 días</ToggleGroupItem>
             <ToggleGroupItem value="1d">Hoy</ToggleGroupItem>
           </ToggleGroup>
-          <Select value={timeRange} onValueChange={handleTimeRangeChange}>
-            <SelectTrigger className="w-40 @[768px]/card:hidden text-sm">
-              <SelectValue placeholder="Selecciona un rango" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              <SelectItem value="90d" className="rounded-lg">
-                Últimos 3 meses
-              </SelectItem>
-              <SelectItem value="30d" className="rounded-lg">
-                Últimos 30 días
-              </SelectItem>
-              <SelectItem value="7d" className="rounded-lg">
-                Últimos 7 días
-              </SelectItem>
-              <SelectItem value="1d" className="rounded-lg">
-                Hoy
-              </SelectItem>
-            </SelectContent>
-          </Select>
+
+          <div className="flex w-full gap-2 @[768px]/card:hidden">
+             {onMetricChange && (
+                <Select value={metric} onValueChange={handleMetricChange}>
+                  <SelectTrigger className="h-9 flex-1 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sales">Ventas</SelectItem>
+                    <SelectItem value="profit">Ganancias</SelectItem>
+                  </SelectContent>
+                </Select>
+             )}
+            <Select value={timeRange} onValueChange={handleTimeRangeChange}>
+              <SelectTrigger className="h-9 flex-1 text-xs">
+                <SelectValue placeholder="Rango" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="90d" className="rounded-lg">
+                  Últimos 3 m
+                </SelectItem>
+                <SelectItem value="30d" className="rounded-lg">
+                  30 días
+                </SelectItem>
+                <SelectItem value="7d" className="rounded-lg">
+                  7 días
+                </SelectItem>
+                <SelectItem value="1d" className="rounded-lg">
+                  Hoy
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardAction>
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
