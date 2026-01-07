@@ -149,7 +149,7 @@ interface HistorialItem {
 
 interface IngresoItem {
   id: string | number
-  tipo: 'venta_contado' | 'abono'
+  tipo: 'venta_contado' | 'abono' | 'venta_credito'
   monto: number
   fecha: string
   descripcion: string
@@ -224,6 +224,7 @@ export default function MovimientosPage() {
   const [historial, setHistorial] = useState<HistorialItem[]>([])
   const [loadingHistorial, setLoadingHistorial] = useState(true)
   const [filterTerm, setFilterTerm] = useState("")
+  const [globalBalance, setGlobalBalance] = useState(0)
 
   // New State for Cash Flow
   const [ingresos, setIngresos] = useState<IngresoItem[]>([])
@@ -433,13 +434,13 @@ export default function MovimientosPage() {
       // We need extended window for pending settlements (check date + daysToSettle matches range)
       // AND normal window for sales created today
       
-      // 1. Fetch Cash Sales (Extended window)
+      // 1. Fetch Sales (Extended window)
       // Remove nested join that was causing errors
       const { data: ventas, error: ventasError } = await supabase
         .from("ventas")
         .select("id, folio, total, createdAt, tipo_venta, metodo_pago_id, descripcion")
         .eq("tienda_id", tiendaId)
-        .eq("tipo_venta", "contado")
+        // .eq("tipo_venta", "contado") // Removed to include credit sales
         .gte("createdAt", extendedStart.toISOString())
         .lte("createdAt", bufferedEnd.toISOString())
         .order("createdAt", { ascending: false })
@@ -608,6 +609,13 @@ export default function MovimientosPage() {
              }
         }
 
+        // Handle Credit Sales explicitly
+        if (v.tipo_venta === 'credito') {
+             // Credit sales are not income events until an Abono is made. 
+             // They appear in "Por Cobrar" tab, not "Ingresos".
+             return []
+        }
+
         const metodoPago = metodosMap.get(v.metodo_pago_id) || 'Efectivo'
         const metodoPagoLower = metodoPago.toLowerCase()
         const isAddi = metodoPagoLower.includes('addi')
@@ -717,6 +725,48 @@ export default function MovimientosPage() {
   }, [loadIngresos])
 
   // Load Expenses (Gastos)
+  const loadGlobalBalance = useCallback(async () => {
+    try {
+      const tiendaId = await getCurrentTiendaId()
+      
+      // Fetch Methods to identify Credit
+      const { data: metodos } = await supabase.from('metodos_pago').select('id, nombre').eq('tienda_id', tiendaId)
+      const creditMethodIds = new Set((metodos || [])
+        .filter(m => ['crédito', 'credito', 'por cobrar'].includes(m.nombre.toLowerCase()))
+        .map(m => m.id))
+
+      const { data: v } = await supabase
+        .from('ventas')
+        .select('total, tipo_venta, metodo_pago_id')
+        .eq('tienda_id', tiendaId)
+        .limit(5000)
+
+      const { data: a } = await supabase.from('abonos').select('monto').eq('tienda_id', tiendaId).limit(5000)
+      const { data: g } = await supabase.from('gastos').select('monto').eq('tienda_id', tiendaId).eq('estado', 'pagado').limit(5000)
+      const { data: pg } = await supabase.from('pago_gastos').select('monto').eq('tienda_id', tiendaId).limit(5000)
+      
+      const sumV = (v || []).reduce((acc, i) => {
+        const isCreditType = i.tipo_venta === 'credito'
+        const isCreditMethod = creditMethodIds.has(i.metodo_pago_id)
+        
+        if (isCreditType || isCreditMethod) return acc
+        
+        return acc + (Number(i.total) || 0)
+      }, 0)
+
+      const sumA = (a || []).reduce((acc, i) => acc + (Number(i.monto) || 0), 0)
+      const sumG = (g || []).reduce((acc, i) => acc + (Number(i.monto) || 0), 0)
+      const sumPG = (pg || []).reduce((acc, i) => acc + (Number(i.monto) || 0), 0)
+      
+      const total = (sumV + sumA) - (sumG + sumPG)
+      setGlobalBalance(total)
+    } catch (error) {
+       console.error("Error loading global balance", error)
+    }
+  }, [])
+  
+  useEffect(() => { void loadGlobalBalance() }, [loadGlobalBalance])
+
   const loadGastos = useCallback(async () => {
     if (!date) return
 
@@ -921,7 +971,10 @@ export default function MovimientosPage() {
   const movimientosEgresos = useMemo(() => {
     // Inventory entries removed from display
 
-    const expenseItems = gastos.filter(g => {
+    // Combine paid and pending expenses for visual list, apply filters
+    const allGastos = [...gastos, ...gastosPendientes]
+
+    const expenseItems = allGastos.filter(g => {
       // Apply same date filters if needed
       if (date) {
         const itemDate = new Date(g.fechaGasto)
@@ -939,16 +992,22 @@ export default function MovimientosPage() {
             itemDate.getFullYear() === selectedDate.getFullYear()
           if (!isSameMonth) return false
         } else if (periodo === "semanal") {
-          // ... logic for weekly ...
-          // Simplified for brevity, reusing logic would be better
-          return true
+          const startOfWeek = new Date(selectedDate)
+          startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay())
+          startOfWeek.setHours(0, 0, 0, 0)
+
+          const endOfWeek = new Date(startOfWeek)
+          endOfWeek.setDate(startOfWeek.getDate() + 6)
+          endOfWeek.setHours(23, 59, 59, 999)
+
+          if (itemDate < startOfWeek || itemDate > endOfWeek) return false
         }
       }
       return true
     }).map(g => ({
       id: `gasto-${g.id}`,
       tipo: 'gasto',
-      descripcion: g.descripcion,
+      descripcion: g.descripcion + (g.estado === 'pendiente' ? ' (Pendiente)' : ''),
       monto: g.monto,
       fecha: g.fechaGasto,
       categoria: g.categoria
@@ -967,27 +1026,29 @@ export default function MovimientosPage() {
   }, [gastos, pagosGastos, date, periodo]) // Removed filteredHistorial dependency
 
   const resumenFinanciero = useMemo(() => {
-    // Calculate Income from Cash Sales + Abonos (Exclude pending Addi sales)
-    const totalIngresos = filteredIngresos
-      .filter(item => item.status !== 'pending')
+    // Ventas Totales: Includes 'venta_contado' (cash/settled) and 'abono' (payments). 
+    // Excludes 'venta_credito' (since we only count the cash inflow via abonos for this view)
+    const totalVentas = filteredIngresos
+      .filter(item => (item.tipo === 'venta_contado' || item.tipo === 'abono') && item.status !== 'pending')
       .reduce((acc, item) => acc + item.monto, 0)
 
-    // Calculate Expenses from Inventory Entries (Cost) + Registered Expenses
+    // Calculate Expenses
     const gastosInventario = filteredHistorial
       .filter(item => item.tipo === 'entrada')
       .reduce((acc, item) => acc + (item.costoUnitario || 0) * item.cantidad, 0)
 
-    const gastosRegistrados = gastos.reduce((acc, item) => acc + item.monto, 0) // Should apply filters here too ideally
+    const gastosRegistrados = gastos.reduce((acc, item) => acc + item.monto, 0)
     const pagosRegistrados = pagosGastos.reduce((acc, item) => acc + item.monto, 0)
 
     const totalGastos = gastosInventario + gastosRegistrados + pagosRegistrados
 
+    // Balance: Uses globalBalance fetch (ignores filters)
     return {
-      ventas: totalIngresos,
+      ventas: totalVentas,
       gastos: totalGastos,
-      balance: totalIngresos - totalGastos
+      balance: globalBalance
     }
-  }, [filteredIngresos, filteredHistorial, gastos])
+  }, [filteredIngresos, filteredHistorial, gastos, pagosGastos, globalBalance])
 
   const convertirId = (valor: string | undefined) => {
     if (!valor || valor === "none") {

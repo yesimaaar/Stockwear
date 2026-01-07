@@ -536,6 +536,40 @@ export default function ReportesPage() {
           }
         })
 
+        // Prepare Cash Flow events (Cash Sales + Abonos)
+        const ventasMap = ventas.reduce((acc, v) => {
+          acc[v.id] = v
+          return acc
+        }, {} as Record<number, HistorialRow>)
+
+        const cashSales = ventas.filter((v) => !creditMethodsRef.current.has(v.metodo_pago_id))
+        
+        const abonoEvents = abonos.map((abono) => {
+          const relatedSale = ventasMap[abono.venta_id]
+          let gananciaEstimada = 0
+          
+          if (relatedSale && relatedSale.total && relatedSale.total > 0) {
+             const margin = relatedSale.ganancia / relatedSale.total
+             gananciaEstimada = abono.monto * margin
+          }
+
+          return {
+            ...relatedSale,
+            id: abono.id + 9000000, 
+            total: abono.monto,
+            createdAt: abono.createdAt,
+            usuarioId: relatedSale?.usuarioId,
+            tipo: "abono",
+            cantidad: 1,
+            costoUnitario: abono.monto,
+            ganancia: gananciaEstimada,
+          } as HistorialRow
+        })
+
+        const reportableEvents = [...cashSales, ...abonoEvents].sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+
         const productos = (productosResp.data as ProductoRow[]) || []
         const stock = (stockResp.data as StockRow[]) || []
         const usuarios = (usuariosResp.data as UsuarioRow[]) || []
@@ -565,42 +599,29 @@ export default function ReportesPage() {
           return acc
         }, {})
 
-        // ventas is already populated above
+        // reportableEvents (Cash Flow) used for Financial Metrics
         const now = new Date()
         const { month: currentMonth, year: currentYear } = getDateParts(now)
         const previousMonthDate = new Date(currentYear, currentMonth - 1, 1)
         const { month: previousMonth, year: previousMonthYear } = getDateParts(previousMonthDate)
-        const monthSales = ventas.filter((v) => {
+        
+        const monthSales = reportableEvents.filter((v) => {
           const { month, year } = getDateParts(v.createdAt)
           return month === currentMonth && year === currentYear
         })
-        const previousMonthSales = ventas.filter((v) => {
+        const previousMonthSales = reportableEvents.filter((v) => {
           const { month, year } = getDateParts(v.createdAt)
           return month === previousMonth && year === previousMonthYear
         })
 
         const monthSalesValue = monthSales
-          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
-          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
-          abonos
-            .filter((a) => {
-              const { month, year } = getDateParts(a.createdAt)
-              return month === currentMonth && year === currentYear
-            })
-            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
         const previousMonthSalesValue = previousMonthSales
-          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
           .reduce(
           (sum, item) => sum + (Number(item.total) || 0),
           0,
-        ) +
-          abonos
-            .filter((a) => {
-              const { month, year } = getDateParts(a.createdAt)
-              return month === previousMonth && year === previousMonthYear
-            })
-            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+        )
 
         const monthSalesCount = monthSales.length
         const previousMonthSalesCount = previousMonthSales.length
@@ -610,35 +631,20 @@ export default function ReportesPage() {
         const weekStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek)
         const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
         const yearStartDate = new Date(now.getFullYear(), 0, 1)
-        const salesToday = ventas.filter((v) => new Date(v.createdAt) >= today)
+        const salesToday = reportableEvents.filter((v) => new Date(v.createdAt) >= today)
         const dailySalesValue = salesToday
-          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
-          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
-          abonos
-            .filter((a) => new Date(a.createdAt) >= today)
-            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
-        const weeklySales = ventas.filter((v) => new Date(v.createdAt) >= weekStartDate)
+        const weeklySales = reportableEvents.filter((v) => new Date(v.createdAt) >= weekStartDate)
         const weeklySalesValue = weeklySales
-          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
-          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
-          abonos
-            .filter((a) => new Date(a.createdAt) >= weekStartDate)
-            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
-        const yearlySales = ventas.filter((v) => {
+        const yearlySales = reportableEvents.filter((v) => {
           const { year } = getDateParts(v.createdAt)
           return year === currentYear
         })
         const yearlySalesValue = yearlySales
-          .filter((v) => !creditMethodsIds.has(v.metodo_pago_id))
-          .reduce((sum, item) => sum + (Number(item.total) || 0), 0) +
-          abonos
-            .filter((a) => {
-              const { year } = getDateParts(a.createdAt)
-              return year === currentYear
-            })
-            .reduce((sum, item) => sum + (Number(item.monto) || 0), 0)
+          .reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
         const employeeTotals: Record<ReportPeriod, Record<string, { total: number; cantidad: number }>> = {
           daily: {},
@@ -655,6 +661,7 @@ export default function ReportesPage() {
           employeeTotals[period][empleadoId].cantidad += quantity
         }
 
+        // Keep using 'ventas' (All Sales) for Employee Performance - Accrual Basis
         ventas.forEach((venta) => {
           if (!venta.usuarioId) return
           const empleado = usuariosById[venta.usuarioId]
@@ -710,7 +717,7 @@ export default function ReportesPage() {
           return month === previousMonth && year === previousMonthYear
         })
 
-        setAllSales(ventas)
+        setAllSales(reportableEvents)
 
         const monthSalesTrend = computeTrend(monthSalesValue, previousMonthSalesValue)
         const monthSalesCountTrend = computeTrend(monthSalesCount, previousMonthSalesCount)
@@ -793,7 +800,7 @@ export default function ReportesPage() {
 
         setMetrics(metricsPayload)
         setLowStockCount(lowStock.length)
-        setAllSales(ventas)
+        setAllSales(reportableEvents)
         setAllAbonos(abonos)
 
         setEmployeeSales(employeeSalesPayload)
@@ -843,14 +850,13 @@ export default function ReportesPage() {
     }
 
     const now = new Date()
-    // Filter out credit sales using the ref populated during load
-    const validSales = allSales.filter((s) => !creditMethodsRef.current.has(s.metodo_pago_id))
+    // Use all sales (including credit) to show on sale day - do not filter credit methods
+    const validSales = allSales
 
     if (chartRange === "1d") {
       const startOfToday = startOfDay(now)
       const visibleSales = validSales.filter((sale) => new Date(sale.createdAt) >= startOfToday)
-      const visibleAbonos = allAbonos.filter((a) => new Date(a.createdAt) >= startOfToday)
-
+      
       const hours = eachHourOfInterval({
         start: startOfToday,
         end: endOfDay(now),
@@ -873,18 +879,6 @@ export default function ReportesPage() {
         }
       })
 
-      visibleAbonos.forEach((abono) => {
-        const date = new Date(abono.createdAt)
-        const hourKey = startOfHour(date).toISOString()
-        if (salesMap.has(hourKey)) {
-          const current = salesMap.get(hourKey)!
-          salesMap.set(hourKey, {
-            total: current.total + (Number(abono.monto) || 0),
-            profit: current.profit,
-          })
-        }
-      })
-
       const series = hours.map((hour) => {
         const data = salesMap.get(hour.toISOString())!
         return {
@@ -901,7 +895,6 @@ export default function ReportesPage() {
 
       const startDate = subDays(startOfDay(now), daysToSubtract - 1)
       const visibleSales = validSales.filter((sale) => new Date(sale.createdAt) >= startDate)
-      const visibleAbonos = allAbonos.filter((a) => new Date(a.createdAt) >= startDate)
 
       const salesMap = new Map<string, { total: number; profit: number }>()
       const dates: Date[] = []
@@ -919,17 +912,6 @@ export default function ReportesPage() {
           salesMap.set(key, {
             total: current.total + (sale.costoUnitario || 0) * sale.cantidad,
             profit: current.profit + (sale.ganancia || 0),
-          })
-        }
-      })
-
-      visibleAbonos.forEach((abono) => {
-        const key = format(new Date(abono.createdAt), "yyyy-MM-dd")
-        if (salesMap.has(key)) {
-          const current = salesMap.get(key)!
-          salesMap.set(key, {
-            total: current.total + (Number(abono.monto) || 0),
-            profit: current.profit,
           })
         }
       })
