@@ -32,7 +32,9 @@ import { ADMIN_NAV_ITEMS } from "@/lib/admin-nav";
 import AdminSidebar, { type AdminSidebarProps, type SidebarMode } from "@/components/domain/admin-sidebar";
 import HeaderSearchBar from "@/components/domain/header-search-bar";
 import { cn } from "@/lib/utils";
-import { OPEN_QUICK_CART_EVENT } from "@/lib/events";
+import { OPEN_QUICK_CART_EVENT, GLOBAL_SEARCH_UPDATE_EVENT } from "@/lib/events";
+import { useCart, type CartItem } from "@/hooks/useCart";
+import { useToast } from "@/hooks/use-toast";
 
 const SEARCHABLE_MODULES = [
     { label: "Stock", icon: Package, href: "/admin/productos" },
@@ -46,6 +48,8 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const { theme, setTheme, resolvedTheme } = useTheme();
+    const { addItem } = useCart();
+    const { toast } = useToast();
 
     const [mounted, setMounted] = useState(false);
     // Inicializar sidebar en modo condensado para evitar CLS
@@ -58,6 +62,19 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
     const [searchModule, setSearchModule] = useState<string>("/admin/productos");
     const [searchPanelOpen, setSearchPanelOpen] = useState(false);
     const searchWrapperRef = useRef<HTMLDivElement>(null);
+
+    // Dispatch global search event (e.g. for SalesWorkspace dashboard)
+    useEffect(() => {
+        if (pathname === '/admin') {
+            const event = new CustomEvent(GLOBAL_SEARCH_UPDATE_EVENT, { detail: searchTerm });
+            window.dispatchEvent(event);
+        }
+    }, [searchTerm, pathname]);
+
+    // Handle Quick Add to Cart (removed, handled by event consumer if needed)
+    // The previous implementation of direct results in dropdown is removed
+    // to search directly in the "Todos los productos" section of SalesWorkspace
+
 
     // Notifications state
     const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -310,9 +327,9 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                                 />
                                 {searchPanelOpen && canShowSearchModules && (
                                     <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
-                                        <div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
+                                        <div className="flex items-center justify-between border-b border-border/80 px-4 py-3 bg-muted/30">
                                             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Módulos</p>
-                                            <span className="text-[11px] text-muted-foreground">Selecciona dónde buscar</span>
+                                            <span className="text-[11px] text-muted-foreground">Filtrar búsqueda</span>
                                         </div>
                                         <ul className="max-h-56 divide-y divide-border/60 overflow-y-auto">
                                             {SEARCHABLE_MODULES.map(module => {
@@ -329,7 +346,7 @@ export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
                                                 );
                                             })}
                                         </ul>
-                                        <div className="border-t border-border/80 px-4 py-3">
+                                        <div className="border-t border-border/80 px-4 py-3 bg-muted/10">
                                             <Button type="submit" className="w-full rounded-xl" disabled={!canSubmitSearch}>Buscar en {selectedModule?.label ?? "Stockwear"}</Button>
                                         </div>
                                     </div>
