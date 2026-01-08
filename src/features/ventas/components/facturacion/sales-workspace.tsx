@@ -50,7 +50,7 @@ import { CajaService } from "@/features/caja/services/caja-service"
 import { ClienteService } from "@/features/ventas/services/cliente-service"
 import type { Usuario, MetodoPago, CajaSesion, Cliente } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED } from "@/lib/events"
+import { OPEN_QUICK_CART_EVENT, CAJA_SESSION_UPDATED, GLOBAL_SEARCH_UPDATE_EVENT } from "@/lib/events"
 import { PaymentMethodSelector } from "@/components/domain/payment-method-selector"
 
 export interface LineaVentaForm {
@@ -451,6 +451,23 @@ export function SalesWorkspace({
       setBuscando(false)
     }
   }
+
+  // Ref to access latest realizarBusqueda in event listener
+  const realizarBusquedaRef =  useCallback(realizarBusqueda, [busqueda]);
+
+  useEffect(() => {
+    const handleGlobalSearch = (event: Event) => {
+        const customEvent = event as CustomEvent;
+        if (customEvent.detail !== undefined) {
+             void realizarBusqueda(customEvent.detail);
+        }
+    };
+
+    window.addEventListener(GLOBAL_SEARCH_UPDATE_EVENT, handleGlobalSearch);
+    return () => {
+        window.removeEventListener(GLOBAL_SEARCH_UPDATE_EVENT, handleGlobalSearch);
+    };
+  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const agregarLinea = (producto: ProductoConStock, stock: ProductoConStock["stockPorTalla"][number]) => {
     if (stock.cantidad <= 0) {

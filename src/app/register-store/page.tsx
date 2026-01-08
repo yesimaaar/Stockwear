@@ -40,10 +40,30 @@ export default function RegisterStorePage() {
             const { data: { session } } = await supabase.auth.getSession()
             if (!session) {
                 router.replace('/login')
+                return
+            }
+
+            // Check if user already has a store
+            try {
+                const { data: userProfile } = await supabase
+                    .from('usuarios')
+                    .select('tienda_id')
+                    .eq('auth_uid', session.user.id)
+                    .maybeSingle()
+
+                if (userProfile?.tienda_id) {
+                    toast({
+                        title: 'Ya tienes una tienda',
+                        description: 'Redirigiendo a tu panel de administración...',
+                    })
+                    router.replace('/admin')
+                }
+            } catch (error) {
+                console.error("Error checking user profile", error)
             }
         }
         checkSession()
-    }, [router])
+    }, [router, toast])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()

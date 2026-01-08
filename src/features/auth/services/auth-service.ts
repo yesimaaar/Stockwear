@@ -217,15 +217,19 @@ export class AuthService {
 
   static async signInWithGoogle(redirectPath?: string): Promise<AuthResponse> {
     try {
-      const redirectTo =
-        typeof window === 'undefined'
-          ? undefined
-          : `${window.location.origin}${redirectPath && redirectPath.startsWith('/') ? redirectPath : ''}`
+      const nextParam = redirectPath ? `?next=${redirectPath}` : ''
+      const redirectTo = typeof window === 'undefined'
+        ? undefined
+        : `${window.location.origin}/auth/callback${nextParam}`
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       })
 

@@ -2,16 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useTheme } from "next-themes"
-import { Bell, Shield, Database, Palette } from "lucide-react"
+import { Bell, Shield, Database, Palette, Settings, Store, CreditCard, Users, FileText, Check } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { GlobalExcelActions } from "@/features/configuracion/components/global-excel-actions"
+import { PaymentMethodsSettings } from "@/features/configuracion/components/payment-methods-settings"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 
 export default function ConfiguracionPage() {
   const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [activeTab, setActiveTab] = useState("general")
 
   useEffect(() => {
     setMounted(true)
@@ -27,120 +31,154 @@ export default function ConfiguracionPage() {
   const isDarkMode = mounted && resolvedTheme === "dark"
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-bold text-foreground">Configuración</h2>
-        <p className="text-muted-foreground">Ajustes generales del sistema</p>
-      </div>
+    <div className="flex flex-col gap-6 md:flex-row md:gap-8 min-h-[calc(100vh-8rem)]">
+      {/* Sidebar Navigation */}
+      <aside className="w-full md:w-64 space-y-4 shrink-0">
+        <div className="flex flex-col gap-2">
+           <h2 className="text-2xl font-bold px-2 mb-4">Configuración</h2>
+           <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
+             <Button
+                variant={activeTab === "general" ? "secondary" : "ghost"}
+                className="justify-start gap-2 h-10 px-4 font-normal"
+                onClick={() => setActiveTab("general")}
+             >
+                <Settings className="h-4 w-4" />
+                General
+             </Button>
+             <Button
+                variant={activeTab === "pagos" ? "secondary" : "ghost"}
+                className="justify-start gap-2 h-10 px-4 font-normal"
+                onClick={() => setActiveTab("pagos")}
+             >
+                <CreditCard className="h-4 w-4" />
+                Pagos y Facturación
+             </Button>
+             <Button
+                variant={activeTab === "notificaciones" ? "secondary" : "ghost"}
+                className="justify-start gap-2 h-10 px-4 font-normal"
+                onClick={() => setActiveTab("notificaciones")}
+             >
+                <Bell className="h-4 w-4" />
+                Notificaciones
+             </Button>
+             <Button
+                variant={activeTab === "datos" ? "secondary" : "ghost"}
+                className="justify-start gap-2 h-10 px-4 font-normal"
+                onClick={() => setActiveTab("datos")}
+             >
+                <Database className="h-4 w-4" />
+                Datos y Respaldo
+             </Button>
+           </div>
+        </div>
+      </aside>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-indigo-500">
-                <Bell className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Notificaciones</CardTitle>
-                <CardDescription>Gestionar alertas del sistema</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="stock-alerts">Alertas de stock bajo</Label>
-              <Switch id="stock-alerts" defaultChecked />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="email-notifications">Notificaciones por email</Label>
-              <Switch id="email-notifications" />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Main Content Area */}
+      <div className="flex-1 space-y-6">
+        {/* Header mobile only */}
+        <div className="md:hidden pb-4 border-b">
+           <h3 className="text-lg font-semibold capitalize">{activeTab.replace("-", " ")}</h3>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-emerald-500">
-                <Shield className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Seguridad</CardTitle>
-                <CardDescription>Configuración de acceso</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="two-factor">Autenticación de dos factores</Label>
-              <Switch id="two-factor" />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="session-timeout">Cerrar sesión automático</Label>
-              <Switch id="session-timeout" defaultChecked />
-            </div>
-          </CardContent>
-        </Card>
+        {activeTab === "general" && (
+           <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+              <CatalogConfigCard />
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-purple-500">
-                <Database className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Base de Datos</CardTitle>
-                <CardDescription>Mantenimiento y respaldos</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="mb-4">
-              <h4 className="text-sm font-medium mb-2">Inventario</h4>
-              <div className="flex flex-col gap-2">
-                <GlobalExcelActions />
-              </div>
-            </div>
-            
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-medium mb-2">Sistema</h4>
-              <div className="flex flex-col gap-2">
-                <Button variant="outline" className="w-full bg-transparent">
-                  Crear respaldo
-                </Button>
-                <Button variant="outline" className="w-full bg-transparent">
-                  Restaurar datos
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Apariencia</CardTitle>
+                  <CardDescription>Personaliza cómo se ve el sistema en tu dispositivo.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
+                    <div className="space-y-0.5">
+                      <Label className="text-base font-medium">Modo Oscuro</Label>
+                      <p className="text-sm text-muted-foreground">Cambia entre tema claro y oscuro.</p>
+                    </div>
+                    <Switch 
+                      checked={isDarkMode}
+                      onCheckedChange={handleThemeToggle}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-orange-500">
-                <Palette className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Apariencia</CardTitle>
-                <CardDescription>Personalizar interfaz</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="dark-mode">Modo oscuro</Label>
-              <Switch id="dark-mode" checked={isDarkMode} onCheckedChange={handleThemeToggle} disabled={!mounted} />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="compact-view">Vista compacta</Label>
-              <Switch id="compact-view" />
-            </div>
-          </CardContent>
-        </Card>
+              <Card>
+                 <CardHeader>
+                   <CardTitle>Información del Plan</CardTitle>
+                   <CardDescription>Detalles de tu suscripción</CardDescription>
+                 </CardHeader>
+                 <CardContent className="space-y-4">
+                   <div className="p-4 border rounded-lg bg-card/50 flex flex-col gap-2">
+                        <Label className="text-muted-foreground">Plan Actual</Label>
+                        <div className="flex items-center gap-2">
+                            <span className="font-semibold text-lg">Pro</span>
+                            <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Activo</Badge>
+                        </div>
+                    </div>
+                 </CardContent>
+              </Card>
+           </div>
+        )}
 
-        <CatalogConfigCard />
+        {activeTab === "pagos" && (
+           <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+               <PaymentMethodsSettings />
+           </div>
+        )}
+
+        {activeTab === "notificaciones" && (
+           <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Preferencias de Alertas</CardTitle>
+                  <CardDescription>Decide cuándo y cómo quieres ser notificado.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
+                      <div className="space-y-0.5">
+                        <Label>Alertas de stock bajo</Label>
+                        <p className="text-sm text-muted-foreground">Recibe un aviso cuando un producto tenga menos de 5 unidades.</p>
+                      </div>
+                      <Switch defaultChecked />
+                    </div>
+                    <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
+                      <div className="space-y-0.5">
+                        <Label>Reporte diario de ventas</Label>
+                        <p className="text-sm text-muted-foreground">Recibe un resumen por email al cierre de caja.</p>
+                      </div>
+                      <Switch />
+                    </div>
+                </CardContent>
+              </Card>
+           </div>
+        )}
+
+        {activeTab === "datos" && (
+           <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Gestión de Datos</CardTitle>
+                  <CardDescription>Herramientas para administración masiva de inventario.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                   <GlobalExcelActions />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-red-500">Zona de Peligro</CardTitle>
+                  <CardDescription>Acciones irreversibles.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                   <Button variant="destructive" variant="outline" className="w-full sm:w-auto">
+                      Restablecer configuración de fábrica
+                   </Button>
+                </CardContent>
+              </Card>
+           </div>
+        )}
       </div>
     </div>
   )
@@ -152,7 +190,8 @@ import { supabase } from "@/lib/supabase"
 import { useToast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
 import Image from "next/image"
-import { Store } from "lucide-react"
+// Remove duplicate Store import from lucide-react since it is already imported at the top
+// import { Store } from "lucide-react"
 
 function CatalogConfigCard() {
   const [whatsapp, setWhatsapp] = useState("")

@@ -94,7 +94,7 @@ export default function RegisterPage() {
     setError("")
     setSuccess("")
     setGoogleLoading(true)
-    const result = await AuthService.signInWithGoogle()
+    const result = await AuthService.signInWithGoogle('/register-store')
     if (!result.success) {
       setError(result.message || "No se pudo continuar con Google")
       setGoogleLoading(false)

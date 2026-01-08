@@ -20,12 +20,12 @@ export type AdminNavItem = {
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
 	{ href: "/admin", icon: Home, label: "Inicio" },
-	{ href: "/admin/almacenes", icon: Store, label: "Almacenes" },
-	{ href: "/admin/categorias", icon: Layers3, label: "Categorías" },
 	{ href: "/admin/productos", icon: Package, label: "Stock" },
 	{ href: "/admin/movimientos", icon: ArrowLeftRight, label: "Movimientos" },
-	{ href: "/admin/tallas", icon: Shirt, label: "Tallas" },
-	{ href: "/admin/usuarios", icon: Users, label: "Usuarios" },
 	{ href: "/admin/reportes", icon: BarChart3, label: "Reportes" },
-	{ href: "/admin/historial", icon: Clock, label: "Historial" }
+	{ href: "/admin/historial", icon: Clock, label: "Historial" },
+	{ href: "/admin/almacenes", icon: Store, label: "Almacenes" },
+	{ href: "/admin/categorias", icon: Layers3, label: "Categorías" },
+	{ href: "/admin/tallas", icon: Shirt, label: "Tallas" },
+	{ href: "/admin/usuarios", icon: Users, label: "Usuarios" }
 ];

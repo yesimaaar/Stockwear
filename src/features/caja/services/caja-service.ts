@@ -48,6 +48,72 @@ export const CajaService = {
         }
     },
 
+    async getAllMetodosPago(): Promise<MetodoPago[]> {
+        try {
+            const tiendaId = await getCurrentTiendaId()
+            const { data, error } = await supabase
+                .from("metodos_pago")
+                .select("*")
+                .eq("tienda_id", tiendaId)
+                .order("id")
+
+            if (error) throw error
+
+            // Deduplicate by name (consistent with getMetodosPago)
+            const uniqueMethods = new Map<string, any>()
+
+            if (data) {
+                data.forEach(method => {
+                    const normalizedName = method.nombre.trim().toLowerCase()
+                    if (!uniqueMethods.has(normalizedName)) {
+                        uniqueMethods.set(normalizedName, method)
+                    }
+                })
+            }
+
+            return Array.from(uniqueMethods.values()).map((row) => ({
+                id: row.id,
+                tiendaId: row.tienda_id,
+                nombre: row.nombre,
+                tipo: row.tipo,
+                estado: row.estado,
+                comisionPorcentaje: 0
+            }))
+        } catch (err) {
+            console.error("CajaService.getAllMetodosPago: Error", err)
+            return []
+        }
+    },
+
+    async updateMetodoPagoStatus(id: number, estado: 'activo' | 'inactivo'): Promise<boolean> {
+        try {
+            const tiendaId = await getCurrentTiendaId()
+            
+            // 1. Get the name of the method being updated
+            const { data: currentMethod, error: fetchError } = await supabase
+                .from("metodos_pago")
+                .select("nombre")
+                .eq("id", id)
+                .single()
+
+            if (fetchError) throw fetchError
+
+            // 2. Update ALL methods with the same name for this store to ensure consistency
+            // This handles the case where duplicate payment methods might exist in the DB
+            const { error } = await supabase
+                .from("metodos_pago")
+                .update({ estado })
+                .eq("tienda_id", tiendaId)
+                .ilike("nombre", currentMethod.nombre)
+
+            if (error) throw error
+            return true
+        } catch (err) {
+            console.error("CajaService.updateMetodoPagoStatus: Error", err)
+            return false
+        }
+    },
+
     async ensureDefaults(): Promise<void> {
         try {
             const tiendaId = await getCurrentTiendaId()
@@ -85,17 +151,8 @@ export const CajaService = {
                     if (insertError) {
                         console.error("CajaService.ensureDefaults: Error inserting", def.nombre, insertError)
                     }
-                } else if (match.estado !== 'activo') {
-                    console.log("CajaService.ensureDefaults: Reactivating", def.nombre)
-                    const { error: updateError } = await supabase
-                        .from("metodos_pago")
-                        .update({ estado: 'activo' })
-                        .eq('id', match.id)
-
-                    if (updateError) {
-                        console.error("CajaService.ensureDefaults: Error reactivating", def.nombre, updateError)
-                    }
                 }
+                // Removed logic that re-activates disabled methods
             }
         } catch (error) {
             console.error("Error ensuring default payment methods:", error)
