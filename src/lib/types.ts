@@ -6,6 +6,9 @@ export interface Tienda {
   nombre: string
   slug: string
   logo_url?: string | null
+  whatsapp?: string | null
+  facebook?: string | null
+  instagram?: string | null
   createdAt: string
 }
 

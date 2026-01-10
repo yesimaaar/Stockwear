@@ -1,10 +1,13 @@
 -- 002_functions.sql
--- Consolidated Functions and Triggers
+-- Consolidated Functions and Triggers for Stockwear
+-- Updated: 2026-01-10
 
--- 1. Helper Functions
+-- ============================================================================
+-- 1. HELPER FUNCTIONS
+-- ============================================================================
 
 -- Function to get current user's tienda_id (Multi-tenancy)
--- Updated in migration 009 to use JWT metadata for recursion prevention
+-- Uses JWT metadata for recursion prevention
 CREATE OR REPLACE FUNCTION get_my_tienda_id()
 RETURNS bigint AS $$
 DECLARE
@@ -25,10 +28,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION get_my_tienda_id TO authenticated;
 GRANT EXECUTE ON FUNCTION get_my_tienda_id TO service_role;
 
--- 2. Auth Sync Function
+-- ============================================================================
+-- 2. AUTH SYNC FUNCTION
+-- ============================================================================
 
 -- Syncs Supabase Auth users to public.usuarios
--- Updated in migration 011 to handle tienda_id and metadata
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -91,7 +95,9 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW
   EXECUTE PROCEDURE public.handle_new_user();
 
--- 3. Timestamp Update Functions
+-- ============================================================================
+-- 3. TIMESTAMP UPDATE FUNCTIONS
+-- ============================================================================
 
 -- Stock Updated At
 CREATE OR REPLACE FUNCTION set_stock_updated_at()
@@ -102,6 +108,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_stock_updated_at ON stock;
 CREATE TRIGGER trg_stock_updated_at
 BEFORE UPDATE ON stock
 FOR EACH ROW
@@ -116,6 +123,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_producto_reference_image_updated_at ON producto_reference_images;
 CREATE TRIGGER trg_producto_reference_image_updated_at
 BEFORE UPDATE ON producto_reference_images
 FOR EACH ROW
@@ -130,14 +138,37 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_producto_embedding_updated_at ON producto_embeddings;
 CREATE TRIGGER trg_producto_embedding_updated_at
 BEFORE UPDATE ON producto_embeddings
 FOR EACH ROW
 EXECUTE FUNCTION set_producto_embedding_updated_at();
 
--- =============================================================================
--- 4. Visual Recognition Feedback Functions (Consolidated from 023)
--- =============================================================================
+-- ============================================================================
+-- 4. BUSINESS LOGIC FUNCTIONS
+-- ============================================================================
+
+-- Update Client Balance
+CREATE OR REPLACE FUNCTION public.actualizar_saldo_cliente(p_cliente_id bigint, p_monto numeric)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.clientes
+  SET saldo_actual = COALESCE(saldo_actual, 0) + p_monto,
+      "updatedAt" = timezone('utc', now())
+  WHERE id = p_cliente_id;
+
+  IF NOT FOUND THEN
+    RAISE NOTICE 'Cliente % no encontrado', p_cliente_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.actualizar_saldo_cliente TO authenticated;
+GRANT EXECUTE ON FUNCTION public.actualizar_saldo_cliente TO service_role;
+
+-- ============================================================================
+-- 5. VISUAL RECOGNITION FEEDBACK FUNCTIONS
+-- ============================================================================
 
 -- Vista para estadísticas de feedback por tienda
 CREATE OR REPLACE VIEW vista_feedback_estadisticas AS
@@ -196,3 +227,6 @@ BEGIN
   RETURN (v_promedio_correctos + v_promedio_rechazados) / 2;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION calcular_umbral_sugerido TO authenticated;
+GRANT EXECUTE ON FUNCTION calcular_umbral_sugerido TO service_role;

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
-import { Search, ShoppingBag, Sparkles, Filter, X } from "lucide-react"
+import { Search, ShoppingBag, Sparkles, Filter, X, Facebook, Instagram } from "lucide-react"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -30,6 +30,8 @@ interface CatalogClientProps {
     storeName?: string
     storeLogoUrl?: string | null
     storeSlug?: string
+    facebook?: string
+    instagram?: string
 }
 
 interface FilterContentProps {
@@ -234,7 +236,7 @@ function FilterContent({
     )
 }
 
-export function CatalogClient({ initialProducts, categories, totalStock, storeName, storeLogoUrl, storeSlug }: CatalogClientProps) {
+export function CatalogClient({ initialProducts, categories, totalStock, storeName, storeLogoUrl, storeSlug, facebook, instagram }: CatalogClientProps) {
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
     const [selectedColors, setSelectedColors] = useState<string[]>([])
@@ -395,6 +397,31 @@ export function CatalogClient({ initialProducts, categories, totalStock, storeNa
                         <Badge variant="outline" className="rounded-full border-border bg-card/50 px-3 py-1 text-muted-foreground">
                             {numberFormatter.format(initialProducts.length)} modelos
                         </Badge>
+                        
+                        {(facebook || instagram) && (
+                            <div className="flex items-center gap-2 ml-2">
+                                {facebook && (
+                                    <a
+                                        href={facebook}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 transition-colors hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
+                                    >
+                                        <Facebook className="h-4 w-4" />
+                                    </a>
+                                )}
+                                {instagram && (
+                                    <a
+                                        href={instagram}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-100 text-pink-600 transition-colors hover:bg-pink-200 dark:bg-pink-900/30 dark:text-pink-400 dark:hover:bg-pink-900/50"
+                                    >
+                                        <Instagram className="h-4 w-4" />
+                                    </a>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>

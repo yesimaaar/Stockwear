@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "start": "next start",
     "test": "vitest",
-    "generate:embeddings": "node scripts/generate-reference-embeddings.js",
+    "generate:embeddings": "node scripts/ml/generate-reference-embeddings.js",
     "check-all": "tsc --noEmit && pnpm run lint && pnpm run build"
   },
   "dependencies": {
