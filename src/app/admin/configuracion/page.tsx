@@ -2,27 +2,62 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useTheme } from "next-themes"
-import { Bell, Shield, Database, Palette, Settings, Store, CreditCard, Users, FileText, Check, Facebook, Instagram, Plus, X } from "lucide-react"
+import { 
+  Bell, 
+  Database, 
+  Settings, 
+  Store, 
+  CreditCard, 
+  Facebook, 
+  Instagram, 
+  Plus, 
+  X,
+  Crown,
+  Palette,
+  Moon,
+  Sun
+} from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { GlobalExcelActions } from "@/features/configuracion/components/global-excel-actions"
 import { PaymentMethodsSettings } from "@/features/configuracion/components/payment-methods-settings"
+import { SubscriptionCard } from "@/components/admin/subscription-card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { getStoreSettings, updateStoreSettings } from "@/app/actions/store-actions"
+import { uploadStoreLogo } from "@/features/stores/services/store-image-service"
+import { supabase } from "@/lib/supabase"
+import { useToast } from "@/hooks/use-toast"
+import { Input } from "@/components/ui/input"
+import Image from "next/image"
 
+type TabId = "tienda" | "suscripcion" | "apariencia" | "notificaciones" | "datos"
+
+interface NavItem {
+  id: TabId
+  label: string
+  icon: React.ElementType
+  description: string
+}
+
+const navItems: NavItem[] = [
+  { id: "tienda", label: "Mi Tienda", icon: Store, description: "Catálogo y métodos de pago" },
+  { id: "suscripcion", label: "Suscripción", icon: Crown, description: "Plan y facturación" },
+  { id: "apariencia", label: "Apariencia", icon: Palette, description: "Tema y personalización" },
+  { id: "notificaciones", label: "Notificaciones", icon: Bell, description: "Alertas y avisos" },
+  { id: "datos", label: "Datos", icon: Database, description: "Respaldo y gestión" },
+]
 
 export default function ConfiguracionPage() {
   const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  const [activeTab, setActiveTab] = useState("general")
+  const [activeTab, setActiveTab] = useState<TabId>("tienda")
 
   useEffect(() => {
     setMounted(true)
@@ -37,70 +72,133 @@ export default function ConfiguracionPage() {
 
   const isDarkMode = mounted && resolvedTheme === "dark"
 
+  const activeNavItem = navItems.find(item => item.id === activeTab)
+
   return (
-    <div className="flex flex-col gap-6 md:flex-row md:gap-8 min-h-[calc(100vh-8rem)]">
+    <div className="flex flex-col gap-6 lg:flex-row lg:gap-8 min-h-[calc(100vh-8rem)]">
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 space-y-4 shrink-0">
-        <div className="flex flex-col gap-2">
-           <h2 className="text-2xl font-bold px-2 mb-4">Configuración</h2>
-           <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
-             <Button
-                variant={activeTab === "general" ? "secondary" : "ghost"}
-                className="justify-start gap-2 h-10 px-4 font-normal"
-                onClick={() => setActiveTab("general")}
-             >
-                <Settings className="h-4 w-4" />
-                General
-             </Button>
-             <Button
-                variant={activeTab === "pagos" ? "secondary" : "ghost"}
-                className="justify-start gap-2 h-10 px-4 font-normal"
-                onClick={() => setActiveTab("pagos")}
-             >
-                <CreditCard className="h-4 w-4" />
-                Pagos y Facturación
-             </Button>
-             <Button
-                variant={activeTab === "notificaciones" ? "secondary" : "ghost"}
-                className="justify-start gap-2 h-10 px-4 font-normal"
-                onClick={() => setActiveTab("notificaciones")}
-             >
-                <Bell className="h-4 w-4" />
-                Notificaciones
-             </Button>
-             <Button
-                variant={activeTab === "datos" ? "secondary" : "ghost"}
-                className="justify-start gap-2 h-10 px-4 font-normal"
-                onClick={() => setActiveTab("datos")}
-             >
-                <Database className="h-4 w-4" />
-                Datos y Respaldo
-             </Button>
-           </div>
+      <aside className="w-full lg:w-72 shrink-0">
+        <div className="sticky top-20">
+          <div className="flex items-center gap-2 px-2 mb-6">
+            <Settings className="h-6 w-6" />
+            <h2 className="text-2xl font-bold">Configuración</h2>
+          </div>
+          
+          <nav className="space-y-1">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeTab === item.id
+              
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-all ${
+                    isActive 
+                      ? "bg-primary text-primary-foreground" 
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-medium truncate ${isActive ? "" : "text-foreground"}`}>
+                      {item.label}
+                    </p>
+                    <p className={`text-xs truncate ${isActive ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                      {item.description}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </nav>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 space-y-6">
-        {/* Header mobile only */}
-        <div className="md:hidden pb-4 border-b">
-           <h3 className="text-lg font-semibold capitalize">{activeTab.replace("-", " ")}</h3>
+      <div className="flex-1 min-w-0">
+        {/* Header */}
+        <div className="mb-6 pb-4 border-b">
+          <div className="flex items-center gap-3">
+            {activeNavItem && <activeNavItem.icon className="h-6 w-6 text-primary" />}
+            <div>
+              <h3 className="text-xl font-semibold">{activeNavItem?.label}</h3>
+              <p className="text-sm text-muted-foreground">{activeNavItem?.description}</p>
+            </div>
+          </div>
         </div>
 
-        {activeTab === "general" && (
-           <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+        {/* Tab Content */}
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300" key={activeTab}>
+          
+          {/* ============ MI TIENDA ============ */}
+          {activeTab === "tienda" && (
+            <>
               <CatalogConfigCard />
-
               <Card>
                 <CardHeader>
-                  <CardTitle>Apariencia</CardTitle>
-                  <CardDescription>Personaliza cómo se ve el sistema en tu dispositivo.</CardDescription>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400">
+                      <CreditCard className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <CardTitle>Métodos de Pago</CardTitle>
+                      <CardDescription>Configura cómo pueden pagar tus clientes</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <PaymentMethodsSettings />
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* ============ SUSCRIPCIÓN ============ */}
+          {activeTab === "suscripcion" && (
+            <>
+              <SubscriptionCard />
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Historial de Facturación</CardTitle>
+                  <CardDescription>Revisa tus pagos anteriores</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <CreditCard className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                    <p className="text-muted-foreground">No hay facturas disponibles</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Las facturas aparecerán aquí cuando realices pagos
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* ============ APARIENCIA ============ */}
+          {activeTab === "apariencia" && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tema de la Aplicación</CardTitle>
+                  <CardDescription>Personaliza cómo se ve el sistema en tu dispositivo</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
-                    <div className="space-y-0.5">
-                      <Label className="text-base font-medium">Modo Oscuro</Label>
-                      <p className="text-sm text-muted-foreground">Cambia entre tema claro y oscuro.</p>
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-card">
+                    <div className="flex items-center gap-3">
+                      {isDarkMode ? (
+                        <Moon className="h-5 w-5 text-blue-500" />
+                      ) : (
+                        <Sun className="h-5 w-5 text-amber-500" />
+                      )}
+                      <div>
+                        <Label className="text-base font-medium">Modo Oscuro</Label>
+                        <p className="text-sm text-muted-foreground">
+                          {isDarkMode ? "Activo - Reduce la fatiga visual" : "Inactivo - Tema claro"}
+                        </p>
+                      </div>
                     </div>
                     <Switch 
                       checked={isDarkMode}
@@ -111,94 +209,131 @@ export default function ConfiguracionPage() {
               </Card>
 
               <Card>
-                 <CardHeader>
-                   <CardTitle>Información del Plan</CardTitle>
-                   <CardDescription>Detalles de tu suscripción</CardDescription>
-                 </CardHeader>
-                 <CardContent className="space-y-4">
-                   <div className="p-4 border rounded-lg bg-card/50 flex flex-col gap-2">
-                        <Label className="text-muted-foreground">Plan Actual</Label>
-                        <div className="flex items-center gap-2">
-                            <span className="font-semibold text-lg">Pro</span>
-                            <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Activo</Badge>
-                        </div>
+                <CardHeader>
+                  <CardTitle>Idioma y Región</CardTitle>
+                  <CardDescription>Preferencias de localización</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-card">
+                    <div>
+                      <Label className="text-base font-medium">Idioma</Label>
+                      <p className="text-sm text-muted-foreground">Español (Colombia)</p>
                     </div>
-                 </CardContent>
+                    <Button variant="outline" size="sm" disabled>
+                      Próximamente
+                    </Button>
+                  </div>
+                </CardContent>
               </Card>
-           </div>
-        )}
+            </>
+          )}
 
-        {activeTab === "pagos" && (
-           <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-               <PaymentMethodsSettings />
-           </div>
-        )}
+          {/* ============ NOTIFICACIONES ============ */}
+          {activeTab === "notificaciones" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Preferencias de Alertas</CardTitle>
+                <CardDescription>Decide cuándo y cómo quieres ser notificado</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Alertas de stock bajo</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Recibe un aviso cuando un producto tenga menos de 5 unidades
+                    </p>
+                  </div>
+                  <Switch defaultChecked />
+                </div>
+                
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Reporte diario de ventas</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Recibe un resumen por email al cierre de caja
+                    </p>
+                  </div>
+                  <Switch />
+                </div>
 
-        {activeTab === "notificaciones" && (
-           <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Nuevos pedidos</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Notificación instantánea cuando llegue un pedido por WhatsApp
+                    </p>
+                  </div>
+                  <Switch defaultChecked />
+                </div>
+
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Actualizaciones del sistema</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Recibe información sobre nuevas funciones y mejoras
+                    </p>
+                  </div>
+                  <Switch defaultChecked />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ============ DATOS ============ */}
+          {activeTab === "datos" && (
+            <>
               <Card>
                 <CardHeader>
-                  <CardTitle>Preferencias de Alertas</CardTitle>
-                  <CardDescription>Decide cuándo y cómo quieres ser notificado.</CardDescription>
+                  <CardTitle>Importar y Exportar</CardTitle>
+                  <CardDescription>Herramientas para administración masiva de inventario</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <GlobalExcelActions />
+                </CardContent>
+              </Card>
+
+              <Card className="border-red-200 dark:border-red-900/50">
+                <CardHeader>
+                  <CardTitle className="text-red-600 dark:text-red-400">Zona de Peligro</CardTitle>
+                  <CardDescription>Estas acciones son permanentes e irreversibles</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
-                      <div className="space-y-0.5">
-                        <Label>Alertas de stock bajo</Label>
-                        <p className="text-sm text-muted-foreground">Recibe un aviso cuando un producto tenga menos de 5 unidades.</p>
-                      </div>
-                      <Switch defaultChecked />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border border-red-200 dark:border-red-900/50 rounded-lg bg-red-50/50 dark:bg-red-900/10">
+                    <div>
+                      <p className="font-medium">Eliminar todos los productos</p>
+                      <p className="text-sm text-muted-foreground">
+                        Borra permanentemente todos los productos e inventario
+                      </p>
                     </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
-                      <div className="space-y-0.5">
-                        <Label>Reporte diario de ventas</Label>
-                        <p className="text-sm text-muted-foreground">Recibe un resumen por email al cierre de caja.</p>
-                      </div>
-                      <Switch />
+                    <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      Eliminar productos
+                    </Button>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border border-red-200 dark:border-red-900/50 rounded-lg bg-red-50/50 dark:bg-red-900/10">
+                    <div>
+                      <p className="font-medium">Restablecer configuración</p>
+                      <p className="text-sm text-muted-foreground">
+                        Vuelve a los valores predeterminados del sistema
+                      </p>
                     </div>
+                    <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      Restablecer
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
-           </div>
-        )}
-
-        {activeTab === "datos" && (
-           <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Gestión de Datos</CardTitle>
-                  <CardDescription>Herramientas para administración masiva de inventario.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                   <GlobalExcelActions />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-red-500">Zona de Peligro</CardTitle>
-                  <CardDescription>Acciones irreversibles.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                   <Button variant="destructive" variant="outline" className="w-full sm:w-auto">
-                      Restablecer configuración de fábrica
-                   </Button>
-                </CardContent>
-              </Card>
-           </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-import { getStoreSettings, updateStoreSettings } from "@/app/actions/store-actions"
-import { uploadStoreLogo } from "@/features/stores/services/store-image-service"
-import { supabase } from "@/lib/supabase"
-import { useToast } from "@/hooks/use-toast"
-import { Input } from "@/components/ui/input"
-import Image from "next/image"
-// Remove duplicate Store import from lucide-react since it is already imported at the top
-// import { Store } from "lucide-react"
+// ============================================================================
+// CATALOG CONFIG CARD COMPONENT
+// ============================================================================
 
 function CatalogConfigCard() {
   const [whatsapp, setWhatsapp] = useState("")
@@ -295,40 +430,25 @@ function CatalogConfigCard() {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-pink-500">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400">
             <Store className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle>Catálogo</CardTitle>
-            <CardDescription>Configuración de tu tienda pública</CardDescription>
+            <CardTitle>Catálogo Público</CardTitle>
+            <CardDescription>Configura cómo ven tu tienda los clientes</CardDescription>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="whatsapp">WhatsApp para pedidos</Label>
-          <Input
-            id="whatsapp"
-            placeholder="Ej: 573001234567"
-            value={whatsapp}
-            onChange={(e) => setWhatsapp(e.target.value)}
-            disabled={loading}
-          />
-          <p className="text-xs text-muted-foreground">
-            Este número recibirá los pedidos realizados a través del catálogo.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Logo de la tienda</Label>
+      <CardContent className="space-y-6">
+        {/* Logo */}
+        <div className="space-y-3">
+          <Label className="text-base">Logo de la tienda</Label>
           <div className="flex items-start gap-4">
-            <div className="relative h-20 w-20 overflow-hidden rounded-lg border bg-muted">
+            <div className="relative h-24 w-24 overflow-hidden rounded-xl border-2 border-dashed bg-muted flex items-center justify-center">
               {logoUrl ? (
                 <Image src={logoUrl} alt="Logo" fill className="object-cover" />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                  Sin logo
-                </div>
+                <Store className="h-8 w-8 text-muted-foreground/40" />
               )}
             </div>
             <div className="flex-1 space-y-2">
@@ -337,33 +457,55 @@ function CatalogConfigCard() {
                 accept="image/*"
                 onChange={handleLogoUpload}
                 disabled={loading || uploadingLogo}
+                className="cursor-pointer"
               />
               <p className="text-xs text-muted-foreground">
-                Sube una imagen cuadrada para mejor visualización. (Max 2MB)
+                Imagen cuadrada recomendada. Máximo 2MB. Formatos: JPG, PNG, WebP.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Social Media Section */}
-        <div className="space-y-3 pt-2">
+        {/* WhatsApp */}
+        <div className="space-y-2">
+          <Label htmlFor="whatsapp" className="text-base">WhatsApp para pedidos</Label>
+          <Input
+            id="whatsapp"
+            placeholder="Ej: 573001234567"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            disabled={loading}
+          />
+          <p className="text-xs text-muted-foreground">
+            Los pedidos del catálogo se enviarán a este número. Incluye el código del país.
+          </p>
+        </div>
+
+        {/* Redes Sociales */}
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label>Redes Sociales</Label>
+            <Label className="text-base">Redes Sociales</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                   <Plus className="h-4 w-4" />
-                  Agregar redes
+                  Agregar
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setSocials(prev => ({ ...prev, facebook: prev.facebook || "" }))}>
-                  <Facebook className="mr-2 h-4 w-4" />
-                  Agregar Facebook
+                <DropdownMenuItem 
+                  onClick={() => setSocials(prev => ({ ...prev, facebook: prev.facebook || "" }))}
+                  disabled={socials.facebook !== undefined}
+                >
+                  <Facebook className="mr-2 h-4 w-4 text-blue-600" />
+                  Facebook
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSocials(prev => ({ ...prev, instagram: prev.instagram || "" }))}>
-                  <Instagram className="mr-2 h-4 w-4" />
-                  Agregar Instagram
+                <DropdownMenuItem 
+                  onClick={() => setSocials(prev => ({ ...prev, instagram: prev.instagram || "" }))}
+                  disabled={socials.instagram !== undefined}
+                >
+                  <Instagram className="mr-2 h-4 w-4 text-pink-600" />
+                  Instagram
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -376,13 +518,14 @@ function CatalogConfigCard() {
                   <Facebook className="h-5 w-5" />
                 </div>
                 <Input
-                  placeholder="URL de Facebook"
+                  placeholder="https://facebook.com/tu-tienda"
                   value={socials.facebook}
                   onChange={(e) => setSocials(prev => ({ ...prev, facebook: e.target.value }))}
                 />
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="shrink-0"
                   onClick={() => setSocials(prev => {
                     const newSocials = { ...prev }
                     delete newSocials.facebook
@@ -400,13 +543,14 @@ function CatalogConfigCard() {
                   <Instagram className="h-5 w-5" />
                 </div>
                 <Input
-                  placeholder="URL de Instagram"
+                  placeholder="https://instagram.com/tu-tienda"
                   value={socials.instagram}
                   onChange={(e) => setSocials(prev => ({ ...prev, instagram: e.target.value }))}
                 />
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="shrink-0"
                   onClick={() => setSocials(prev => {
                     const newSocials = { ...prev }
                     delete newSocials.instagram
@@ -417,11 +561,17 @@ function CatalogConfigCard() {
                 </Button>
               </div>
             )}
+
+            {socials.facebook === undefined && socials.instagram === undefined && (
+              <p className="text-sm text-muted-foreground py-2">
+                Agrega tus redes sociales para mostrarlas en el catálogo
+              </p>
+            )}
           </div>
         </div>
 
         <Button onClick={handleSave} disabled={loading || saving || uploadingLogo} className="w-full">
-          {saving ? "Guardando..." : "Guardar Configuración"}
+          {saving ? "Guardando..." : "Guardar Cambios"}
         </Button>
       </CardContent>
     </Card>
