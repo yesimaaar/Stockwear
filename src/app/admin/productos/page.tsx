@@ -118,6 +118,26 @@ const getDefaultNuevoProducto = () => ({
   color: "",
 })
 
+const formatCurrencyInput = (value: string) => {
+  if (!value) return ""
+  // Eliminar todo excepto números y punto
+  const clean = value.replace(/[^0-9.]/g, "")
+  const parts = clean.split(".")
+  
+  // Si hay más de un punto, retornar el valor limpio sin formatear extra para evitar errores
+  if (parts.length > 2) return clean
+
+  // Formatear parte entera con comas
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+  
+  // Limitar a máximo 2 decimales si existe parte decimal
+  if (parts[1] && parts[1].length > 2) {
+    parts[1] = parts[1].substring(0, 2)
+  }
+
+  return parts.join(".")
+}
+
 type NuevoProductoForm = ReturnType<typeof getDefaultNuevoProducto>
 
 type ReferenceDraft = { file: File; preview: string }
@@ -257,8 +277,8 @@ export default function ProductosPage() {
     codigo: producto.codigo,
     nombre: producto.nombre,
     categoriaId: String(producto.categoriaId),
-    precio: String(producto.precio),
-    precio_base: String(producto.precio_base ?? 0),
+    precio: formatCurrencyInput(String(producto.precio)),
+    precio_base: formatCurrencyInput(String(producto.precio_base ?? 0)),
     descuento: String(producto.descuento ?? 0),
     proveedor: producto.proveedor ?? "",
     marca: producto.marca ?? "",
@@ -318,7 +338,14 @@ export default function ProductosPage() {
       return null
     }
 
-    const precio = Number(form.precio)
+    const parseCurrency = (str: string | number) => {
+      if (typeof str === "number") return str
+      if (!str) return 0
+      return Number(str.replace(/,/g, ""))
+    }
+
+    const precio = parseCurrency(form.precio)
+    const precio_base = parseCurrency(form.precio_base)
     const descuento = form.descuento ? Number(form.descuento) : 0
     const stockMinimo = Number(form.stockMinimo)
     const categoriaId = Number(form.categoriaId)
@@ -347,7 +374,7 @@ export default function ProductosPage() {
       categoriaId,
       descripcion: form.descripcion.trim() || null,
       precio,
-      precio_base: Number(form.precio_base) || 0,
+      precio_base,
       descuento: Number.isNaN(descuento) ? 0 : descuento,
       proveedor: form.proveedor.trim() || null,
       marca: form.marca.trim() || null,
@@ -1890,26 +1917,32 @@ export default function ProductosPage() {
                   <div className="grid gap-4 sm:grid-cols-3">
                     <div className="space-y-2">
                       <Label htmlFor="editar-precio">Precio (COP)</Label>
-                      <Input
-                        id="editar-precio"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editForm.precio}
-                        onChange={(event) => updateEditFormField("precio", event.target.value)}
-                        required
-                      />
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                        <Input
+                          id="editar-precio"
+                          className="pl-7"
+                          type="text"
+                          inputMode="decimal"
+                          value={editForm.precio}
+                          onChange={(event) => updateEditFormField("precio", formatCurrencyInput(event.target.value))}
+                          required
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="editar-precio-base">Costo Base (COP)</Label>
-                      <Input
-                        id="editar-precio-base"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editForm.precio_base}
-                        onChange={(event) => updateEditFormField("precio_base", event.target.value)}
-                      />
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                        <Input
+                          id="editar-precio-base"
+                          className="pl-7"
+                          type="text"
+                          inputMode="decimal"
+                          value={editForm.precio_base}
+                          onChange={(event) => updateEditFormField("precio_base", formatCurrencyInput(event.target.value))}
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="editar-descuento">Descuento (%)</Label>
@@ -2521,28 +2554,34 @@ export default function ProductosPage() {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="nuevo-precio">Precio (COP)</Label>
-                    <Input
-                      id="nuevo-precio"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="450000"
-                      value={nuevoProducto.precio}
-                      onChange={(event) => setNuevoProducto((prev) => ({ ...prev, precio: event.target.value }))}
-                      required
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                      <Input
+                        id="nuevo-precio"
+                        className="pl-7"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="450,000"
+                        value={nuevoProducto.precio}
+                        onChange={(event) => setNuevoProducto((prev) => ({ ...prev, precio: formatCurrencyInput(event.target.value) }))}
+                        required
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="nuevo-precio-base">Costo Base (COP)</Label>
-                    <Input
-                      id="nuevo-precio-base"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="300000"
-                      value={nuevoProducto.precio_base}
-                      onChange={(event) => setNuevoProducto((prev) => ({ ...prev, precio_base: event.target.value }))}
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                      <Input
+                        id="nuevo-precio-base"
+                        className="pl-7"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="300,000"
+                        value={nuevoProducto.precio_base}
+                        onChange={(event) => setNuevoProducto((prev) => ({ ...prev, precio_base: formatCurrencyInput(event.target.value) }))}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="nuevo-descuento">Descuento (%)</Label>

@@ -108,6 +108,8 @@ interface Metric {
 }
 
 interface HistorialRow {
+  id?: number
+  metodo_pago_id?: number
   tipo: string
   cantidad: number
   costoUnitario: number | null
@@ -437,11 +439,11 @@ export default function ReportesPage() {
       setLoading(true)
       try {
         const tiendaId = await getCurrentTiendaId()
-        const [ventasResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp, metodosResp, detallesResp, abonosResp] =
+        const [ventasResp, productosResp, stockResp, usuariosResp, almacenesResp, masConsultadosResp, metodosResp, abonosResp] =
           await Promise.all([
             supabase
               .from("ventas")
-              .select("id,total,\"createdAt\",\"usuarioId\",metodo_pago_id")
+              .select("id,total,\"createdAt\",\"usuarioId\",metodo_pago_id, ventasDetalle(productoId, cantidad)")
               .eq("tienda_id", tiendaId)
               .gte("createdAt", subDays(new Date(), 90).toISOString())
               .order("createdAt", { ascending: false })
@@ -450,12 +452,12 @@ export default function ReportesPage() {
               .from("productos")
               .select("id,estado,\"stockMinimo\",\"createdAt\",nombre,precio_base")
               .eq("tienda_id", tiendaId)
-              .limit(3000),
+              .limit(5000),
             supabase
               .from("stock")
               .select("\"productoId\",cantidad")
               .eq("tienda_id", tiendaId)
-              .limit(3000),
+              .limit(5000),
             supabase
               .from("usuarios")
               .select("id,estado,\"createdAt\",nombre,rol")
@@ -471,12 +473,6 @@ export default function ReportesPage() {
               .from("metodos_pago")
               .select("id,nombre,comision_porcentaje")
               .eq("tienda_id", tiendaId),
-            supabase
-              .from("ventasDetalle")
-              .select("ventaId,productoId,cantidad,subtotal, ventas!inner(createdAt)")
-              .eq("ventas.tienda_id", tiendaId)
-              .gte("ventas.createdAt", subDays(new Date(), 90).toISOString())
-              .limit(10000),
             supabase
               .from("abonos")
               .select("id,monto,createdAt,venta_id")
@@ -497,59 +493,59 @@ export default function ReportesPage() {
         const abonos = (abonosResp.data as Abono[]) || []
 
         const metodosMap = metodosData.reduce((acc, m: any) => {
-          acc[m.id] = m.comision_porcentaje || 0
+          acc[m.id] = Number(m.comision_porcentaje) || 0
           return acc
         }, {} as Record<number, number>)
 
         const productsMapWithCost = (productosResp?.data ?? []).reduce((acc, p: any) => {
-          acc[p.id] = p.precio_base || 0
+          acc[p.id] = Number(p.precio_base) || 0
           return acc
         }, {} as Record<number, number>)
 
-        const detallesByVenta = (detallesResp?.data ?? []).reduce((acc, d: any) => {
-          if (!acc[d.ventaId]) acc[d.ventaId] = []
-          acc[d.ventaId].push(d)
-          return acc
-        }, {} as Record<number, any[]>)
-
-        // Data from 'ventas' table instead of 'historialStock'
+        // Data from 'ventas' table with embedded details
         const rawVentas = (ventasResp.data as any[]) || []
+        
         // Map to structure compatible with logic below, but using 'total' from parent
         const ventas: HistorialRow[] = rawVentas.map((v) => {
-          const details = detallesByVenta[v.id] || []
+          // Flatten nested details. Check if it's array or object (Supabase returns array for 1:N)
+          const nestedDetails = Array.isArray(v.ventasDetalle) ? v.ventasDetalle : []
           
-          const costoTotal = details.reduce(
-            (sum, d) => sum + d.cantidad * (productsMapWithCost[d.productoId] || 0),
+          const costoTotal = nestedDetails.reduce(
+            (sum: number, d: any) => sum + (Number(d.cantidad) || 0) * (productsMapWithCost[d.productoId] || 0),
             0,
           )
-          const comision = (v.total || 0) * ((metodosMap[v.metodo_pago_id] || 0) / 100)
           
-          // Use total venta instead of subtotalReal to include "ventas libres"
-          const ganancia = (v.total || 0) - costoTotal - comision
+          const comisionPct = metodosMap[v.metodo_pago_id] || 0
+          const totalVenta = Number(v.total) || 0
+          const comision = totalVenta * (comisionPct / 100)
+          
+          const ganancia = totalVenta - costoTotal - comision
 
           return {
             ...v,
+            id: v.id, // Explicit ID mapping
             tipo: "venta",
             cantidad: 1,
-            costoUnitario: v.total,
+            costoUnitario: totalVenta,
             ganancia,
+            // Clean up the object by removing the nested property if desired, or keep it
           }
         })
 
         // Prepare Cash Flow events (Cash Sales + Abonos)
         const ventasMap = ventas.reduce((acc, v) => {
-          acc[v.id] = v
+          if (v.id) acc[v.id] = v
           return acc
         }, {} as Record<number, HistorialRow>)
 
-        const cashSales = ventas.filter((v) => !creditMethodsRef.current.has(v.metodo_pago_id))
+        const cashSales = ventas.filter((v) => v.metodo_pago_id && !creditMethodsRef.current.has(v.metodo_pago_id))
         
         const abonoEvents = abonos.map((abono) => {
-          const relatedSale = ventasMap[abono.venta_id]
+          const relatedSale = abono.venta_id ? ventasMap[abono.venta_id] : undefined
           let gananciaEstimada = 0
           
           if (relatedSale && relatedSale.total && relatedSale.total > 0) {
-             const margin = relatedSale.ganancia / relatedSale.total
+             const margin = (relatedSale.ganancia || 0) / relatedSale.total
              gananciaEstimada = abono.monto * margin
           }
 
@@ -605,11 +601,12 @@ export default function ReportesPage() {
         const previousMonthDate = new Date(currentYear, currentMonth - 1, 1)
         const { month: previousMonth, year: previousMonthYear } = getDateParts(previousMonthDate)
         
-        const monthSales = reportableEvents.filter((v) => {
+        // Use 'ventas' (Accrual Basis - All Sales) for Monthly Sales & Profit Metrics to strictly reflect business performance
+        const monthSales = ventas.filter((v) => {
           const { month, year } = getDateParts(v.createdAt)
           return month === currentMonth && year === currentYear
         })
-        const previousMonthSales = reportableEvents.filter((v) => {
+        const previousMonthSales = ventas.filter((v) => {
           const { month, year } = getDateParts(v.createdAt)
           return month === previousMonth && year === previousMonthYear
         })
@@ -631,15 +628,18 @@ export default function ReportesPage() {
         const weekStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek)
         const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
         const yearStartDate = new Date(now.getFullYear(), 0, 1)
-        const salesToday = reportableEvents.filter((v) => new Date(v.createdAt) >= today)
+        
+        // For daily/weekly trends we can still use reportableEvents (Cash Flow) if preferred, 
+        // or switch to Accrual. Let's stick to Accrual for consistency in "Ventas Registradas"
+        const salesToday = ventas.filter((v) => new Date(v.createdAt) >= today)
         const dailySalesValue = salesToday
           .reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
-        const weeklySales = reportableEvents.filter((v) => new Date(v.createdAt) >= weekStartDate)
+        const weeklySales = ventas.filter((v) => new Date(v.createdAt) >= weekStartDate)
         const weeklySalesValue = weeklySales
           .reduce((sum, item) => sum + (Number(item.total) || 0), 0)
 
-        const yearlySales = reportableEvents.filter((v) => {
+        const yearlySales = ventas.filter((v) => {
           const { year } = getDateParts(v.createdAt)
           return year === currentYear
         })
