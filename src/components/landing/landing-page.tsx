@@ -69,55 +69,86 @@ const steps = [
   },
 ];
 
+type BillingPeriod = "monthly" | "quarterly" | "yearly";
+
+const billingPeriods = {
+  monthly: { label: "Mensual", discount: 0, months: 1 },
+  quarterly: { label: "Trimestral", discount: 10, months: 3 },
+  yearly: { label: "Anual", discount: 25, months: 12 },
+};
+
 const plans = [
   {
-    name: "Básico",
+    name: "Emprendedor",
     description: "Para tiendas pequeñas",
-    price: "Gratis",
-    period: "",
+    monthlyPrice: 0,
     features: [
-      "1 tienda",
-      "Hasta 100 productos",
+      "1 almacén",
+      "Hasta 50 productos",
       "1 usuario",
+      "Catálogo con anuncios",
       "Reportes básicos",
+      "Historial 7 días",
     ],
     highlighted: false,
+    isFree: true,
   },
   {
     name: "Profesional",
     description: "Para tiendas en crecimiento",
-    price: "$299",
-    period: "/mes",
+    monthlyPrice: 24900, // en centavos COP o tu moneda
     features: [
-      "Hasta 3 tiendas",
-      "Productos ilimitados",
+      "3 almacenes",
+      "Hasta 500 productos",
       "5 usuarios",
-      "Reconocimiento visual",
-      "Catálogo digital",
-      "Soporte prioritario",
+      "Reconocimiento visual IA",
+      "Catálogo sin anuncios",
+      "Reportes avanzados",
+      "Historial 90 días",
+      "Exportar Excel/PDF",
     ],
     highlighted: true,
+    isFree: false,
   },
   {
-    name: "Empresarial",
+    name: "Business",
     description: "Para cadenas de tiendas",
-    price: "Contactar",
-    period: "",
+    monthlyPrice: 62900, // en centavos COP o tu moneda
     features: [
-      "Tiendas ilimitadas",
+      "Almacenes ilimitados",
       "Productos ilimitados",
-      "Usuarios ilimitados",
-      "API personalizada",
-      "Integraciones",
-      "Soporte dedicado",
+      "15 usuarios",
+      "IA ilimitada",
+      "Catálogo personalizado",
+      "Multi-tienda dashboard",
+      "API acceso",
+      "Soporte prioritario",
     ],
     highlighted: false,
+    isFree: false,
   },
 ];
+
+function formatPrice(priceInCents: number): string {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(priceInCents);
+}
+
+function calculatePrice(monthlyPrice: number, period: BillingPeriod): number {
+  const { discount, months } = billingPeriods[period];
+  const totalBeforeDiscount = monthlyPrice * months;
+  const discountAmount = totalBeforeDiscount * (discount / 100);
+  return totalBeforeDiscount - discountAmount;
+}
 
 export default function LandingPageClient() {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
   useEffect(() => {
     setMounted(true);
@@ -286,58 +317,119 @@ export default function LandingPageClient() {
       <section id="pricing" className="py-24 md:py-32">
         <div className="mx-auto max-w-7xl px-6">
           <div className="mb-16 text-center">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-sm text-amber-600 dark:text-amber-300">
-              <Zap className="h-4 w-4" />
-              Próximamente
-            </div>
             <h2 className="mb-4 text-3xl font-bold md:text-4xl">Planes para cada etapa de tu negocio</h2>
             <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
-              Estamos preparando planes flexibles que se adaptan al tamaño de tu operación.
+              Elige el plan que mejor se adapte a tu operación. Ahorra más con planes trimestrales o anuales.
             </p>
+            
+            {/* Billing Period Toggle */}
+            <div className="mt-8 inline-flex items-center gap-1 rounded-full border border-border bg-muted p-1">
+              {(Object.keys(billingPeriods) as BillingPeriod[]).map((period) => (
+                <button
+                  key={period}
+                  onClick={() => setBillingPeriod(period)}
+                  className={`relative rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                    billingPeriod === period
+                      ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {billingPeriods[period].label}
+                  {billingPeriods[period].discount > 0 && (
+                    <span className={`ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+                      billingPeriod === period
+                        ? "bg-emerald-500 text-white"
+                        : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                    }`}>
+                      -{billingPeriods[period].discount}%
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
-            {plans.map((plan) => (
-              <div
-                key={plan.name}
-                className={`relative rounded-2xl border p-6 ${
-                  plan.highlighted
-                    ? "border-slate-400 bg-gradient-to-b from-slate-200/50 to-transparent dark:border-slate-600 dark:from-slate-800/50"
-                    : "border-border bg-card"
-                }`}
-              >
-                {plan.highlighted && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
-                    Más popular
-                  </div>
-                )}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold">{plan.name}</h3>
-                  <p className="text-sm text-muted-foreground">{plan.description}</p>
-                </div>
-                <div className="mb-6">
-                  <span className="text-4xl font-bold">{plan.price}</span>
-                  {plan.period && <span className="text-muted-foreground">{plan.period}</span>}
-                </div>
-                <ul className="mb-6 space-y-3">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-slate-700 dark:text-slate-300" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  className={`w-full rounded-full ${
+            {plans.map((plan) => {
+              const totalPrice = plan.isFree ? 0 : calculatePrice(plan.monthlyPrice, billingPeriod);
+              const originalPrice = plan.monthlyPrice * billingPeriods[billingPeriod].months;
+              const hasDiscount = billingPeriods[billingPeriod].discount > 0 && !plan.isFree;
+              
+              return (
+                <div
+                  key={plan.name}
+                  className={`relative rounded-2xl border p-6 ${
                     plan.highlighted
-                      ? "bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-                      : "bg-muted hover:bg-accent"
+                      ? "border-slate-400 bg-gradient-to-b from-slate-200/50 to-transparent dark:border-slate-600 dark:from-slate-800/50"
+                      : "border-border bg-card"
                   }`}
-                  disabled
                 >
-                  Próximamente
-                </Button>
-              </div>
-            ))}
+                  {plan.highlighted && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+                      Más popular
+                    </div>
+                  )}
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold">{plan.name}</h3>
+                    <p className="text-sm text-muted-foreground">{plan.description}</p>
+                  </div>
+                  <div className="mb-6">
+                    {plan.isFree ? (
+                      <span className="text-4xl font-bold">Gratis</span>
+                    ) : (
+                      <div className="space-y-1">
+                        {hasDiscount && (
+                          <div className="text-sm text-muted-foreground line-through">
+                            {formatPrice(originalPrice)}
+                          </div>
+                        )}
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-bold">{formatPrice(totalPrice)}</span>
+                          <span className="text-muted-foreground">
+                            /{billingPeriods[billingPeriod].months === 1 ? "mes" : billingPeriods[billingPeriod].months + " meses"}
+                          </span>
+                        </div>
+                        {hasDiscount && (
+                          <div className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            Ahorras {formatPrice(originalPrice - totalPrice)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <ul className="mb-6 space-y-3">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2 text-sm">
+                        <Check className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    asChild
+                    className={`w-full rounded-full ${
+                      plan.highlighted
+                        ? "bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                        : "bg-muted hover:bg-accent"
+                    }`}
+                  >
+                    <Link href="/register">
+                      {plan.isFree ? "Comenzar gratis" : "Elegir plan"}
+                    </Link>
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Enterprise CTA */}
+          <div className="mt-12 rounded-2xl border border-border bg-gradient-to-r from-slate-100 to-slate-50 p-8 text-center dark:from-slate-900 dark:to-slate-800">
+            <h3 className="mb-2 text-xl font-bold">¿Tienes una franquicia o distribuidora?</h3>
+            <p className="mb-4 text-muted-foreground">
+              Contáctanos para un plan Enterprise con usuarios ilimitados, white-label y soporte dedicado.
+            </p>
+            <Button variant="outline" className="rounded-full">
+              Contactar ventas
+            </Button>
           </div>
         </div>
       </section>
