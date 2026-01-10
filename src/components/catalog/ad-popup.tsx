@@ -1,4 +1,4 @@
-"use client"
+/*"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { X } from "lucide-react"
@@ -69,7 +69,7 @@ export function AdPopup({
       onClick={handleBackdropClick}
     >
       <div className="relative max-w-md w-full mx-4 animate-in zoom-in-95 fade-in duration-300">
-        {/* Close button */}
+        { "Close button" }
         <button
           onClick={handleClose}
           className="absolute -top-3 -right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-lg transition-transform hover:scale-110 dark:bg-gray-800"
@@ -78,7 +78,7 @@ export function AdPopup({
           <X className="h-5 w-5 text-gray-600 dark:text-gray-300" />
         </button>
 
-        {/* Ad content */}
+        { "Ad content" }
         <div className="overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-800 p-2">
           <ins
             ref={adRef}
@@ -95,3 +95,4 @@ export function AdPopup({
     </div>
   )
 }
+*/

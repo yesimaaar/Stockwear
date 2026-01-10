@@ -1,4 +1,4 @@
-"use client"
+/* "use client"
 
 import { useState, useEffect, useRef } from "react"
 import { X } from "lucide-react"
@@ -39,7 +39,7 @@ export function AdBanner({
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-black/10 to-transparent pb-safe">
       <div className="relative mx-auto max-w-4xl px-4 pb-4">
-        {/* Dismiss button */}
+        {"Dismiss button"}
         {dismissible && (
           <button
             onClick={() => setIsDismissed(true)}
@@ -50,7 +50,7 @@ export function AdBanner({
           </button>
         )}
 
-        {/* Banner content */}
+        { "Banner content" }
         <div className="overflow-hidden rounded-xl bg-white shadow-lg dark:bg-gray-800">
           <ins
             ref={adRef}
@@ -71,3 +71,4 @@ export function AdBanner({
     </div>
   )
 }
+*/
