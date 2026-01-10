@@ -2,6 +2,8 @@ import { notFound } from "next/navigation"
 import CartButton from "@/features/ventas/components/CartButton"
 import CartDrawer from "@/features/ventas/components/CartDrawer"
 import { CatalogClient } from "@/components/catalog/catalog-client"
+import { AdPopup } from "@/components/catalog/ad-popup"
+import { AdBanner } from "@/components/catalog/ad-banner"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
   mapProductoRow,
@@ -18,12 +20,14 @@ type StoreRecord = {
   slug: string
   logo_url: string | null
   whatsapp: string | null
+  facebook: string | null
+  instagram: string | null
 }
 
 async function getStoreBySlug(slug: string): Promise<StoreRecord | null> {
   const { data, error } = await supabaseAdmin
     .from("tiendas")
-    .select("id,nombre,slug,logo_url,whatsapp")
+    .select("id,nombre,slug,logo_url,whatsapp,facebook,instagram")
     .eq("slug", slug)
     .maybeSingle()
 
@@ -86,10 +90,22 @@ export default async function CatalogPage({ params }: CatalogPageProps) {
         storeName={store.nombre}
         storeLogoUrl={store.logo_url}
         storeSlug={store.slug}
+        facebook={store.facebook ?? undefined}
+        instagram={store.instagram ?? undefined}
       />
 
       <CartButton />
       <CartDrawer whatsappNumber={store.whatsapp} />
+
+      {/* Google AdSense Ads */}
+      <AdPopup 
+        adSlot="1234567890"  // Reemplaza con tu slot de AdSense
+        delay={1500}
+      />
+      <AdBanner 
+        adSlot="0987654321"  // Reemplaza con tu slot de AdSense
+        dismissible={true}
+      />
     </div>
   )
 }

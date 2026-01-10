@@ -16,7 +16,7 @@ async function resolveUser(accessToken?: string) {
     return data.user
 }
 
-export async function updateStoreSettings(settings: { whatsapp?: string; logo_url?: string }, accessToken?: string) {
+export async function updateStoreSettings(settings: { whatsapp?: string; logo_url?: string; facebook?: string | null; instagram?: string | null }, accessToken?: string) {
     try {
         const user = await resolveUser(accessToken)
         if (!user) return { success: false, message: 'No autorizado' }
@@ -32,6 +32,8 @@ export async function updateStoreSettings(settings: { whatsapp?: string; logo_ur
         const updates: any = {}
         if (settings.whatsapp !== undefined) updates.whatsapp = settings.whatsapp
         if (settings.logo_url !== undefined) updates.logo_url = settings.logo_url
+        if (settings.facebook !== undefined) updates.facebook = settings.facebook
+        if (settings.instagram !== undefined) updates.instagram = settings.instagram
 
         const { error } = await supabaseAdmin
             .from('tiendas')
@@ -79,7 +81,7 @@ export async function getStoreSettings(accessToken?: string) {
 
         const { data: settings, error } = await supabaseAdmin
             .from('tiendas')
-            .select('id, nombre, slug, whatsapp, logo_url')
+            .select('id, nombre, slug, whatsapp, logo_url, facebook, instagram')
             .eq('id', userProfile.tienda_id)
             .single()
 

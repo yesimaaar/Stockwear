@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useTheme } from "next-themes"
-import { Bell, Shield, Database, Palette, Settings, Store, CreditCard, Users, FileText, Check } from "lucide-react"
+import { Bell, Shield, Database, Palette, Settings, Store, CreditCard, Users, FileText, Check, Facebook, Instagram, Plus, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,6 +11,13 @@ import { PaymentMethodsSettings } from "@/features/configuracion/components/paym
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
 
 export default function ConfiguracionPage() {
   const { resolvedTheme, setTheme } = useTheme()
@@ -199,6 +206,7 @@ function CatalogConfigCard() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [socials, setSocials] = useState<{ facebook?: string; instagram?: string }>({})
   const { toast } = useToast()
 
   useEffect(() => {
@@ -212,6 +220,10 @@ function CatalogConfigCard() {
       if (active && res.success && res.data) {
         setWhatsapp(res.data.whatsapp ?? "")
         setLogoUrl(res.data.logo_url ?? "")
+        setSocials({
+          facebook: res.data.facebook ?? undefined,
+          instagram: res.data.instagram ?? undefined
+        })
       }
       if (active) setLoading(false)
     }
@@ -231,7 +243,13 @@ function CatalogConfigCard() {
         return
       }
 
-      const res = await updateStoreSettings({ whatsapp, logo_url: logoUrl }, token)
+      const res = await updateStoreSettings({
+        whatsapp,
+        logo_url: logoUrl,
+        facebook: socials.facebook ?? null,
+        instagram: socials.instagram ?? null
+      }, token)
+
       if (res.success) {
         toast({ title: "Guardado", description: "Configuración actualizada correctamente" })
       } else {
@@ -252,15 +270,6 @@ function CatalogConfigCard() {
     try {
       const { data } = await supabase.auth.getSession()
       const token = data.session?.access_token
-
-      // We need the store ID to upload. Since we don't have it readily available in the component state
-      // (we only fetched settings), we might need to fetch it or update the upload service to handle it.
-      // However, the upload service requires storeId.
-      // Let's re-fetch settings to get the ID if we didn't store it, or just fetch the user profile to get the store ID.
-      // Actually, getStoreSettings returns the ID. Let's store it in state.
-
-      // Wait, I didn't store the ID in the state above. Let me fix that in the next iteration or just fetch it now.
-      // To be clean, let's fetch the store ID first.
 
       if (!token) throw new Error("No session")
 
@@ -333,6 +342,81 @@ function CatalogConfigCard() {
                 Sube una imagen cuadrada para mejor visualización. (Max 2MB)
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Social Media Section */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <Label>Redes Sociales</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1">
+                  <Plus className="h-4 w-4" />
+                  Agregar redes
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setSocials(prev => ({ ...prev, facebook: prev.facebook || "" }))}>
+                  <Facebook className="mr-2 h-4 w-4" />
+                  Agregar Facebook
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSocials(prev => ({ ...prev, instagram: prev.instagram || "" }))}>
+                  <Instagram className="mr-2 h-4 w-4" />
+                  Agregar Instagram
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="space-y-3">
+            {socials.facebook !== undefined && (
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                  <Facebook className="h-5 w-5" />
+                </div>
+                <Input
+                  placeholder="URL de Facebook"
+                  value={socials.facebook}
+                  onChange={(e) => setSocials(prev => ({ ...prev, facebook: e.target.value }))}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSocials(prev => {
+                    const newSocials = { ...prev }
+                    delete newSocials.facebook
+                    return newSocials
+                  })}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {socials.instagram !== undefined && (
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-pink-50 text-pink-600 dark:bg-pink-950 dark:text-pink-400">
+                  <Instagram className="h-5 w-5" />
+                </div>
+                <Input
+                  placeholder="URL de Instagram"
+                  value={socials.instagram}
+                  onChange={(e) => setSocials(prev => ({ ...prev, instagram: e.target.value }))}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSocials(prev => {
+                    const newSocials = { ...prev }
+                    delete newSocials.instagram
+                    return newSocials
+                  })}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 

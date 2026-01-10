@@ -96,8 +96,8 @@ export function WarehouseMap({ almacenes }: WarehouseMapProps) {
 
   if (markers.length === 0) {
     return (
-      <div className="flex h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card/30 text-center text-sm text-muted-foreground">
-        <p>Aún no hay coordenadas guardadas para los almacenes.</p>
+      <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card/30 p-8 text-center text-sm text-muted-foreground">
+        <p>No hay configuración para mapas.</p>
         <p className="mt-1">Edita la dirección para que se geocodifique automáticamente o añade una entrada manual en <code className="rounded bg-muted px-1">lib/config/warehouse-locations.ts</code>.</p>
       </div>
     )

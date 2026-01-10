@@ -1,7 +1,11 @@
 -- 003_policies.sql
--- Consolidated RLS Policies
+-- Consolidated RLS Policies for Stockwear
+-- Updated: 2025-01-10
 
--- 1. Enable RLS on all tables
+-- ============================================================================
+-- 1. ENABLE RLS ON ALL TABLES
+-- ============================================================================
+
 ALTER TABLE tiendas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categorias ENABLE ROW LEVEL SECURITY;
@@ -19,13 +23,17 @@ ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE abonos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metodos_pago ENABLE ROW LEVEL SECURITY;
 ALTER TABLE caja_sesiones ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "public"."gastos" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "public"."pagos_gastos" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gastos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pagos_gastos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE search_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE visual_recognition_feedback ENABLE ROW LEVEL SECURITY;
 
--- 2. Policies
+-- ============================================================================
+-- 2. TIENDAS POLICIES
+-- ============================================================================
 
--- Tiendas
 -- Users can view their own tienda (or if they are the owner)
+DROP POLICY IF EXISTS "Users can view their own tienda" ON tiendas;
 CREATE POLICY "Users can view their own tienda" ON tiendas
   FOR SELECT
   USING (
@@ -33,50 +41,79 @@ CREATE POLICY "Users can view their own tienda" ON tiendas
     OR owner_id = auth.uid()
   );
 
+-- Public can view tienda by slug (for public catalog)
+DROP POLICY IF EXISTS "Public can view tienda by slug" ON tiendas;
+CREATE POLICY "Public can view tienda by slug" ON tiendas
+  FOR SELECT
+  USING (slug IS NOT NULL);
+
 -- Authenticated users can create store
+DROP POLICY IF EXISTS "Authenticated users can create store" ON tiendas;
 CREATE POLICY "Authenticated users can create store" ON tiendas
   FOR INSERT
   WITH CHECK (auth.role() = 'authenticated');
 
 -- Users can update their own tienda
+DROP POLICY IF EXISTS "Users can update their own tienda" ON tiendas;
 CREATE POLICY "Users can update their own tienda" ON tiendas
   FOR UPDATE USING (id = get_my_tienda_id())
   WITH CHECK (id = get_my_tienda_id());
 
--- Usuarios
+-- ============================================================================
+-- 3. USUARIOS POLICIES
+-- ============================================================================
+
 -- Users can view own profile
+DROP POLICY IF EXISTS "Users can view own profile" ON usuarios;
 CREATE POLICY "Users can view own profile" ON usuarios
-FOR SELECT
-USING (auth_uid = auth.uid());
+  FOR SELECT
+  USING (auth_uid = auth.uid());
 
 -- Users can view store members
+DROP POLICY IF EXISTS "Users can view store members" ON usuarios;
 CREATE POLICY "Users can view store members" ON usuarios
-FOR SELECT
-USING (
-  tienda_id IS NOT NULL 
-  AND tienda_id = get_my_tienda_id()
-);
+  FOR SELECT
+  USING (
+    tienda_id IS NOT NULL 
+    AND tienda_id = get_my_tienda_id()
+  );
 
 -- Users can update own profile
+DROP POLICY IF EXISTS "Users can update own profile" ON usuarios;
 CREATE POLICY "Users can update own profile" ON usuarios
-FOR UPDATE
-USING (auth_uid = auth.uid());
+  FOR UPDATE
+  USING (auth_uid = auth.uid());
 
 -- Users can insert own profile
+DROP POLICY IF EXISTS "Users can insert own profile" ON usuarios;
 CREATE POLICY "Users can insert own profile" ON usuarios
-FOR INSERT
-WITH CHECK (auth_uid = auth.uid());
+  FOR INSERT
+  WITH CHECK (auth_uid = auth.uid());
 
--- Tenant Isolation Policies (Generic)
--- Applies to: productos, categorias, tallas, almacenes, stock, ventas, consultas, producto_reference_images, historialStock, ventasDetalle, clientes, abonos
+-- ============================================================================
+-- 4. TENANT ISOLATION POLICIES (GENERIC)
+-- ============================================================================
 
+-- Applies to: productos, categorias, tallas, almacenes, stock, ventas, 
+--             consultas, producto_reference_images, clientes, abonos
 DO $$
 DECLARE
   t text;
 BEGIN
-  -- Standard tables
+  -- Standard tables with tienda_id
   FOR t IN 
-    SELECT unnest(ARRAY['productos', 'categorias', 'tallas', 'almacenes', 'stock', 'ventas', 'consultas', 'producto_reference_images', 'clientes', 'abonos'])
+    SELECT unnest(ARRAY[
+      'productos', 
+      'categorias', 
+      'tallas', 
+      'almacenes', 
+      'stock', 
+      'ventas', 
+      'consultas', 
+      'producto_reference_images', 
+      'clientes', 
+      'abonos'
+    ])
   LOOP
     EXECUTE format('
       DROP POLICY IF EXISTS "Tenant Isolation" ON %I;
@@ -86,152 +123,165 @@ BEGIN
     ', t, t);
   END LOOP;
   
-  -- Quoted tables
+  -- Quoted tables (camelCase names)
   EXECUTE 'DROP POLICY IF EXISTS "Tenant Isolation" ON "historialStock"';
   EXECUTE 'CREATE POLICY "Tenant Isolation" ON "historialStock" USING (tienda_id = get_my_tienda_id()) WITH CHECK (tienda_id = get_my_tienda_id())';
   
   EXECUTE 'DROP POLICY IF EXISTS "Tenant Isolation" ON "ventasDetalle"';
   EXECUTE 'CREATE POLICY "Tenant Isolation" ON "ventasDetalle" USING (tienda_id = get_my_tienda_id()) WITH CHECK (tienda_id = get_my_tienda_id())';
-
 END $$;
 
--- Producto Embeddings (Admin only write, Authenticated read)
--- Note: These do not have tienda_id, so they are global or managed differently.
--- Assuming they follow the pattern from 003.
+-- ============================================================================
+-- 5. PRODUCTO EMBEDDINGS POLICIES
+-- ============================================================================
 
+-- Authenticated users can read
+DROP POLICY IF EXISTS "producto_embeddings_select_authenticated" ON producto_embeddings;
 CREATE POLICY "producto_embeddings_select_authenticated" ON producto_embeddings
-	FOR SELECT
-	USING (auth.uid() IS NOT NULL);
+  FOR SELECT
+  USING (auth.uid() IS NOT NULL);
 
+-- Admins can insert
+DROP POLICY IF EXISTS "producto_embeddings_insert_admin" ON producto_embeddings;
 CREATE POLICY "producto_embeddings_insert_admin" ON producto_embeddings
-	FOR INSERT
-	WITH CHECK (
-		exists (
-			SELECT 1
-			FROM usuarios u
-			WHERE u.id = auth.uid()
-				AND u.rol = 'admin'
-		)
-	);
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM usuarios u
+      WHERE u.auth_uid = auth.uid()
+        AND u.rol = 'admin'
+    )
+  );
 
+-- Admins can update
+DROP POLICY IF EXISTS "producto_embeddings_update_admin" ON producto_embeddings;
 CREATE POLICY "producto_embeddings_update_admin" ON producto_embeddings
-	FOR UPDATE
-	USING (
-		exists (
-			SELECT 1
-			FROM usuarios u
-			WHERE u.id = auth.uid()
-				AND u.rol = 'admin'
-		)
-	)
-	WITH CHECK (
-		exists (
-			SELECT 1
-			FROM usuarios u
-			WHERE u.id = auth.uid()
-				AND u.rol = 'admin'
-		)
-	);
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM usuarios u
+      WHERE u.auth_uid = auth.uid()
+        AND u.rol = 'admin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM usuarios u
+      WHERE u.auth_uid = auth.uid()
+        AND u.rol = 'admin'
+    )
+  );
 
+-- Admins can delete
+DROP POLICY IF EXISTS "producto_embeddings_delete_admin" ON producto_embeddings;
 CREATE POLICY "producto_embeddings_delete_admin" ON producto_embeddings
-	FOR DELETE
-	USING (
-		exists (
-			SELECT 1
-			FROM usuarios u
-			WHERE u.id = auth.uid()
-				AND u.rol = 'admin'
-		)
-	);
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM usuarios u
+      WHERE u.auth_uid = auth.uid()
+        AND u.rol = 'admin'
+    )
+  );
 
--- Consolidated Policies from 017
+-- Allow inserting embeddings for user feedback
+DROP POLICY IF EXISTS "producto_embeddings_insert_feedback" ON producto_embeddings;
+CREATE POLICY "producto_embeddings_insert_feedback" ON producto_embeddings
+  FOR INSERT
+  WITH CHECK (fuente = 'user_feedback');
 
--- Metodos de Pago
+-- ============================================================================
+-- 6. METODOS DE PAGO POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "Tenant Isolation" ON metodos_pago;
 CREATE POLICY "Tenant Isolation" ON metodos_pago
   USING (tienda_id = get_my_tienda_id())
   WITH CHECK (tienda_id = get_my_tienda_id());
 
--- Caja Sesiones
+-- ============================================================================
+-- 7. CAJA SESIONES POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "Tenant Isolation" ON caja_sesiones;
 CREATE POLICY "Tenant Isolation" ON caja_sesiones
   USING (tienda_id = get_my_tienda_id())
   WITH CHECK (tienda_id = get_my_tienda_id());
 
--- Gastos
-CREATE POLICY "Enable read access for all users" ON "public"."gastos"
-  AS PERMISSIVE
+-- ============================================================================
+-- 8. GASTOS POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "Tenant Isolation" ON gastos;
+CREATE POLICY "Tenant Isolation" ON gastos
+  USING (tienda_id = get_my_tienda_id())
+  WITH CHECK (tienda_id = get_my_tienda_id());
+
+-- ============================================================================
+-- 9. PAGOS GASTOS POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "Tenant Isolation" ON pagos_gastos;
+CREATE POLICY "Tenant Isolation" ON pagos_gastos
+  USING (tienda_id = get_my_tienda_id())
+  WITH CHECK (tienda_id = get_my_tienda_id());
+
+-- ============================================================================
+-- 10. SEARCH FEEDBACK POLICIES
+-- ============================================================================
+
+-- search_feedback uses user_id (references auth.users), not tienda_id
+DROP POLICY IF EXISTS "Users can view own search feedback" ON search_feedback;
+CREATE POLICY "Users can view own search feedback" ON search_feedback
   FOR SELECT
-  TO public
-  USING (true);
+  USING (user_id = auth.uid());
 
-CREATE POLICY "Enable insert access for all users" ON "public"."gastos"
-  AS PERMISSIVE
+DROP POLICY IF EXISTS "Users can insert own search feedback" ON search_feedback;
+CREATE POLICY "Users can insert own search feedback" ON search_feedback
   FOR INSERT
-  TO public
-  WITH CHECK (true);
+  WITH CHECK (user_id = auth.uid());
 
-CREATE POLICY "Enable update access for all users" ON "public"."gastos"
-  AS PERMISSIVE
-  FOR UPDATE
-  TO public
-  USING (true);
+DROP POLICY IF EXISTS "Users can delete own search feedback" ON search_feedback;
+CREATE POLICY "Users can delete own search feedback" ON search_feedback
+  FOR DELETE
+  USING (user_id = auth.uid());
 
--- Pagos Gastos
-CREATE POLICY "Enable read access for all users" ON "public"."pagos_gastos"
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
-  USING (true);
+-- ============================================================================
+-- 11. VISUAL RECOGNITION FEEDBACK POLICIES
+-- ============================================================================
 
-CREATE POLICY "Enable insert access for all users" ON "public"."pagos_gastos"
-  AS PERMISSIVE
-  FOR INSERT
-  TO public
-  WITH CHECK (true);
-
--- =============================================================================
--- Producto Embeddings - User Feedback Policy (Consolidated from 022)
--- =============================================================================
-
--- Allow inserting embeddings for user feedback (bypasses auth check due to Server Action cookie issue)
-DROP POLICY IF EXISTS "producto_embeddings_insert_feedback" ON producto_embeddings;
-
-CREATE POLICY "producto_embeddings_insert_feedback" ON producto_embeddings
-FOR INSERT
-WITH CHECK (
-  fuente = 'user_feedback'
-);
-
--- =============================================================================
--- Visual Recognition Feedback Policies (Consolidated from 023)
--- =============================================================================
-
-ALTER TABLE visual_recognition_feedback ENABLE ROW LEVEL SECURITY;
-
--- Política: Los usuarios solo pueden ver feedback de su tienda
+-- Users can view feedback from their store
+DROP POLICY IF EXISTS "Users can view feedback from their store" ON visual_recognition_feedback;
 CREATE POLICY "Users can view feedback from their store" ON visual_recognition_feedback
   FOR SELECT
   USING (
     tienda_id IN (
-      SELECT tienda_id FROM usuarios WHERE id = auth.uid()
+      SELECT tienda_id FROM usuarios WHERE auth_uid = auth.uid()
     )
   );
 
--- Política: Los usuarios pueden insertar feedback en su tienda
+-- Users can insert feedback for their store
+DROP POLICY IF EXISTS "Users can insert feedback for their store" ON visual_recognition_feedback;
 CREATE POLICY "Users can insert feedback for their store" ON visual_recognition_feedback
   FOR INSERT
   WITH CHECK (
     tienda_id IN (
-      SELECT tienda_id FROM usuarios WHERE id = auth.uid()
+      SELECT tienda_id FROM usuarios WHERE auth_uid = auth.uid()
     )
   );
 
--- Política: Los administradores pueden ver todo el feedback
+-- Admins can view all feedback
+DROP POLICY IF EXISTS "Admins can view all feedback" ON visual_recognition_feedback;
 CREATE POLICY "Admins can view all feedback" ON visual_recognition_feedback
   FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM usuarios 
-      WHERE id = auth.uid() 
+      WHERE auth_uid = auth.uid() 
       AND rol IN ('admin', 'super_admin')
     )
   );
