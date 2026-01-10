@@ -108,6 +108,8 @@ interface Metric {
 }
 
 interface HistorialRow {
+  id?: number
+  metodo_pago_id?: number
   tipo: string
   cantidad: number
   costoUnitario: number | null
@@ -538,18 +540,18 @@ export default function ReportesPage() {
 
         // Prepare Cash Flow events (Cash Sales + Abonos)
         const ventasMap = ventas.reduce((acc, v) => {
-          acc[v.id] = v
+          if (v.id) acc[v.id] = v
           return acc
         }, {} as Record<number, HistorialRow>)
 
-        const cashSales = ventas.filter((v) => !creditMethodsRef.current.has(v.metodo_pago_id))
+        const cashSales = ventas.filter((v) => v.metodo_pago_id && !creditMethodsRef.current.has(v.metodo_pago_id))
         
         const abonoEvents = abonos.map((abono) => {
-          const relatedSale = ventasMap[abono.venta_id]
+          const relatedSale = abono.venta_id ? ventasMap[abono.venta_id] : undefined
           let gananciaEstimada = 0
           
           if (relatedSale && relatedSale.total && relatedSale.total > 0) {
-             const margin = relatedSale.ganancia / relatedSale.total
+             const margin = (relatedSale.ganancia || 0) / relatedSale.total
              gananciaEstimada = abono.monto * margin
           }
 
