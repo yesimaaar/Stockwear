@@ -4,6 +4,7 @@ import { Package } from "lucide-react"
 import { useCart, type CartItem } from "@/hooks/useCart"
 import { formatCurrency } from "@/lib/whatsapp"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import type { ProductoConStock } from "@/features/productos/services/producto-service"
 
@@ -53,13 +54,33 @@ export default function ProductCard({ product }: { product: ProductoConStock }) 
     <div className="group flex flex-col h-full gap-2 sm:gap-3 rounded-2xl border border-border/60 bg-background/80 p-3 sm:p-4 shadow-sm transition-all hover:border-border hover:shadow-md">
       <div className="relative w-full h-32 sm:h-56 overflow-hidden rounded-xl border border-border/40 bg-card">
         {product.imagen ? (
-          <Image
-            src={product.imagen}
-            alt={product.nombre ?? product.codigo ?? "Producto"}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(min-width: 1280px) 240px, (min-width: 768px) 220px, 160px"
-          />
+          <Dialog>
+            <DialogTrigger asChild>
+              <div className="relative h-full w-full cursor-zoom-in">
+                <Image
+                  src={product.imagen}
+                  alt={product.nombre ?? product.codigo ?? "Producto"}
+                  fill
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  sizes="(min-width: 1280px) 240px, (min-width: 768px) 220px, 160px"
+                />
+              </div>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl border-none bg-transparent p-0 shadow-none">
+              <DialogTitle className="sr-only">
+                {product.nombre ?? product.codigo ?? "Producto"}
+              </DialogTitle>
+              <div className="relative h-[50vh] w-full sm:h-[80vh]">
+                <Image
+                  src={product.imagen}
+                  alt={product.nombre ?? product.codigo ?? "Producto"}
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
+            </DialogContent>
+          </Dialog>
         ) : (
           <div className="flex h-full w-full items-center justify-center text-muted-foreground">
             <Package className="h-8 w-8" />
